@@ -73,9 +73,12 @@ a §4 event, not a judgement call.
 1. **Coverage by construction, where possible.** The schema layer is generated
    or inherited from machine-complete sources — never hand-wired per record
    type. The lane split:
-   - **TweakDB** — there is no upstream type model to inherit, so the schema
-     generator is **ours**, derived mechanically from the RTTI dump and
-     validated against the shipped database.
+   - **TweakDB** — two machine-complete sources, one per mode, neither
+     hand-wired. The no-setup default inherits the pinned library's compiled
+     type model by reflection; the dump-bound mode derives our own schema
+     mechanically from the RTTI dump. Both modes are validated field by field
+     against the shipped database, and what the inherited mode cannot do is
+     named in the artifact's own provenance, never silently absent.
    - **CR2W resources** — WolvenKit's type model is inherited, with the RTTI
      dump as a by-construction validator and a dependency-drift gate in CI.
 
