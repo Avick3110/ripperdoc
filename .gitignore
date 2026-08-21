@@ -1,0 +1,19 @@
+# The working corpus — research, session handoffs, advisor lane, kickoffs.
+# Untracked by design: it carries machine paths, install contents and the
+# bench characterization, none of which belong in a public tree. Anything
+# that must move in lockstep with the code lives in the tracked tree instead
+# (see standards/RIPPERDOC_DOC_HYGIENE.md).
+dev/
+
+# Build output
+bin/
+obj/
+artifacts/
+*.user
+*.suo
+.vs/
+
+# Editor / tooling
+.obsidian/
+.idea/
+.vscode/

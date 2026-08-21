@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>ripperdoc-core</AssemblyName>
+    <RootNamespace>Ripperdoc.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WolvenKit.RED4" />
+    <PackageReference Include="WolvenKit.Core" />
+  </ItemGroup>
+
+</Project>

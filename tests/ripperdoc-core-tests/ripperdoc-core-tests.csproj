@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>ripperdoc-core-tests</AssemblyName>
+    <RootNamespace>Ripperdoc.Core.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- Test names are the documentation here; XML doc comments on facts add
+         noise without adding a reader. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ripperdoc-core\ripperdoc-core.csproj" />
+  </ItemGroup>
+
+</Project>

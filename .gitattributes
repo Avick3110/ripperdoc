@@ -1,0 +1,9 @@
+# LF in every committed text blob, whatever the working tree looks like.
+# The repo is authored on Windows; without this, committed blobs carry CR
+# bytes and the debris sweep (scripts/debris-sweep.sh) reports them forever.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.zip binary
+*.archive binary
