@@ -42,6 +42,28 @@ is the thing that goes stale first.
 **One home per fact.** If sequencing appears in two places, one of them is
 wrong and nobody knows which.
 
+### Milestones carry membership, never sequence
+
+A GitHub milestone on this repository means exactly one thing: **this item
+closes before that ship point.** It says nothing about order, and it is not a
+theme or a label for related work.
+
+That restriction is what stops it rotting. Sequence lives in §3 and changes
+there; a milestone that also implied ordering would silently disagree with this
+table the first time anything moved. What the milestone *is* good for is being
+the **public projection of routing** — the one signal about what is coming that
+an outside reporter can see without reading this document.
+
+Two rules follow:
+
+- **Routing an item and setting its milestone are one act.** An item routed to
+  a wave without a milestone is invisible outside; a milestone set without
+  routing is a promise nothing owns.
+- **A milestone is a named ship point with a close-condition walk** — the
+  condition is written in the milestone's own description, so closing it means
+  checking something rather than deciding it. An item that fits no milestone's
+  gate is a flag that a new one may be due, and creating one is Aaron's call.
+
 ## 2. The shape, in one paragraph
 
 Build a deterministic resolved-state engine in C# on .NET 8 against a pinned
