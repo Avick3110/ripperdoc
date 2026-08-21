@@ -1,0 +1,204 @@
+using Ripperdoc.Core.Schema;
+using Ripperdoc.Core.Tweak;
+using Xunit;
+
+namespace Ripperdoc.Core.Tests;
+
+/// <summary>
+/// The whole spine, run against a real shipped database.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Tier (ii): this needs game data that is not this project's to redistribute,
+/// so it cannot run on a runner and does not try to. The gate script runs it
+/// when the environment names a database and announces it as skipped, by name,
+/// when nothing does. Run outside the gate with no database named, it fails
+/// rather than passing quietly.
+/// </para>
+/// <para>
+/// The counts below are what the research this port reproduces measured. A
+/// divergence is a defect in the port, and the way to close it is to find out
+/// which values moved and why - never to move the number written here to
+/// whatever the code now produces.
+/// </para>
+/// </remarks>
+[Trait(TierTrait.Name, TierTrait.ShippedDatabase)]
+public class ShippedDatabaseValidationTests : IClassFixture<ShippedDatabaseFixture>
+{
+    private const int RecordsInTheDatabase = 193_354;
+    private const int ValuesInTheDatabase = 3_306_462;
+    private const int ValuesTheSchemaExplains = 3_150_037;
+    private const int FieldSlotsCorroborated = 6_584;
+    private const int FieldSlotsNoValueCarriesThem = 13;
+    private const int FieldSlotsOnTypesWithNoRecords = 658;
+
+    private readonly ShippedDatabaseFixture _fixture;
+
+    public ShippedDatabaseValidationTests(ShippedDatabaseFixture fixture) => _fixture = fixture;
+
+    [Fact]
+    public void TheDatabaseHoldsWhatThisPortWasMeasuredAgainst()
+    {
+        Assert.Equal(RecordsInTheDatabase, _fixture.Manifest.RecordsExamined);
+        Assert.Equal(ValuesInTheDatabase, _fixture.Manifest.StoredValueCount);
+    }
+
+    [Fact]
+    public void TheSchemaExplainsTheShippedValuesItWasMeasuredToExplain()
+    {
+        Assert.Equal(ValuesTheSchemaExplains, _fixture.Manifest.StoredValuesExplained);
+        Assert.Equal(0.9527d, Math.Round(_fixture.Manifest.ExplainedShare, 4));
+    }
+
+    [Fact]
+    public void EveryRecordTypeInTheDatabaseIsOneTheSchemaKnows()
+    {
+        Assert.Empty(_fixture.Manifest.RecordTypesNotInSchema);
+    }
+
+    [Fact]
+    public void NoFieldIsContradictedByWhatTheDatabaseActuallyStores()
+    {
+        // Every value the schema explains is stored as the type the schema
+        // claims for it. This is the check that would catch the inherited type
+        // model having drifted from the game in a way that matters, and it is
+        // the strongest single statement the no-setup mode can make about
+        // itself.
+        var counts = _fixture.Manifest.StateCounts();
+
+        Assert.Equal(0, counts[ValidationState.Contradicted]);
+        Assert.Equal(0, counts[ValidationState.StorageTypeUnreadable]);
+    }
+
+    [Fact]
+    public void EveryFieldSlotIsMarkedAndTheMarksAccountForAllOfThem()
+    {
+        var counts = _fixture.Manifest.StateCounts();
+
+        Assert.Equal(FieldSlotsCorroborated, counts[ValidationState.Corroborated]);
+        Assert.Equal(FieldSlotsNoValueCarriesThem, counts[ValidationState.NoCorroboratingValue]);
+        Assert.Equal(FieldSlotsOnTypesWithNoRecords, counts[ValidationState.NoShippedRecordsOfType]);
+        Assert.Equal(_fixture.Schema.ResolvedFieldSlotCount, counts.Values.Sum());
+        Assert.Equal(_fixture.Schema.ResolvedFieldSlotCount, _fixture.Manifest.Fields().Count);
+    }
+
+    [Fact]
+    public void TheArtifactSaysWhichModeMadeItAndWhatArbitratedIt()
+    {
+        var artifact = _fixture.Artifact;
+
+        Assert.Equal(SchemaMode.InheritedTypeModel, artifact.Provenance.Mode);
+        Assert.NotNull(artifact.Validation);
+        Assert.Contains("sha256", artifact.Provenance.ValidatedAgainst!, StringComparison.Ordinal);
+
+        // A provenance block travels wherever the artifact is pasted, so it
+        // carries a fingerprint of the database rather than the place it was
+        // found on this machine.
+        Assert.DoesNotContain(":\\", artifact.Provenance.ValidatedAgainst!, StringComparison.Ordinal);
+        Assert.NotEmpty(artifact.Provenance.NamedLosses);
+    }
+
+    [Fact]
+    public void TheSweepNoticesWhenTheSchemaItIsCheckingIsDamaged()
+    {
+        // The canary. A sweep that always returns the same number tells you
+        // nothing about whether it ran, so one field the database really does
+        // carry is renamed and the sweep is expected to come back worse. If
+        // this passes, the machinery discriminates; if it does not, every other
+        // number in this file is unearned.
+        var busiest = _fixture.Manifest.Fields()
+            .OrderByDescending(field => field.CorroboratingValueCount)
+            .ThenBy(field => field.FieldName, StringComparer.Ordinal)
+            .First();
+
+        Assert.True(busiest.CorroboratingValueCount > 0, "the undamaged sweep corroborated nothing");
+
+        var damaged = ValidationManifest.Build(
+            RecordSchemaDerivation.Derive(
+                Damage(_fixture.Reading, busiest.DeclaringTypeName, busiest.FieldName),
+                "the pinned type model with one field renamed"),
+            _fixture.Database);
+
+        Assert.True(
+            damaged.StoredValuesExplained < _fixture.Manifest.StoredValuesExplained,
+            $"renaming '{busiest.FieldName}' explained {damaged.StoredValuesExplained} values, "
+            + $"no fewer than the {_fixture.Manifest.StoredValuesExplained} the intact schema explains");
+
+        var afterwards = damaged.Fields()
+            .Single(field => field.RecordTypeName == busiest.RecordTypeName
+                && field.FieldName == busiest.FieldName + DamageSuffix);
+
+        Assert.Equal(ValidationState.NoCorroboratingValue, afterwards.State);
+    }
+
+    private const string DamageSuffix = "_renamed_by_the_canary";
+
+    private static RecordTypeSourceReading Damage(
+        RecordTypeSourceReading reading,
+        string typeName,
+        string fieldName)
+    {
+        var types = reading.Types
+            .Select(type => type.TypeName == typeName
+                ? type with
+                {
+                    DeclaredFields = type.DeclaredFields
+                        .Select(field => field.FieldName == fieldName
+                            ? field with { FieldName = field.FieldName + DamageSuffix }
+                            : field)
+                        .ToArray(),
+                }
+                : type)
+            .ToArray();
+
+        return reading with { Types = types };
+    }
+}
+
+/// <summary>
+/// The shipped database, parsed once for every check that needs it.
+/// </summary>
+public sealed class ShippedDatabaseFixture
+{
+    public ShippedDatabaseFixture()
+    {
+        var path = Environment.GetEnvironmentVariable(VariableName);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new InvalidOperationException(
+                $"These checks read a shipped tweak database, which no runner has. Set {VariableName} to one "
+                + "to run them. The gate script announces them as skipped, by name, when it cannot run them - "
+                + "an absent database is never reported as a pass.");
+        }
+
+        Database = TweakDatabaseSource.OpenReadOnly(path);
+        Reading = ReflectedRecordTypeSource.FromPinnedTypeModel().Read();
+        Schema = RecordSchemaDerivation.Derive(Reading, "the pinned type model");
+        Manifest = ValidationManifest.Build(Schema, Database);
+        Artifact = SchemaIr.Create(Schema, Manifest, SchemaMode.InheritedTypeModel, DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>
+    /// The environment variable naming the database, derived from the brand
+    /// rather than spelled out, so a rebrand does not leave a stale name here.
+    /// </summary>
+    public static string VariableName => Branding.Name.ToUpperInvariant() + "_TWEAKDB_PATH";
+
+    public TweakDatabaseSource Database { get; }
+
+    public RecordTypeSourceReading Reading { get; }
+
+    public RecordSchema Schema { get; }
+
+    public ValidationManifest Manifest { get; }
+
+    public SchemaIr Artifact { get; }
+}
+
+/// <summary>Which tier a check belongs to, as a trait the gate can filter on.</summary>
+public static class TierTrait
+{
+    public const string Name = "Tier";
+
+    public const string ShippedDatabase = "ShippedDatabase";
+}

@@ -2,11 +2,12 @@
 
 A deterministic resolved-state engine for Cyberpunk 2077 mod setups.
 
-**Status: early. There is no release, and there is no engine yet.** This
-repository was created at the start of the build; what it currently holds is
-the operating manual, the standards, the decision record, and a set of measured
-findings about how the game and its modding frameworks actually resolve
-conflicts. The code arrives wave by wave from here.
+**Status: early. There is no release.** The first layer of the engine exists -
+the schema layer that knows what every record type looks like, and the check
+that holds it to what the game actually ships. Nothing reads a mod setup yet.
+Alongside the code sit the operating manual, the standards, the decision
+record, and a set of measured findings about how the game and its modding
+frameworks actually resolve conflicts. The rest arrives wave by wave from here.
 
 ---
 
@@ -46,6 +47,24 @@ remains the editor; ripperdoc is the data layer beneath it.
 | [`tests/`](tests/) | Checks, and the [fixture rules](tests/fixtures/README.md) they run under |
 | `CLAUDE.md` | The operating manual - how work is done here, in full |
 
+## What works today
+
+The schema layer, in the mode that needs no setup.
+
+It reads the record type model out of the pinned dependency, resolves what
+every record type's fields are, and then checks that schema against a shipped
+tweak database - computing each value's identifier arithmetically, so nothing
+has to map identifiers back to names. Every field comes out marked: confirmed
+by real data, or not confirmed and labelled with the reason.
+
+The artifact it produces carries its own provenance, including what this mode
+cannot do. It cannot say what *kind* of record a stored reference is allowed to
+point at, it cannot notice the type model drifting away from the game, and it
+covers a newly patched game only once the dependency catches up. Those are
+written into the artifact rather than into a footnote, because a degraded mode
+that does not say what it lost is indistinguishable from a complete one until
+it gives a wrong answer.
+
 ## The findings are worth reading on their own
 
 Some of what is in [`findings/`](findings/) is useful whether or not this tool
@@ -59,13 +78,24 @@ would have refuted it, and where it stops.
 Requires the .NET 8 SDK.
 
 ```bash
-dotnet build ripperdoc.sln
-dotnet test ripperdoc.sln
+bash scripts/ci-checks.sh
 ```
+
+That script is the gate, and it is the same command CI runs. Checks that cannot
+run on a machine without the game are announced as skipped, by name, rather
+than left silent.
 
 The dependency on WolvenKit is pinned exactly, and a test asserts the pin - the
 type model is inherited rather than hand-written, so a version drift would be a
 silent behaviour change.
+
+The checks that read a shipped tweak database need one, and the database is the
+game publisher's file rather than anything this project ships. Point
+`RIPPERDOC_TWEAKDB_PATH` at your own copy to run them:
+
+```bash
+RIPPERDOC_TWEAKDB_PATH="<your game>/r6/cache/tweakdb_ep1.bin" bash scripts/ci-checks.sh
+```
 
 ## Credit, and licence
 

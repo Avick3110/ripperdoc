@@ -330,6 +330,7 @@ and its status: `OPEN`, `RUN <date> → result`, or `WAIVED <date>, Aaron,
 | 2 | Whether the tweak framework sorts, or consumes an already-collated enumeration | Tweak-order measurement, single NTFS volume | **OPEN** — would be settled by running the same tree from a non-collating volume |
 | 3 | Per-mod apportionment of shared pooled values | Buffer-ceiling measurement | **OPEN** — wave 6 |
 | 4 | Whether mods name properties the schema lacks, and how often | Mod-declared-types measurement | **OPEN** — wave 2 |
+| 5 | How the game addresses a name carrying a character outside ASCII | Wave 1a. The pinned conversion replaces such a character with a placeholder, so two different names come out as one identifier; the engine refuses the name rather than reproduce the collision | **OPEN** — would be settled by a mod-authored name outside ASCII, resolved in game and read back. Until then the refusal is a labelled limit, not a measured rule |
 
 **The ship gate is: this table empty, or every remaining line waived by name.**
 

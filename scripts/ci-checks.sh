@@ -15,6 +15,15 @@
 #      announced as SKIPPED, by name. An absent capability never reads as a
 #      pass, because a skipped check reported as green is the same lie as a
 #      wrong answer.
+#
+# The tier (ii) checks read a shipped tweak database, which is the game
+# publisher's file and lives only on a machine with the game installed. They
+# run when the environment names one and are announced as skipped when it does
+# not. The variable name below is the one the tier (ii) fixture derives from
+# the brand constant; if the two ever disagree the symptom is loud - the checks
+# either run and fail to find a database, or are announced as skipped when they
+# could have run.
+tweakdb_variable="RIPPERDOC_TWEAKDB_PATH"
 
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
@@ -42,12 +51,22 @@ skip() { # label reason
 
 run "debris sweep self-test" bash scripts/debris-sweep.sh --self-test
 run "debris sweep"           bash scripts/debris-sweep.sh
+
+# Cleaned before building because part of what is under test is a schema this
+# engine derives, and a build-then-run that serves a stale binary would be
+# testing the previous answer while reporting on this one.
+run "clean"                  dotnet clean ripperdoc.sln --nologo -v minimal
 run "build"                  dotnet build ripperdoc.sln --nologo -v minimal
-run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal
+run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase"
 
 # Tiers (ii) and (iii): see tests/fixtures/README.md. Named here rather than
 # left silent, so the gate's coverage is legible from its own output.
-skip "shipped-database checks" "needs the user's own installed game data - tier (ii), local only"
+if [ -n "${tweakdb_variable:+x}" ] && [ -n "$(printenv "$tweakdb_variable" || true)" ]; then
+  run "shipped-database checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=ShippedDatabase"
+else
+  skip "shipped-database checks"     "needs the user's own installed game data - tier (ii), local only; set $tweakdb_variable to a shipped tweak database to run it"
+fi
+
 skip "RTTI-dump checks"        "needs a dump generated from the user's own install - tier (iii), local only"
 
 echo ""
