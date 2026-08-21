@@ -38,15 +38,31 @@ public sealed class TweakDatabaseSource : IShippedRecordSource
     private readonly TweakDB _database;
     private readonly Dictionary<Type, string?> _storageTypeNames = new();
 
-    private TweakDatabaseSource(TweakDB database, string description, int storedValueCount)
+    private TweakDatabaseSource(TweakDB database, string name, string fingerprint, int storedValueCount)
     {
         _database = database;
-        Description = description;
+        Name = name;
+        Fingerprint = fingerprint;
+        Description = $"{name}, sha256 {fingerprint}";
         StoredValueCount = storedValueCount;
     }
 
     /// <inheritdoc />
     public string Description { get; }
+
+    /// <summary>The database file's name, without the directory it was found in.</summary>
+    public string Name { get; }
+
+    /// <summary>
+    /// The SHA-256 of the database's bytes, lower-case hexadecimal.
+    /// </summary>
+    /// <remarks>
+    /// Which database a result came from is part of the result. Two files can
+    /// be the same size, sit in the same directory and carry different content
+    /// - one game build against another - so identity here is the hash and
+    /// never the name or the size.
+    /// </remarks>
+    public string Fingerprint { get; }
 
     /// <inheritdoc />
     public int StoredValueCount { get; }
@@ -85,7 +101,7 @@ public sealed class TweakDatabaseSource : IShippedRecordSource
             throw new FileNotFoundException("There is no tweak database at this path.", path);
         }
 
-        var fingerprint = Fingerprint(path);
+        var fingerprint = ComputeFingerprint(path);
 
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using var reader = new TweakDBReader(stream);
@@ -97,8 +113,11 @@ public sealed class TweakDatabaseSource : IShippedRecordSource
                 $"'{Path.GetFileName(path)}' could not be read as a tweak database: {outcome}.");
         }
 
-        var description = $"{Path.GetFileName(path)}, sha256 {fingerprint}";
-        return new TweakDatabaseSource(database, description, database.GetFlats().Count);
+        return new TweakDatabaseSource(
+            database,
+            Path.GetFileName(path),
+            fingerprint,
+            database.GetFlats().Count);
     }
 
     /// <inheritdoc />
@@ -126,6 +145,12 @@ public sealed class TweakDatabaseSource : IShippedRecordSource
 
         try
         {
+            // A stored value carries no annotation flags - it is an object, not
+            // a declaration - so the name is resolved without them. Comparing
+            // it against a schema field's name therefore rests on flags not
+            // changing what a storage type is called, which holds for the
+            // pinned type model and is the assumption to revisit if a later one
+            // ever reports a field as contradicted for no visible reason.
             storageType = RedReflection.GetRedTypeFromCSType(valueType, Flags.Empty);
         }
         catch (Exception)
@@ -140,7 +165,7 @@ public sealed class TweakDatabaseSource : IShippedRecordSource
         return true;
     }
 
-    private static string Fingerprint(string path)
+    private static string ComputeFingerprint(string path)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using var algorithm = SHA256.Create();

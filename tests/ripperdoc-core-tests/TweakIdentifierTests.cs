@@ -97,6 +97,22 @@ public class TweakIdentifierTests
     }
 
     [Fact]
+    public void TheLengthBoundIsWhereThePinnedConversionStopsBeingUsable()
+    {
+        // The bound is pinned from outside rather than by restating the
+        // constant: at the limit the two conversions still agree, and one
+        // character further the pinned one produces an identifier whose length
+        // field no longer holds the length it was built from.
+        var atLimit = new string('a', TweakIdentifier.MaxNameLength);
+        TweakDBID pinnedAtLimit = atLimit;
+        Assert.Equal((ulong)pinnedAtLimit, TweakIdentifier.Of(atLimit));
+        Assert.True(TweakIdentifier.IsWellFormed((ulong)pinnedAtLimit));
+
+        TweakDBID pinnedPastLimit = new string('a', TweakIdentifier.MaxNameLength + 1);
+        Assert.False(TweakIdentifier.IsWellFormed((ulong)pinnedPastLimit));
+    }
+
+    [Fact]
     public void ANameTooLongToAddressIsRefusedRatherThanWrapped()
     {
         var name = new string('a', TweakIdentifier.MaxNameLength + 1);
@@ -111,6 +127,45 @@ public class TweakIdentifierTests
         var record = TweakIdentifier.Of(new string('a', 200));
 
         Assert.Throws<ArgumentException>(() => TweakIdentifier.ForField(record, new string('b', 55)));
+    }
+
+    [Fact]
+    public void AnUnaddressablePairIsAnAnswerRatherThanAnError()
+    {
+        // A caller sweeping millions of pairs needs to record this one and
+        // carry on, not lose everything it had already established.
+        var record = TweakIdentifier.Of(new string('a', 200));
+
+        Assert.False(TweakIdentifier.TryForField(record, new string('b', 55), out var none));
+        Assert.Equal(0ul, none);
+
+        Assert.True(TweakIdentifier.TryForField(record, new string('b', 54), out var addressable));
+        Assert.Equal(TweakIdentifier.MaxNameLength, TweakIdentifier.LengthOf(addressable));
+    }
+
+    [Fact]
+    public void AnIdentifierWithBitsAboveTheLengthFieldIsRefusedRatherThanMisread()
+    {
+        // The pinned conversion does not truncate the length it stores, so a
+        // name too long to address comes back with bits set above the length
+        // field. Reading the low eight of them would give a length the name
+        // never had, and every field computed from it would miss silently.
+        TweakDBID overlong = new string('a', 300);
+        Assert.False(TweakIdentifier.IsWellFormed((ulong)overlong));
+
+        var thrown = Assert.Throws<ArgumentException>(
+            () => TweakIdentifier.ForField((ulong)overlong, "field"));
+        Assert.Contains("not a well-formed identifier", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EveryIdentifierThisArithmeticBuildsIsWellFormed()
+    {
+        Assert.True(TweakIdentifier.IsWellFormed(TweakIdentifier.Of("Items.money")));
+        Assert.True(TweakIdentifier.IsWellFormed(
+            TweakIdentifier.Of(new string('a', TweakIdentifier.MaxNameLength))));
+        Assert.True(TweakIdentifier.IsWellFormed(
+            TweakIdentifier.ForField(TweakIdentifier.Of("Items.money"), "entityName")));
     }
 
     [Fact]

@@ -66,7 +66,13 @@ public static class TweakIdentifier
     public static ulong Of(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
-        RequireAddressableLength(name.Length, nameof(name));
+        if (name.Length > MaxNameLength)
+        {
+            throw new ArgumentException(
+                $"A name of {name.Length} bytes has no identifier; the length field holds at most "
+                + $"{MaxNameLength}.",
+                nameof(name));
+        }
 
         return ((ulong)name.Length << 32) | Checksum(0u, name);
     }
@@ -86,9 +92,47 @@ public static class TweakIdentifier
     /// <exception cref="ArgumentException">
     /// <paramref name="fieldName"/> is empty, carries a character above
     /// <see cref="MaxCharacter"/>, or would make the combined name longer than
-    /// <see cref="MaxNameLength"/>.
+    /// <see cref="MaxNameLength"/>; or <paramref name="recordIdentifier"/> is
+    /// not well formed. Use <see cref="TryForField"/> where an unaddressable
+    /// pair is an outcome to record rather than an error.
     /// </exception>
     public static ulong ForField(ulong recordIdentifier, string fieldName)
+    {
+        if (!TryForField(recordIdentifier, fieldName, out var identifier))
+        {
+            throw new ArgumentException(
+                $"'{fieldName}' cannot be addressed on this record: the combined name would be "
+                + $"{LengthOf(recordIdentifier) + 1 + fieldName.Length} bytes and the length field holds at "
+                + $"most {MaxNameLength}.",
+                nameof(fieldName));
+        }
+
+        return identifier;
+    }
+
+    /// <summary>
+    /// The identifier of a field on a record, where one exists.
+    /// </summary>
+    /// <param name="recordIdentifier">The owning record's identifier.</param>
+    /// <param name="fieldName">The field's name, without the separator.</param>
+    /// <param name="identifier">
+    /// The identifier of <c>&lt;record&gt;.&lt;field&gt;</c>, or zero if there is none.
+    /// </param>
+    /// <returns>False if this field cannot be addressed on this record at all.</returns>
+    /// <remarks>
+    /// A combined name longer than <see cref="MaxNameLength"/> has no identifier,
+    /// so no stored value can exist under it. That is a fact about the pair
+    /// rather than an error, and a caller sweeping many records against many
+    /// fields wants to record it and carry on rather than lose the sweep - which
+    /// is why this form exists beside the throwing one.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="fieldName"/> is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="fieldName"/> is empty or carries a character above
+    /// <see cref="MaxCharacter"/>, or <paramref name="recordIdentifier"/> is not
+    /// a well-formed identifier.
+    /// </exception>
+    public static bool TryForField(ulong recordIdentifier, string fieldName, out ulong identifier)
     {
         ArgumentNullException.ThrowIfNull(fieldName);
         if (fieldName.Length == 0)
@@ -96,15 +140,35 @@ public static class TweakIdentifier
             throw new ArgumentException("A field name cannot be empty.", nameof(fieldName));
         }
 
-        var checksum = ChecksumOf(recordIdentifier);
-        var length = LengthOf(recordIdentifier) + 1 + fieldName.Length;
-        RequireAddressableLength(length, nameof(fieldName));
+        RequireWellFormed(recordIdentifier);
 
-        checksum = Checksum(checksum, FieldSeparator.ToString());
+        identifier = 0;
+        var length = LengthOf(recordIdentifier) + 1 + fieldName.Length;
+        if (length > MaxNameLength)
+        {
+            return false;
+        }
+
+        var checksum = Checksum(ChecksumOf(recordIdentifier), FieldSeparator.ToString());
         checksum = Checksum(checksum, fieldName);
 
-        return ((ulong)length << 32) | checksum;
+        identifier = ((ulong)length << 32) | checksum;
+        return true;
     }
+
+    /// <summary>
+    /// Whether <paramref name="identifier"/> is shaped like an identifier this
+    /// arithmetic can build on.
+    /// </summary>
+    /// <param name="identifier">The identifier to test.</param>
+    /// <returns>True if nothing is set above the length field.</returns>
+    /// <remarks>
+    /// The length occupies eight bits and nothing above them is ever set in a
+    /// shipped database. A value with bits set there was built from a name too
+    /// long to have an identifier, and reading its length would read the wrong
+    /// eight bits - so it is refused rather than quietly used.
+    /// </remarks>
+    public static bool IsWellFormed(ulong identifier) => (identifier >> (32 + 8)) == 0;
 
     /// <summary>
     /// The name length an identifier carries in its high half.
@@ -153,13 +217,14 @@ public static class TweakIdentifier
         return ~register;
     }
 
-    private static void RequireAddressableLength(int length, string argumentName)
+    private static void RequireWellFormed(ulong identifier)
     {
-        if (length > MaxNameLength)
+        if (!IsWellFormed(identifier))
         {
             throw new ArgumentException(
-                $"A name of {length} bytes has no identifier; the length field holds at most {MaxNameLength}.",
-                argumentName);
+                $"0x{identifier:X} is not a well-formed identifier: it has bits set above the length field, "
+                + "so the length it appears to carry is not the length it was built from.",
+                nameof(identifier));
         }
     }
 

@@ -39,8 +39,10 @@ public class ShippedDatabaseValidationTests : IClassFixture<ShippedDatabaseFixtu
     [Fact]
     public void TheDatabaseHoldsWhatThisPortWasMeasuredAgainst()
     {
+        Assert.Equal(ShippedDatabaseFixture.MeasuredDatabase, _fixture.Database.Fingerprint);
         Assert.Equal(RecordsInTheDatabase, _fixture.Manifest.RecordsExamined);
         Assert.Equal(ValuesInTheDatabase, _fixture.Manifest.StoredValueCount);
+        Assert.Equal(0, _fixture.Manifest.UnaddressableFieldProbes);
     }
 
     [Fact]
@@ -89,7 +91,7 @@ public class ShippedDatabaseValidationTests : IClassFixture<ShippedDatabaseFixtu
 
         Assert.Equal(SchemaMode.InheritedTypeModel, artifact.Provenance.Mode);
         Assert.NotNull(artifact.Validation);
-        Assert.Contains("sha256", artifact.Provenance.ValidatedAgainst!, StringComparison.Ordinal);
+        Assert.Contains(ShippedDatabaseFixture.MeasuredDatabase, artifact.Provenance.ValidatedAgainst!, StringComparison.Ordinal);
 
         // A provenance block travels wherever the artifact is pasted, so it
         // carries a fingerprint of the database rather than the place it was
@@ -172,6 +174,22 @@ public sealed class ShippedDatabaseFixture
         }
 
         Database = TweakDatabaseSource.OpenReadOnly(path);
+
+        // Which database this is decides whether the counts below mean
+        // anything. Two builds of the game ship differently sized databases
+        // under sibling names in the same directory, so pointing at the wrong
+        // one would otherwise fail every count with a message blaming this
+        // port for a divergence that is really a different game build.
+        if (!string.Equals(Database.Fingerprint, MeasuredDatabase, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"These checks reproduce counts measured against {MeasuredDatabaseDescription}, whose sha256 "
+                + $"is {MeasuredDatabase}. {VariableName} names '{Database.Name}', whose sha256 is "
+                + $"{Database.Fingerprint}. That is a different database, so the counts do not apply to it - "
+                + "this is not a defect in the engine. Point the variable at the same build, or measure the "
+                + "counts afresh against yours and say in the check which build they came from.");
+        }
+
         Reading = ReflectedRecordTypeSource.FromPinnedTypeModel().Read();
         Schema = RecordSchemaDerivation.Derive(Reading, "the pinned type model");
         Manifest = ValidationManifest.Build(Schema, Database);
@@ -183,6 +201,16 @@ public sealed class ShippedDatabaseFixture
     /// rather than spelled out, so a rebrand does not leave a stale name here.
     /// </summary>
     public static string VariableName => Branding.Name.ToUpperInvariant() + "_TWEAKDB_PATH";
+
+    /// <summary>
+    /// The SHA-256 of the one database the counts in these checks were measured
+    /// against.
+    /// </summary>
+    public const string MeasuredDatabase =
+        "89c7ee678c1366d4c289edc78beaa60ce3d64bf44b300fc3902adc94f6ac14c5";
+
+    /// <summary>Which game build that database belongs to, in words.</summary>
+    public const string MeasuredDatabaseDescription = "game 2.31 with Phantom Liberty";
 
     public TweakDatabaseSource Database { get; }
 

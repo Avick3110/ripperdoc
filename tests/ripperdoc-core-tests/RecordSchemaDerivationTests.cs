@@ -191,6 +191,19 @@ public class RecordSchemaDerivationTests
         Assert.Single(schema.RecordTypeNames);
     }
 
+    [Theory]
+    [InlineData("gamedataItem_Record", true)]
+    [InlineData("gamedata_Record", true)]
+    [InlineData("gamedataTweakDBRecord", false)]
+    [InlineData("Item_Record", false)]
+    [InlineData("gamedataItem", false)]
+    [InlineData("IScriptable", false)]
+    [InlineData("", false)]
+    public void ARecordTypeIsRecognisedByBothHalvesOfItsName(string typeName, bool isRecord)
+    {
+        Assert.Equal(isRecord, RecordTypeNaming.IsRecordTypeName(typeName));
+    }
+
     private static RecordSchema Derive(params RecordTypeShape[] types) =>
         RecordSchemaDerivation.Derive(
             new RecordTypeSourceReading(types, Array.Empty<DerivationFailure>()),

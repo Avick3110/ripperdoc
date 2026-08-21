@@ -40,7 +40,14 @@ default set with the higher tiers filtered out, then either runs a higher tier
 because the environment gave it what that tier needs, or announces that tier as
 skipped by name in its own summary. Run such a check directly, outside the
 gate, with nothing to run it against, and it fails - loudly, saying what it
-wanted. There is no path on which it passes without having run.
+wanted. There is no path on which it passes without having run: the gate asks
+the test runner to treat a filter that matches nothing as a failure, because a
+mistyped filter would otherwise report a pass for a tier it never executed.
+
+**A check that reproduces numbers measured against one specific input verifies
+that it has that input.** Where the input can be fingerprinted, the check
+compares fingerprints and says "this is a different input" rather than letting
+every count fail as though the code were wrong.
 
 Tier (ii) exists rather than folding into tier (i) for a measured reason: in the
 pinned library version, a written TweakDB file cannot be read back by the same

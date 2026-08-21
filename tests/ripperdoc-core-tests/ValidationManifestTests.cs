@@ -192,6 +192,37 @@ public class ValidationManifestTests
         Assert.Equal(manifest.Fields().Count, manifest.Validated().Count() + manifest.Unvalidated().Count());
     }
 
+    [Fact]
+    public void APairThatCannotBeAddressedIsCountedRatherThanLosingTheSweep()
+    {
+        // One record whose name is long enough that a long field name has no
+        // identifier at all. The sweep must come back with everything else it
+        // established, and say how many places it could not look.
+        var schema = SchemaWith(
+            Field("speed", "Float"),
+            Field(new string('f', 60), "Float"));
+        var shipped = new FakeDatabase((new string('r', 200), "gamedataThing_Record"));
+        shipped.Store(new string('r', 200), "speed", "Float");
+
+        var manifest = ValidationManifest.Build(schema, shipped);
+
+        Assert.Equal(1, manifest.UnaddressableFieldProbes);
+        Assert.Equal(1, manifest.StoredValuesExplained);
+        Assert.Equal(
+            ValidationState.Corroborated,
+            manifest.Fields().Single(field => field.FieldName == "speed").State);
+    }
+
+    [Fact]
+    public void AnOrdinarySweepAddressesEverythingItLooksAt()
+    {
+        var schema = SchemaWith(Field("speed", "Float"));
+        var shipped = new FakeDatabase(("Vehicle.quadra", "gamedataThing_Record"));
+        shipped.Store("Vehicle.quadra", "speed", "Float");
+
+        Assert.Equal(0, ValidationManifest.Build(schema, shipped).UnaddressableFieldProbes);
+    }
+
     private static FieldValidation Single(ValidationManifest manifest) => Assert.Single(manifest.Fields());
 
     private static RecordFieldShape Field(string name, string storageType) => new(name, storageType);

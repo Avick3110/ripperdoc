@@ -113,7 +113,81 @@ public class ReflectedRecordTypeSourceTests
 
         var failure = Assert.Single(RecordSchemaDerivation.Derive(source).Failures);
 
-        Assert.Contains("both named", failure.Reason, StringComparison.Ordinal);
+        Assert.Contains("different types with the same name", failure.Reason, StringComparison.Ordinal);
+        Assert.Contains("not in this schema", failure.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ARecordTypeIsNeverHandedAClashingAncestorsFieldsInstead()
+    {
+        // The dangerous half of a name clash is not the clash itself but the
+        // type below it, which would otherwise inherit whichever same-named
+        // ancestor happened to be read first.
+        var source = new ReflectedRecordTypeSource(
+            new[] { typeof(gamedataProbeInheritsHere_Record), typeof(Elsewhere.gamedataProbeInheritsElsewhere_Record) },
+            "two ancestors that share a name");
+
+        var schema = RecordSchemaDerivation.Derive(source);
+
+        var here = schema.Find(nameof(gamedataProbeInheritsHere_Record))!;
+        var elsewhere = schema.Find(nameof(Elsewhere.gamedataProbeInheritsElsewhere_Record))!;
+
+        // Whichever of the two was read second, neither may end up carrying the
+        // other's field, and the one that lost its base must have no field at
+        // all rather than the wrong one.
+        Assert.DoesNotContain("fieldFromHere", elsewhere.Fields.Keys.Where(_ => here.Fields.Count == 0));
+        Assert.True(
+            here.Fields.Count == 0 || elsewhere.Fields.Count == 0,
+            "one of the two should have had its chain cut");
+        Assert.True(
+            here.Fields.Count + elsewhere.Fields.Count == 1,
+            $"exactly one field set should survive; got {here.Fields.Count} and {elsewhere.Fields.Count}");
+
+        var cut = here.Fields.Count == 0 ? here : elsewhere;
+        Assert.Null(cut.BaseTypeName);
+
+        var failure = Assert.Single(schema.Failures);
+        Assert.Equal(cut.Name, failure.TypeName);
+        Assert.Contains("cut here", failure.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void APropertyTheTypeModelCannotMapIsReportedRatherThanCarriedWithNoType()
+    {
+        // The type model answers an unmappable property with an empty storage
+        // type rather than by refusing, so a source that only guarded against
+        // an exception would carry the field and never hear about it again.
+        var schema = Derive(typeof(gamedataProbeUnmappable_Record));
+        var fields = schema.Find(nameof(gamedataProbeUnmappable_Record))!.Fields;
+
+        Assert.DoesNotContain("unmappable", fields.Keys);
+        Assert.Contains("ordinary", fields.Keys);
+        Assert.All(fields.Values, field => Assert.NotEmpty(field.StorageType));
+
+        var failure = Assert.Single(schema.Failures);
+        Assert.Equal("Unmappable", failure.MemberName);
+        Assert.Contains("names no storage type", failure.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EveryFieldInThePinnedTypeModelHasARealStorageType()
+    {
+        var schema = RecordSchemaDerivation.Derive(ReflectedRecordTypeSource.FromPinnedTypeModel());
+
+        Assert.All(
+            schema.RecordTypeNames.SelectMany(name => schema.Find(name)!.Fields.Values),
+            field => Assert.NotEmpty(field.StorageType));
+    }
+
+    [Fact]
+    public void ATypeOutsideThePublicSurfaceIsNotPartOfTheSchema()
+    {
+        var schema = Derive(typeof(gamedataProbeAnnotated_Record).Assembly
+            .GetTypes()
+            .Where(type => type.Name.StartsWith("gamedataProbe", StringComparison.Ordinal))
+            .ToArray());
+
+        Assert.DoesNotContain("gamedataProbeInternal_Record", schema.RecordTypeNames);
     }
 
     private static RecordSchema Derive(params Type[] types) =>

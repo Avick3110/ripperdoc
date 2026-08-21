@@ -33,7 +33,8 @@ public sealed class ValidationManifest
         int storedValuesExplained,
         int storedValueCount,
         int recordsExamined,
-        IReadOnlyList<string> recordTypesNotInSchema)
+        IReadOnlyList<string> recordTypesNotInSchema,
+        int unaddressableFieldProbes)
     {
         _fields = fields;
         SourceDescription = sourceDescription;
@@ -41,6 +42,7 @@ public sealed class ValidationManifest
         StoredValueCount = storedValueCount;
         RecordsExamined = recordsExamined;
         RecordTypesNotInSchema = recordTypesNotInSchema;
+        UnaddressableFieldProbes = unaddressableFieldProbes;
     }
 
     /// <summary>What the shipped values were read from.</summary>
@@ -68,6 +70,18 @@ public sealed class ValidationManifest
     /// where it would look like ordinary residue.
     /// </remarks>
     public IReadOnlyList<string> RecordTypesNotInSchema { get; }
+
+    /// <summary>
+    /// How many record-and-field pairs could not be addressed at all, because
+    /// their combined name is longer than an identifier can carry.
+    /// </summary>
+    /// <remarks>
+    /// Expected to be zero. Such a pair is not a failure of the sweep - no
+    /// stored value can exist under a name with no identifier - but it is a
+    /// place the sweep looked and could not look properly, so it is counted
+    /// rather than passed over in silence.
+    /// </remarks>
+    public int UnaddressableFieldProbes { get; }
 
     /// <summary>
     /// The share of stored values the schema accounts for, between 0 and 1.
@@ -119,6 +133,7 @@ public sealed class ValidationManifest
         var unknownTypes = new HashSet<string>(StringComparer.Ordinal);
         var explained = new HashSet<ulong>();
         var recordsExamined = 0;
+        var unaddressable = 0;
 
         foreach (var record in shipped.Records)
         {
@@ -139,7 +154,16 @@ public sealed class ValidationManifest
 
             foreach (var field in type.Fields.Values)
             {
-                var identifier = TweakIdentifier.ForField(record.Identifier, field.Name);
+                if (!TweakIdentifier.TryForField(record.Identifier, field.Name, out var identifier))
+                {
+                    // This field cannot be addressed on this record at all, so
+                    // no stored value can exist for it. Counted rather than
+                    // thrown: one such pair must not cost the sweep every
+                    // verdict it had already reached.
+                    unaddressable++;
+                    continue;
+                }
+
                 if (!shipped.TryGetStoredValueType(identifier, out var storedType))
                 {
                     continue;
@@ -194,7 +218,8 @@ public sealed class ValidationManifest
             explained.Count,
             shipped.StoredValueCount,
             recordsExamined,
-            unknownTypes.OrderBy(name => name, StringComparer.Ordinal).ToArray());
+            unknownTypes.OrderBy(name => name, StringComparer.Ordinal).ToArray(),
+            unaddressable);
     }
 
     private static ValidationState StateOf(Tally tally, bool typeHasRecords)
