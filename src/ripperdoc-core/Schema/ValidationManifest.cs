@@ -156,11 +156,14 @@ public sealed class ValidationManifest
             {
                 if (!TweakIdentifier.TryForField(record.Identifier, field.Name, out var identifier))
                 {
-                    // This field cannot be addressed on this record at all, so
-                    // no stored value can exist for it. Counted rather than
-                    // thrown: one such pair must not cost the sweep every
-                    // verdict it had already reached.
+                    // No identifier exists for this pair, so there is nothing to
+                    // look under. Recorded as its own outcome: marking it the
+                    // same way as a field the records were checked for and did
+                    // not carry would claim a check that never happened.
                     unaddressable++;
+                    var missing = fieldTallies.GetValueOrDefault(field.Name);
+                    missing.Unaddressable++;
+                    fieldTallies[field.Name] = missing;
                     continue;
                 }
 
@@ -224,6 +227,9 @@ public sealed class ValidationManifest
 
     private static ValidationState StateOf(Tally tally, bool typeHasRecords)
     {
+        // Ordered by how much each outcome establishes. A contradiction is the
+        // strongest thing the data can say, and the weakest - that nothing
+        // could be looked at - must never be reported as one of the others.
         // Disagreement wins over agreement. One stored value of the wrong type
         // is a finding about the schema; it is not outvoted by the values that
         // happened to match.
@@ -242,6 +248,11 @@ public sealed class ValidationManifest
             return ValidationState.StorageTypeUnreadable;
         }
 
+        if (tally.Unaddressable > 0)
+        {
+            return ValidationState.NotAddressable;
+        }
+
         return typeHasRecords
             ? ValidationState.NoCorroboratingValue
             : ValidationState.NoShippedRecordsOfType;
@@ -252,6 +263,7 @@ public sealed class ValidationManifest
         public int Agreeing;
         public int Disagreeing;
         public int Unreadable;
+        public int Unaddressable;
         public string? ObservedStorageType;
     }
 }
@@ -333,4 +345,17 @@ public enum ValidationState
     /// type they are stored as, so the claim is neither confirmed nor denied.
     /// </summary>
     StorageTypeUnreadable,
+
+    /// <summary>
+    /// This field has no identifier on records of this type, so nothing could
+    /// be stored under it and nothing was looked for.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not <see cref="NoCorroboratingValue"/>, which says the
+    /// records were checked and did not carry the field. Here they were not
+    /// checked, because there was no identifier to check under - and reporting
+    /// a check that did not happen is the failure this whole manifest exists to
+    /// prevent.
+    /// </remarks>
+    NotAddressable,
 }

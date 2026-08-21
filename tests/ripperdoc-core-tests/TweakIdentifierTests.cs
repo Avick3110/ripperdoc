@@ -130,14 +130,9 @@ public class TweakIdentifierTests
     }
 
     [Fact]
-    public void AnUnaddressablePairIsAnAnswerRatherThanAnError()
+    public void TheLongestAddressablePairIsStillAddressable()
     {
-        // A caller sweeping millions of pairs needs to record this one and
-        // carry on, not lose everything it had already established.
         var record = TweakIdentifier.Of(new string('a', 200));
-
-        Assert.False(TweakIdentifier.TryForField(record, new string('b', 55), out var none));
-        Assert.Equal(0ul, none);
 
         Assert.True(TweakIdentifier.TryForField(record, new string('b', 54), out var addressable));
         Assert.Equal(TweakIdentifier.MaxNameLength, TweakIdentifier.LengthOf(addressable));
@@ -155,7 +150,72 @@ public class TweakIdentifierTests
 
         var thrown = Assert.Throws<ArgumentException>(
             () => TweakIdentifier.ForField((ulong)overlong, "field"));
-        Assert.Contains("not a well-formed identifier", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("above its length field", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("malformed record identifier")]
+    [InlineData("field name outside the range")]
+    [InlineData("combined name too long")]
+    public void EveryReasonAPairHasNoIdentifierIsAnAnswerNotAnException(string reason)
+    {
+        // The totality half of the arm-per-branch rule: a sweep over millions
+        // of pairs has to be able to record one and carry on. Each reason gets
+        // its own case here rather than one standing in for the rest.
+        var record = TweakIdentifier.Of("Items.money");
+        var field = "entityName";
+
+        switch (reason)
+        {
+            case "malformed record identifier":
+                record = (ulong)(TweakDBID)new string('a', 300);
+                break;
+            case "field name outside the range":
+                field = "caf\u00e9";
+                break;
+            default:
+                record = TweakIdentifier.Of(new string('a', 200));
+                field = new string('b', 55);
+                break;
+        }
+
+        Assert.False(TweakIdentifier.TryForField(record, field, out var none));
+        Assert.Equal(0ul, none);
+    }
+
+    [Fact]
+    public void TheOtherArmStillProducesAnIdentifier()
+    {
+        Assert.True(TweakIdentifier.TryForField(TweakIdentifier.Of("Items.money"), "entityName", out var id));
+        Assert.Equal(TweakIdentifier.Of("Items.money.entityName"), id);
+    }
+
+    [Fact]
+    public void AFieldNameThatIsMissingRatherThanUnaddressableIsStillTheCallersMistake()
+    {
+        // Narrowing the totality claim to what it actually covers: bad data is
+        // an answer, a broken caller is not.
+        Assert.Throws<ArgumentNullException>(
+            () => TweakIdentifier.TryForField(TweakIdentifier.Of("a"), null!, out _));
+        Assert.Throws<ArgumentException>(
+            () => TweakIdentifier.TryForField(TweakIdentifier.Of("a"), "", out _));
+    }
+
+    [Fact]
+    public void AnUnaddressablePairSaysWhichReasonAppliesRatherThanTheUsualOne()
+    {
+        var overlong = (ulong)(TweakDBID)new string('a', 300);
+        var malformed = Assert.Throws<ArgumentException>(
+            () => TweakIdentifier.ForField(overlong, "field"));
+        Assert.Contains("above its length field", malformed.Message, StringComparison.Ordinal);
+
+        var outsideRange = Assert.Throws<ArgumentException>(
+            () => TweakIdentifier.ForField(TweakIdentifier.Of("Items.money"), "caf\u00e9"));
+        Assert.Contains("no defined place", outsideRange.Message, StringComparison.Ordinal);
+
+        var tooLong = Assert.Throws<ArgumentException>(
+            () => TweakIdentifier.ForField(TweakIdentifier.Of(new string('a', 200)), new string('b', 55)));
+        Assert.Contains("length field holds at most", tooLong.Message, StringComparison.Ordinal);
     }
 
     [Fact]

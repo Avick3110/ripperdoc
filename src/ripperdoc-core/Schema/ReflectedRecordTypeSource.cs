@@ -139,8 +139,9 @@ public sealed class ReflectedRecordTypeSource : IRecordTypeSource
         failures.Add(new DerivationFailure(
             child.Name,
             null,
-            $"{bothNamed}. Its inheritance chain was cut here rather than resolved by arrival order, so the "
-            + $"fields '{clashing.Name}' declares are not in this schema for this type."));
+            $"{bothNamed}. Its inheritance chain was cut here rather than resolved by arrival order, so "
+            + $"nothing that '{clashing.Name}' or anything above it declares is in this schema for this "
+            + "type - the whole remainder of the chain is gone, not only the clashing type's own fields."));
     }
 
     private static bool IsUsableStorageType(string storageType) =>

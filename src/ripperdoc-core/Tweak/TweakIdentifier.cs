@@ -90,20 +90,17 @@ public static class TweakIdentifier
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="fieldName"/> is null.</exception>
     /// <exception cref="ArgumentException">
-    /// <paramref name="fieldName"/> is empty, carries a character above
-    /// <see cref="MaxCharacter"/>, or would make the combined name longer than
-    /// <see cref="MaxNameLength"/>; or <paramref name="recordIdentifier"/> is
-    /// not well formed. Use <see cref="TryForField"/> where an unaddressable
-    /// pair is an outcome to record rather than an error.
+    /// <paramref name="fieldName"/> is empty, or the pair has no identifier.
+    /// Use <see cref="TryForField"/> wherever an unaddressable pair is data to
+    /// record rather than a mistake to stop for.
     /// </exception>
     public static ulong ForField(ulong recordIdentifier, string fieldName)
     {
         if (!TryForField(recordIdentifier, fieldName, out var identifier))
         {
             throw new ArgumentException(
-                $"'{fieldName}' cannot be addressed on this record: the combined name would be "
-                + $"{LengthOf(recordIdentifier) + 1 + fieldName.Length} bytes and the length field holds at "
-                + $"most {MaxNameLength}.",
+                $"'{fieldName}' has no identifier on this record: "
+                + WhyUnaddressable(recordIdentifier, fieldName) + ".",
                 nameof(fieldName));
         }
 
@@ -118,20 +115,25 @@ public static class TweakIdentifier
     /// <param name="identifier">
     /// The identifier of <c>&lt;record&gt;.&lt;field&gt;</c>, or zero if there is none.
     /// </param>
-    /// <returns>False if this field cannot be addressed on this record at all.</returns>
+    /// <returns>False if this pair has no identifier at all.</returns>
     /// <remarks>
-    /// A combined name longer than <see cref="MaxNameLength"/> has no identifier,
-    /// so no stored value can exist under it. That is a fact about the pair
-    /// rather than an error, and a caller sweeping many records against many
-    /// fields wants to record it and carry on rather than lose the sweep - which
-    /// is why this form exists beside the throwing one.
+    /// <para>
+    /// Total over its data. Every reason a pair can fail to have an identifier
+    /// - a record identifier that is not well formed, a field name outside the
+    /// range identifiers are defined over, a combined name longer than one can
+    /// carry - comes back as false rather than as an exception, because each is
+    /// a fact about the pair rather than a mistake by the caller. A sweep over
+    /// millions of pairs has to be able to record one and carry on; losing every
+    /// verdict already reached is not a safer outcome than recording the one
+    /// that could not be reached.
+    /// </para>
+    /// <para>
+    /// A null or empty field name is different in kind and still throws. No
+    /// schema produces one, so it means the caller is wrong rather than the data.
+    /// </para>
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="fieldName"/> is null.</exception>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="fieldName"/> is empty or carries a character above
-    /// <see cref="MaxCharacter"/>, or <paramref name="recordIdentifier"/> is not
-    /// a well-formed identifier.
-    /// </exception>
+    /// <exception cref="ArgumentException"><paramref name="fieldName"/> is empty.</exception>
     public static bool TryForField(ulong recordIdentifier, string fieldName, out ulong identifier)
     {
         ArgumentNullException.ThrowIfNull(fieldName);
@@ -140,9 +142,13 @@ public static class TweakIdentifier
             throw new ArgumentException("A field name cannot be empty.", nameof(fieldName));
         }
 
-        RequireWellFormed(recordIdentifier);
-
         identifier = 0;
+
+        if (!IsWellFormed(recordIdentifier) || !IsWithinRange(fieldName))
+        {
+            return false;
+        }
+
         var length = LengthOf(recordIdentifier) + 1 + fieldName.Length;
         if (length > MaxNameLength)
         {
@@ -153,6 +159,28 @@ public static class TweakIdentifier
         checksum = Checksum(checksum, fieldName);
 
         identifier = ((ulong)length << 32) | checksum;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether every character of <paramref name="text"/> has a defined place in
+    /// an identifier.
+    /// </summary>
+    /// <param name="text">The text to test.</param>
+    /// <returns>True if nothing in it is above <see cref="MaxCharacter"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="text"/> is null.</exception>
+    public static bool IsWithinRange(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        foreach (var character in text)
+        {
+            if (character > MaxCharacter)
+            {
+                return false;
+            }
+        }
+
         return true;
     }
 
@@ -217,15 +245,25 @@ public static class TweakIdentifier
         return ~register;
     }
 
-    private static void RequireWellFormed(ulong identifier)
+    // The message names the reason that actually applies rather than the one
+    // that usually does. A caller told the wrong reason looks in the wrong
+    // place, which costs more than saying nothing would.
+    private static string WhyUnaddressable(ulong recordIdentifier, string fieldName)
     {
-        if (!IsWellFormed(identifier))
+        if (!IsWellFormed(recordIdentifier))
         {
-            throw new ArgumentException(
-                $"0x{identifier:X} is not a well-formed identifier: it has bits set above the length field, "
-                + "so the length it appears to carry is not the length it was built from.",
-                nameof(identifier));
+            return $"the record identifier 0x{recordIdentifier:X} has bits set above its length field, so the "
+                + "length it appears to carry is not the length it was built from";
         }
+
+        if (!IsWithinRange(fieldName))
+        {
+            return "the field name carries a character with no defined place in an identifier, and the "
+                + "conversion this is checked against would replace it with a placeholder";
+        }
+
+        return $"the combined name would be {LengthOf(recordIdentifier) + 1 + fieldName.Length} bytes and the "
+            + $"length field holds at most {MaxNameLength}";
     }
 
     private static uint[] BuildTable()
