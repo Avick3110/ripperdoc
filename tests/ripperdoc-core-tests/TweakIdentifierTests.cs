@@ -218,6 +218,52 @@ public class TweakIdentifierTests
         Assert.Contains("length field holds at most", tooLong.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(UnaddressableReason.MalformedRecordIdentifier)]
+    [InlineData(UnaddressableReason.FieldNameOutsideRange)]
+    [InlineData(UnaddressableReason.CombinedNameTooLong)]
+    public void EachReasonComesBackAsItselfRatherThanAsAPlainFalse(UnaddressableReason expected)
+    {
+        var pair = expected switch
+        {
+            UnaddressableReason.MalformedRecordIdentifier =>
+                ((ulong)(TweakDBID)new string('a', 300), "field"),
+            UnaddressableReason.FieldNameOutsideRange =>
+                (TweakIdentifier.Of("Items.money"), "caf\u00e9"),
+            _ => (TweakIdentifier.Of(new string('a', 200)), new string('b', 55)),
+        };
+
+        Assert.False(TweakIdentifier.TryForField(pair.Item1, pair.Item2, out _, out var reason));
+        Assert.Equal(expected, reason);
+    }
+
+    [Fact]
+    public void AnAddressablePairReportsNoReason()
+    {
+        Assert.True(TweakIdentifier.TryForField(TweakIdentifier.Of("Items.money"), "entityName", out _, out var reason));
+        Assert.Equal(UnaddressableReason.None, reason);
+    }
+
+    [Theory]
+    [InlineData(UnaddressableReason.MalformedRecordIdentifier, "above its length field")]
+    [InlineData(UnaddressableReason.FieldNameOutsideRange, "no defined place")]
+    [InlineData(UnaddressableReason.CombinedNameTooLong, "longer than")]
+    public void EveryReasonDescribesItselfDifferently(UnaddressableReason reason, string expected)
+    {
+        Assert.Contains(expected, TweakIdentifier.Describe(reason), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AskingWhyAPairFailedThatDidNotFailIsRefused()
+    {
+        // The other arm. None is not a reason, and neither is a value the enum
+        // never had - answering either would be inventing a loss to report.
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => TweakIdentifier.Describe(UnaddressableReason.None));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => TweakIdentifier.Describe((UnaddressableReason)99));
+    }
+
     [Fact]
     public void EveryIdentifierThisArithmeticBuildsIsWellFormed()
     {

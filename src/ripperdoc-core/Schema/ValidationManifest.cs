@@ -34,7 +34,8 @@ public sealed class ValidationManifest
         int storedValueCount,
         int recordsExamined,
         IReadOnlyList<string> recordTypesNotInSchema,
-        int unaddressableFieldProbes)
+        int unaddressableFieldProbes,
+        IReadOnlyDictionary<UnaddressableReason, int> unaddressableFieldProbesByReason)
     {
         _fields = fields;
         SourceDescription = sourceDescription;
@@ -43,6 +44,7 @@ public sealed class ValidationManifest
         RecordsExamined = recordsExamined;
         RecordTypesNotInSchema = recordTypesNotInSchema;
         UnaddressableFieldProbes = unaddressableFieldProbes;
+        UnaddressableFieldProbesByReason = unaddressableFieldProbesByReason;
     }
 
     /// <summary>What the shipped values were read from.</summary>
@@ -72,16 +74,29 @@ public sealed class ValidationManifest
     public IReadOnlyList<string> RecordTypesNotInSchema { get; }
 
     /// <summary>
-    /// How many record-and-field pairs could not be addressed at all, because
-    /// their combined name is longer than an identifier can carry.
+    /// How many record-and-field pairs could not be addressed at all, for any
+    /// of the reasons a pair can have no identifier.
     /// </summary>
     /// <remarks>
     /// Expected to be zero. Such a pair is not a failure of the sweep - no
     /// stored value can exist under a name with no identifier - but it is a
     /// place the sweep looked and could not look properly, so it is counted
-    /// rather than passed over in silence.
+    /// rather than passed over in silence. Which reasons, and how many of each,
+    /// is in <see cref="UnaddressableFieldProbesByReason"/>: a total on its own
+    /// invites whoever reads it to assume the reason that comes to mind.
     /// </remarks>
     public int UnaddressableFieldProbes { get; }
+
+    /// <summary>
+    /// How many pairs could not be addressed for each reason.
+    /// </summary>
+    /// <remarks>
+    /// Every reason appears, including those nothing hit, so a reader can see
+    /// which were looked for as well as which were found.
+    /// <see cref="UnaddressableReason.None"/> is not among them: it names a
+    /// pair that has an identifier, which is not a reason for anything.
+    /// </remarks>
+    public IReadOnlyDictionary<UnaddressableReason, int> UnaddressableFieldProbesByReason { get; }
 
     /// <summary>
     /// The share of stored values the schema accounts for, between 0 and 1.
@@ -141,6 +156,9 @@ public sealed class ValidationManifest
         var explained = new HashSet<ulong>();
         var recordsExamined = 0;
         var unaddressable = 0;
+        var unaddressableByReason = Enum.GetValues<UnaddressableReason>()
+            .Where(value => value != UnaddressableReason.None)
+            .ToDictionary(value => value, _ => 0);
 
         foreach (var record in shipped.Records)
         {
@@ -161,13 +179,16 @@ public sealed class ValidationManifest
 
             foreach (var field in type.Fields.Values)
             {
-                if (!TweakIdentifier.TryForField(record.Identifier, field.Name, out var identifier))
+                if (!TweakIdentifier.TryForField(record.Identifier, field.Name, out var identifier, out var reason))
                 {
                     // No identifier exists for this pair, so there is nothing to
                     // look under. Recorded as its own outcome: marking it the
                     // same way as a field the records were checked for and did
-                    // not carry would claim a check that never happened.
+                    // not carry would claim a check that never happened. The
+                    // reason is kept beside the count because the three reasons
+                    // send a reader to three different places.
                     unaddressable++;
+                    unaddressableByReason[reason]++;
                     var missing = fieldTallies.GetValueOrDefault(field.Name);
                     missing.Unaddressable++;
                     fieldTallies[field.Name] = missing;
@@ -229,7 +250,8 @@ public sealed class ValidationManifest
             shipped.StoredValueCount,
             recordsExamined,
             unknownTypes.OrderBy(name => name, StringComparer.Ordinal).ToArray(),
-            unaddressable);
+            unaddressable,
+            unaddressableByReason);
     }
 
     private static ValidationState StateOf(Tally tally, bool typeHasRecords)

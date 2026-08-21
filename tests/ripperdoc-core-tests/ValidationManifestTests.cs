@@ -272,6 +272,50 @@ public class ValidationManifestTests
     }
 
     [Fact]
+    public void APairThatCannotBeAddressedIsCountedUnderTheReasonThatApplies()
+    {
+        // The total said how many; it did not say which, and the three reasons
+        // are three different things to go and look at.
+        var schema = SchemaWith(Field("caf\u00e9", "Float"));
+        var shipped = new FakeDatabase(("Vehicle.quadra", "gamedataThing_Record"));
+
+        var manifest = ValidationManifest.Build(schema, shipped);
+
+        Assert.Equal(1, manifest.UnaddressableFieldProbes);
+        Assert.Equal(1, manifest.UnaddressableFieldProbesByReason[UnaddressableReason.FieldNameOutsideRange]);
+        Assert.Equal(0, manifest.UnaddressableFieldProbesByReason[UnaddressableReason.CombinedNameTooLong]);
+        Assert.Equal(0, manifest.UnaddressableFieldProbesByReason[UnaddressableReason.MalformedRecordIdentifier]);
+    }
+
+    [Fact]
+    public void ALongCombinedNameIsCountedUnderItsOwnReasonAndNotTheOther()
+    {
+        // The other arm of the same tally, so that neither reason can be the
+        // one every pair quietly lands in.
+        var schema = SchemaWith(Field(new string('f', 60), "Float"));
+        var shipped = new FakeDatabase((new string('r', 200), "gamedataThing_Record"));
+
+        var manifest = ValidationManifest.Build(schema, shipped);
+
+        Assert.Equal(1, manifest.UnaddressableFieldProbesByReason[UnaddressableReason.CombinedNameTooLong]);
+        Assert.Equal(0, manifest.UnaddressableFieldProbesByReason[UnaddressableReason.FieldNameOutsideRange]);
+    }
+
+    [Fact]
+    public void TheTallyNamesEveryReasonEvenTheOnesNothingHit()
+    {
+        // A reason absent from the tally cannot be told apart from a reason
+        // that was never checked for.
+        var counts = ValidationManifest
+            .Build(SchemaWith(Field("speed", "Float")), new FakeDatabase(("Vehicle.quadra", "gamedataThing_Record")))
+            .UnaddressableFieldProbesByReason;
+
+        Assert.Equal(3, counts.Count);
+        Assert.DoesNotContain(UnaddressableReason.None, counts.Keys);
+        Assert.All(counts.Values, count => Assert.Equal(0, count));
+    }
+
+    [Fact]
     public void AnOrdinarySweepAddressesEverythingItLooksAt()
     {
         var schema = SchemaWith(Field("speed", "Float"));

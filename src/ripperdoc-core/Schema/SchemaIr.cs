@@ -1,3 +1,5 @@
+using Ripperdoc.Core.Tweak;
+
 namespace Ripperdoc.Core.Schema;
 
 /// <summary>
@@ -150,12 +152,22 @@ public sealed class SchemaIr
                     + "absent from this schema, so their records were examined against nothing.");
             }
 
-            if (validation.UnaddressableFieldProbes > 0)
+            // One line per reason that actually occurred, rather than one line
+            // naming the reason that usually would. A pair can fail to have an
+            // identifier three ways, and a reader told the wrong one goes
+            // looking for long names among fields whose names are short.
+            foreach (var reason in validation.UnaddressableFieldProbesByReason.Keys.OrderBy(reason => reason))
             {
+                var count = validation.UnaddressableFieldProbesByReason[reason];
+                if (count == 0)
+                {
+                    continue;
+                }
+
                 losses.Add(
-                    $"{validation.UnaddressableFieldProbes} record-and-field pair(s) have no identifier at "
-                    + "all, because the combined name is longer than one can carry; nothing could be stored "
-                    + "under them and nothing was checked for them.");
+                    $"{count} record-and-field pair(s) have no identifier at all, because "
+                    + TweakIdentifier.Describe(reason)
+                    + "; nothing could be stored under them and nothing was checked for them.");
             }
         }
 
