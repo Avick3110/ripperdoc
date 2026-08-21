@@ -1,0 +1,11 @@
+name: Note
+description: An observation, a question, or something that does not fit the other forms.
+title: "[NOTE] "
+labels: ["note"]
+body:
+  - type: textarea
+    id: note
+    attributes:
+      label: What is on your mind
+    validations:
+      required: true

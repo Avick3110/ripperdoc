@@ -1,0 +1,49 @@
+# CI - the gate that has to be green before anything lands on main.
+#
+# What it does, in plain terms: it checks out the repository, installs the
+# .NET 8 SDK, and runs `scripts/ci-checks.sh`. That script is the single source
+# of truth for what "green" means - the same command runs on a developer's
+# machine and produces the same verdict. Nothing is checked here that is not
+# checked there.
+#
+# Why this runner can be trusted without Cyberpunk 2077 installed: the engine's
+# testable surface is built from synthetic data. The repository contains zero
+# game-derived bytes by rule (see tests/fixtures/README.md), so the checks that
+# run here are the real checks, not a reduced set. The two tiers that genuinely
+# need a real install or a generated RTTI dump cannot run on any runner, and
+# the gate SKIPS them by name in its own output rather than letting their
+# absence read as a pass.
+#
+# The gate runs on Linux. The debris sweep's carriage-return check exists
+# because of a Windows shell quirk, so that specific check is exercised most
+# meaningfully when the sweep runs locally on Windows - here it still guards
+# the .gitattributes policy.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  # Supersede an in-progress run on the same pull request, never on main:
+  # every commit that lands is verified end to end.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Run the gate
+        run: bash scripts/ci-checks.sh

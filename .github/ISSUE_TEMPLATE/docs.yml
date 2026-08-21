@@ -1,0 +1,22 @@
+name: Docs
+description: Something written here is wrong, unclear, or missing.
+title: "[Docs] "
+labels: ["docs"]
+body:
+  - type: input
+    id: where
+    attributes:
+      label: Which document
+      description: A path or a link, plus the section.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong with it
+      description: >
+        If a findings document states something you have measured differently,
+        say what you measured and how. A contradicted measurement is the most
+        valuable report this project can receive.
+    validations:
+      required: true
