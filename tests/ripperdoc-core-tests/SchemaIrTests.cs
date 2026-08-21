@@ -100,6 +100,42 @@ public class SchemaIrTests
         Assert.Contains(losses, loss => loss.Contains("not for kind", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void PairsWithNoIdentifierAtAllAreANamedLossInTheArtifact()
+    {
+        // A count that reaches the manifest and stops there tells nobody. The
+        // artifact is what a consumer holds, so the loss has to arrive in it.
+        var schema = RecordSchemaDerivation.Derive(
+            new RecordTypeSourceReading(
+                new[]
+                {
+                    new RecordTypeShape("gamedataThing_Record", null, true, new[]
+                    {
+                        new RecordFieldShape(new string('f', 60), "Float"),
+                    }),
+                },
+                Array.Empty<DerivationFailure>()),
+            "a reading constructed for this test");
+
+        var shipped = new StubDatabase((new string('r', 200), "gamedataThing_Record"));
+        var manifest = ValidationManifest.Build(schema, shipped);
+        Assert.True(manifest.UnaddressableFieldProbes > 0, "the sweep recorded nothing unaddressable");
+
+        var losses = SchemaIr.Create(schema, manifest, SchemaMode.InheritedTypeModel, When)
+            .Provenance.NamedLosses;
+
+        Assert.Contains(losses, loss => loss.Contains("no identifier at", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ASweepThatCouldLookEverywhereClaimsNoSuchLoss()
+    {
+        var losses = SchemaIr.Create(Schema(), Manifest(), SchemaMode.InheritedTypeModel, When)
+            .Provenance.NamedLosses;
+
+        Assert.DoesNotContain(losses, loss => loss.Contains("no identifier at", StringComparison.Ordinal));
+    }
+
     private static RecordSchema Schema() => RecordSchemaDerivation.Derive(
         new RecordTypeSourceReading(
             new[]

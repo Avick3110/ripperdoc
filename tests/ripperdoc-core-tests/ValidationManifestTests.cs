@@ -214,6 +214,64 @@ public class ValidationManifestTests
     }
 
     [Fact]
+    public void AnUnaddressableSlotIsNotReportedAsOneTheRecordsWereCheckedFor()
+    {
+        // The two verdicts say different things and only one of them is true
+        // here: nothing was checked, because there was no identifier to check
+        // under. Reporting a check that did not happen is what this manifest
+        // exists to prevent.
+        var schema = SchemaWith(Field("speed", "Float"), Field(new string('f', 60), "Float"));
+        var shipped = new FakeDatabase((new string('r', 200), "gamedataThing_Record"));
+        shipped.Store(new string('r', 200), "speed", "Float");
+
+        var verdict = ValidationManifest.Build(schema, shipped)
+            .Fields()
+            .Single(field => field.FieldName.Length == 60);
+
+        Assert.Equal(ValidationState.NotAddressable, verdict.State);
+        Assert.NotEqual(ValidationState.NoCorroboratingValue, verdict.State);
+        Assert.False(verdict.IsValidated);
+    }
+
+    [Fact]
+    public void AFieldOnAnOrdinaryRecordIsStillReportedAsCheckedAndAbsent()
+    {
+        // The other arm: where the pair does have an identifier and nothing is
+        // stored under it, the verdict must stay the one that says so.
+        var schema = SchemaWith(Field("speed", "Float"));
+        var shipped = new FakeDatabase(("Vehicle.quadra", "gamedataThing_Record"));
+
+        Assert.Equal(
+            ValidationState.NoCorroboratingValue,
+            Single(ValidationManifest.Build(schema, shipped)).State);
+    }
+
+    [Theory]
+    [InlineData("malformed record identifier")]
+    [InlineData("field name outside the range")]
+    public void NoSingleBadInputCostsTheSweepTheVerdictsItAlreadyReached(string reason)
+    {
+        // Each reason a pair can lack an identifier, driven through the whole
+        // sweep rather than through the arithmetic alone.
+        var fieldName = reason == "field name outside the range" ? "caf\u00e9" : "speed";
+        var schema = SchemaWith(Field(fieldName, "Float"));
+
+        var records = reason == "malformed record identifier"
+            ? new[] { ("Vehicle.quadra", "gamedataThing_Record") }
+            : new[] { ("Vehicle.quadra", "gamedataThing_Record") };
+        var shipped = new FakeDatabase(records);
+        if (reason == "malformed record identifier")
+        {
+            shipped.AddRawRecord((ulong)(WolvenKit.RED4.Types.TweakDBID)new string('a', 300), "gamedataThing_Record");
+        }
+
+        var manifest = ValidationManifest.Build(schema, shipped);
+
+        Assert.NotEmpty(manifest.Fields());
+        Assert.True(manifest.UnaddressableFieldProbes > 0, "nothing was recorded as unaddressable");
+    }
+
+    [Fact]
     public void AnOrdinarySweepAddressesEverythingItLooksAt()
     {
         var schema = SchemaWith(Field("speed", "Float"));
@@ -258,6 +316,9 @@ public class ValidationManifestTests
             _values[TweakIdentifier.ForField(TweakIdentifier.Of(recordName), fieldName)] = storageType;
 
         public void StoreUnattached(string name) => _values[TweakIdentifier.Of(name)] = "Float";
+
+        public void AddRawRecord(ulong identifier, string typeName) =>
+            _records.Add(new ShippedRecord(identifier, typeName));
 
         public bool TryGetStoredValueType(ulong identifier, out string? storageType) =>
             _values.TryGetValue(identifier, out storageType);

@@ -72,3 +72,20 @@ internal class gamedataProbeInternal_Record : RedBaseClass
     [RED("hidden")]
     public CFloat Hidden { get; set; } = new();
 }
+
+/// <summary>A record type carrying a container of a type the model cannot map.</summary>
+public class gamedataProbeNestedUnmappable_Record : RedBaseClass
+{
+    /// <summary>A field whose storage type resolves to a container of nothing.</summary>
+    [RED("nested")]
+    public CArray<ProbeUnmappableElement> Nested { get; set; } = new();
+
+    /// <summary>An ordinary field beside it.</summary>
+    [RED("ordinary")]
+    public CFloat Ordinary { get; set; } = new();
+}
+
+/// <summary>An element type the type model has no name for.</summary>
+public sealed class ProbeUnmappableElement : IRedType
+{
+}

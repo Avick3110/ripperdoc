@@ -149,6 +149,11 @@ public class ReflectedRecordTypeSourceTests
         var failure = Assert.Single(schema.Failures);
         Assert.Equal(cut.Name, failure.TypeName);
         Assert.Contains("cut here", failure.Reason, StringComparison.Ordinal);
+
+        // The message has to describe the loss actually taken: the chain is cut
+        // at this point, so everything above it goes, not only the type whose
+        // name clashed.
+        Assert.Contains("whole remainder of the chain", failure.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -166,6 +171,23 @@ public class ReflectedRecordTypeSourceTests
 
         var failure = Assert.Single(schema.Failures);
         Assert.Equal("Unmappable", failure.MemberName);
+        Assert.Contains("names no storage type", failure.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AContainerOfAnUnmappableTypeIsReportedTooRatherThanCarriedAsAnEmptyContainer()
+    {
+        // The clause that catches this resolves to "array:" - non-empty, so a
+        // guard checking only for emptiness lets it through. This is the arm
+        // that rule covers, and it needs a case of its own to constrain it.
+        var schema = Derive(typeof(gamedataProbeNestedUnmappable_Record));
+        var fields = schema.Find(nameof(gamedataProbeNestedUnmappable_Record))!.Fields;
+
+        Assert.DoesNotContain("nested", fields.Keys);
+        Assert.Contains("ordinary", fields.Keys);
+
+        var failure = Assert.Single(schema.Failures);
+        Assert.Equal("Nested", failure.MemberName);
         Assert.Contains("names no storage type", failure.Reason, StringComparison.Ordinal);
     }
 

@@ -85,6 +85,33 @@ public sealed class TweakDatabaseSource : IShippedRecordSource
     }
 
     /// <summary>
+    /// A source over a database that is already in memory.
+    /// </summary>
+    /// <param name="database">The database to read.</param>
+    /// <param name="name">What to call it in a provenance block.</param>
+    /// <param name="fingerprint">
+    /// The content fingerprint to report. A caller that did not read the
+    /// database off a disk supplies whatever identifies it.
+    /// </param>
+    /// <returns>The source.</returns>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <remarks>
+    /// The shipped database is not this project's to redistribute, so the only
+    /// way this adapter's own behaviour can be checked on a machine without the
+    /// game is against a database built in memory. That is the same route the
+    /// rest of the engine's checks take, and it is why this exists beside the
+    /// file-reading form rather than instead of it.
+    /// </remarks>
+    public static TweakDatabaseSource From(TweakDB database, string name, string fingerprint)
+    {
+        ArgumentNullException.ThrowIfNull(database);
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(fingerprint);
+
+        return new TweakDatabaseSource(database, name, fingerprint, database.GetFlats().Count);
+    }
+
+    /// <summary>
     /// Open a shipped database for reading.
     /// </summary>
     /// <param name="path">The path of the database file.</param>

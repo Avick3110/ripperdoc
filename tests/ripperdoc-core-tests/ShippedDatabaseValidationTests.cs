@@ -39,7 +39,9 @@ public class ShippedDatabaseValidationTests : IClassFixture<ShippedDatabaseFixtu
     [Fact]
     public void TheDatabaseHoldsWhatThisPortWasMeasuredAgainst()
     {
-        Assert.Equal(ShippedDatabaseFixture.MeasuredDatabase, _fixture.Database.Fingerprint);
+        // The database's identity is not asserted here: the fixture refuses to
+        // build against any other one, so an assertion at this point could
+        // never fail and would read as a check while being none.
         Assert.Equal(RecordsInTheDatabase, _fixture.Manifest.RecordsExamined);
         Assert.Equal(ValuesInTheDatabase, _fixture.Manifest.StoredValueCount);
         Assert.Equal(0, _fixture.Manifest.UnaddressableFieldProbes);
@@ -80,6 +82,7 @@ public class ShippedDatabaseValidationTests : IClassFixture<ShippedDatabaseFixtu
         Assert.Equal(FieldSlotsCorroborated, counts[ValidationState.Corroborated]);
         Assert.Equal(FieldSlotsNoValueCarriesThem, counts[ValidationState.NoCorroboratingValue]);
         Assert.Equal(FieldSlotsOnTypesWithNoRecords, counts[ValidationState.NoShippedRecordsOfType]);
+        Assert.Equal(0, counts[ValidationState.NotAddressable]);
         Assert.Equal(_fixture.Schema.ResolvedFieldSlotCount, counts.Values.Sum());
         Assert.Equal(_fixture.Schema.ResolvedFieldSlotCount, _fixture.Manifest.Fields().Count);
     }
