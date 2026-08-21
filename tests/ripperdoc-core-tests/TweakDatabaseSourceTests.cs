@@ -125,8 +125,57 @@ public class TweakDatabaseSourceTests
         }
     }
 
+    [Fact]
+    public void AValueWhoseTypeTheModelCannotNameIsUnreadableRatherThanNamedAsSomething()
+    {
+        // The model answers a type it cannot map with a name that names no
+        // storage type. Passed on as a name, it is a type this value was never
+        // read to have.
+        var database = new TweakDB();
+        database.Flats.Add("Test.thing.speed", new ProbeUnmappableElement());
+
+        Assert.True(
+            Source(database).TryGetStoredValueType(TweakIdentifier.Of("Test.thing.speed"), out var storageType));
+        Assert.Null(storageType);
+    }
+
+    [Fact]
+    public void SuchAValueLeavesTheFieldUnreadableRatherThanContradicted()
+    {
+        // The arm the whole check exists for. Contradicted is the strongest
+        // thing this engine says - the schema is wrong about this field - and
+        // saying it from a type that could not be read would be the manifest
+        // making up the one verdict nobody would think to doubt.
+        var database = new TweakDB();
+        database.Add("Test.thing", new gamedataItem_Record());
+        database.Flats.Add("Test.thing.speed", new ProbeUnmappableElement());
+
+        var manifest = ValidationManifest.Build(
+            SchemaWith("gamedataItem_Record", "speed", "Float"),
+            Source(database));
+
+        var verdict = Assert.Single(manifest.Fields());
+        Assert.Equal(ValidationState.StorageTypeUnreadable, verdict.State);
+        Assert.Equal(0, verdict.ContradictingValueCount);
+        Assert.Null(verdict.ObservedStorageType);
+    }
+
     private static TweakDatabaseSource Source(TweakDB database) =>
         TweakDatabaseSource.From(database, "a database built for this test", "no fingerprint");
+
+    private static RecordSchema SchemaWith(string typeName, string fieldName, string storageType) =>
+        RecordSchemaDerivation.Derive(
+            new RecordTypeSourceReading(
+                new[]
+                {
+                    new RecordTypeShape(
+                        typeName,
+                        null,
+                        true,
+                        new[] { new RecordFieldShape(fieldName, storageType) }),
+                },
+                Array.Empty<DerivationFailure>()),
+            "a reading constructed for this test");
 
     private static RecordSchema EmptySchema() => RecordSchemaDerivation.Derive(
         new RecordTypeSourceReading(
