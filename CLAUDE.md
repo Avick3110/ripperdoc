@@ -249,6 +249,10 @@ The other side of §7: what makes a check a check.
 
 - **A fix ships a check that fails before the change and passes after.** If one
   could not be written, say which and why — do not ship silence.
+- **A defensive path ships the claim it makes, checked.** A guard, a state, or a
+  failure message asserts something to whoever reads it, and that assertion
+  carries a check that it holds. A claim that cannot be checked is narrowed to
+  one that can.
 - **Sabotage RED-checks run from a committed state.** Commit the fold, then
   sabotage, then restore, and **verify the restore** by looking for something
   the fold introduced rather than assuming it worked. Never sabotage a dirty
