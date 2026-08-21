@@ -78,11 +78,30 @@ else
   # database is a different input rather than a defect in the engine, so the
   # tier is announced as unrunnable instead of run and failed. The gate decides
   # this, because deciding it inside the checks can only ever produce a red run.
-  actual_sha="$(sha256sum "$tweakdb_path" | cut -d' ' -f1)"
-  if [ "$actual_sha" = "$measured_sha" ]; then
-    run "shipped-database checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=ShippedDatabase" -- RunConfiguration.TreatNoTestsAsError=true
+  #
+  # The hash tool is resolved rather than assumed. sha256sum is coreutils and a
+  # stock macOS ships neither it nor a coreutils prefix on PATH, so on one of
+  # the machines this gate is actually run from the command is simply absent -
+  # and with the shell not set to stop on error, an absent command leaves the
+  # fingerprint empty and the comparison below then announces the correct
+  # database as a different game build. A skip given a false reason is worse
+  # than a skip given none: it names something to investigate that is not there
+  # and hides the thing that is. So each way the fingerprint can fail to be
+  # taken gets the reason that actually applies.
+  hasher=""
+  if command -v sha256sum > /dev/null 2>&1; then hasher="sha256sum"; elif command -v shasum > /dev/null 2>&1; then hasher="shasum -a 256"; fi
+
+  if [ -z "$hasher" ]; then
+    skip "shipped-database checks" "no sha256 tool on this machine - neither sha256sum nor shasum is on PATH - so the database at $tweakdb_variable cannot be told apart from the build these counts were measured on"
   else
-    skip "shipped-database checks" "the database at $tweakdb_variable is sha256 $actual_sha, and these counts were measured against $measured_sha - a different game build, so they do not apply to it"
+    actual_sha="$($hasher "$tweakdb_path" | cut -d' ' -f1)"
+    if [ -z "$actual_sha" ]; then
+      skip "shipped-database checks" "$hasher could not fingerprint the database at $tweakdb_variable, so it cannot be told apart from the build these counts were measured on"
+    elif [ "$actual_sha" = "$measured_sha" ]; then
+      run "shipped-database checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=ShippedDatabase" -- RunConfiguration.TreatNoTestsAsError=true
+    else
+      skip "shipped-database checks" "the database at $tweakdb_variable is sha256 $actual_sha, and these counts were measured against $measured_sha - a different game build, so they do not apply to it"
+    fi
   fi
 fi
 
