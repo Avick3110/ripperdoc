@@ -74,9 +74,10 @@ whose MIT-licensed packages provide the resource type model this project reads
 through. The read and write formats it targets are those established by the
 ecosystem's existing frameworks.
 
-**No licence is declared for ripperdoc's own code yet.** Until one is, the
-default applies and the code is not open-licensed - the repository is public so
-the work can be followed, not yet so it can be reused.
+**ripperdoc is MIT licensed** - see [LICENSE](LICENSE). Use it, fork it, build
+on it. The same licence the packages underneath it use, which keeps the whole
+stack under one set of terms rather than a chain of compatible-but-different
+ones.
 
 ## Contributing
 
