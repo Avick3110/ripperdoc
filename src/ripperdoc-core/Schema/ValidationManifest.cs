@@ -86,6 +86,13 @@ public sealed class ValidationManifest
     /// <summary>
     /// The share of stored values the schema accounts for, between 0 and 1.
     /// </summary>
+    /// <remarks>
+    /// A database holding no values at all reports zero, which reads as "none
+    /// of it was explained" rather than "there was nothing to explain". The
+    /// two are told apart by <see cref="StoredValueCount"/>, which a caller has
+    /// in hand; no branch is spent here distinguishing a case that no arbiter
+    /// produces.
+    /// </remarks>
     public double ExplainedShare => StoredValueCount == 0
         ? 0d
         : (double)StoredValuesExplained / StoredValueCount;

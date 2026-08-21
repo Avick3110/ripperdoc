@@ -209,8 +209,14 @@ public sealed class ShippedDatabaseFixture
     /// The SHA-256 of the one database the counts in these checks were measured
     /// against.
     /// </summary>
-    public const string MeasuredDatabase =
-        "89c7ee678c1366d4c289edc78beaa60ce3d64bf44b300fc3902adc94f6ac14c5";
+    /// <remarks>
+    /// Read from the file the gate script also reads, so that the gate's
+    /// decision to run or skip this tier and these checks' own guard can never
+    /// disagree about which database the counts belong to.
+    /// </remarks>
+    public static string MeasuredDatabase { get; } = File
+        .ReadAllText(Path.Combine(AppContext.BaseDirectory, "measured-database.sha256"))
+        .Trim();
 
     /// <summary>Which game build that database belongs to, in words.</summary>
     public const string MeasuredDatabaseDescription = "game 2.31 with Phantom Liberty";

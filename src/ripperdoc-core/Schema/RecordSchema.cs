@@ -48,13 +48,24 @@ public sealed class RecordSchema
     public IReadOnlyList<DerivationFailure> Failures { get; }
 
     /// <summary>
-    /// How many fields every record type declares itself, added up.
+    /// How many fields the record types declare themselves, added up.
     /// </summary>
     /// <remarks>
-    /// Counts declarations, not resolved slots: a field declared once on a base
-    /// type and inherited by fifty record types is one declared field and fifty
-    /// resolved slots. Both numbers are worth having and they answer different
-    /// questions.
+    /// <para>
+    /// Counts declarations, not resolved slots: a field declared once on a
+    /// record type and inherited by fifty others is one declared field and
+    /// fifty-one resolved slots. Both numbers are worth having and they answer
+    /// different questions.
+    /// </para>
+    /// <para>
+    /// Declarations on ancestors that are not themselves record types are not
+    /// counted here, though they do appear in
+    /// <see cref="ResolvedFieldSlotCount"/> and in every record type that
+    /// inherits them. That is deliberate - this number describes the record
+    /// surface - but it means the two counts can move independently, and a
+    /// type model that moved a field onto such an ancestor would lower this one
+    /// without losing anything.
+    /// </para>
     /// </remarks>
     public int DeclaredFieldCount => _types.Values
         .Where(type => type.IsRecordType)

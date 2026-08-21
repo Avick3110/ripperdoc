@@ -121,7 +121,11 @@ the type the schema claims.
 
 **Every record type in the database is one the schema knows** — 843 of the 965
 appear in shipped data, and no record in the file has a type the schema has
-never heard of. The other 122 types are the 658 unconfirmable slots above.
+never heard of. The other 122 have no shipped records at all; **118** of them
+declare at least one field and together account for the 658 unconfirmable slots
+above, while the remaining four resolve to no fields whatever and so contribute
+none. (Seven of the 965 resolve to no fields in total — they are the abstract
+bases of the family.)
 
 **Nothing of the game's is copied anywhere.** The database is read in place from
 an installation and never moved, and no part of it is reproduced in this

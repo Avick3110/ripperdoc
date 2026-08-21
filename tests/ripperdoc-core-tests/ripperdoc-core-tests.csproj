@@ -19,4 +19,12 @@
     <ProjectReference Include="..\..\src\ripperdoc-core\ripperdoc-core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The gate script reads this same file, so which database the tier (ii)
+         counts belong to has one home rather than two that can disagree. -->
+    <None Include="..\measured-database.sha256" Link="measured-database.sha256">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
