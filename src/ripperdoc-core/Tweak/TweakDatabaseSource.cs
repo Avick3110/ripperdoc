@@ -128,9 +128,18 @@ public sealed class TweakDatabaseSource : IShippedRecordSource
             throw new FileNotFoundException("There is no tweak database at this path.", path);
         }
 
-        var fingerprint = ComputeFingerprint(path);
-
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+
+        // Fingerprinted and parsed from one open, in that order. Two opens
+        // would leave a window between them, and the share mode this file is
+        // opened with permits a writer in it - a game update is a writer. The
+        // fingerprint would then describe one build while the records came
+        // from another, and every artifact built on it would carry a wrong
+        // answer wearing a complete provenance block, which is the one shape
+        // of wrong answer nobody would think to doubt.
+        var fingerprint = ComputeFingerprint(stream);
+        stream.Position = 0;
+
         using var reader = new TweakDBReader(stream);
 
         var outcome = reader.ReadFile(out TweakDB? database);
@@ -201,9 +210,8 @@ public sealed class TweakDatabaseSource : IShippedRecordSource
         return true;
     }
 
-    private static string ComputeFingerprint(string path)
+    private static string ComputeFingerprint(Stream stream)
     {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using var algorithm = SHA256.Create();
 
         return Convert.ToHexString(algorithm.ComputeHash(stream)).ToLower(CultureInfo.InvariantCulture);
