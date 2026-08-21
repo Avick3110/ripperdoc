@@ -144,10 +144,6 @@ public sealed class ReflectedRecordTypeSource : IRecordTypeSource
             + "type - the whole remainder of the chain is gone, not only the clashing type's own fields."));
     }
 
-    private static bool IsUsableStorageType(string storageType) =>
-        storageType.Length > 0
-        && !storageType.Split(':').Any(string.IsNullOrEmpty);
-
     private static bool IsUsableRedClass(Type type) =>
         type.IsPublic
         && !type.IsGenericTypeDefinition
@@ -188,7 +184,7 @@ public sealed class ReflectedRecordTypeSource : IRecordTypeSource
             // as well as taken. A field carried with no storage type would
             // match no stored value, be marked unconfirmed, and read as
             // ordinary residue - a wrong field wearing an innocent label.
-            if (!IsUsableStorageType(storageType))
+            if (!StorageTypeName.IsUsable(storageType))
             {
                 failures.Add(new DerivationFailure(
                     type.Name,

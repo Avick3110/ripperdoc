@@ -178,7 +178,16 @@ public sealed class TweakDatabaseSource : IShippedRecordSource
             // changing what a storage type is called, which holds for the
             // pinned type model and is the assumption to revisit if a later one
             // ever reports a field as contradicted for no visible reason.
-            storageType = RedReflection.GetRedTypeFromCSType(valueType, Flags.Empty);
+            var name = RedReflection.GetRedTypeFromCSType(valueType, Flags.Empty);
+
+            // The model answers a type it cannot map with a name that names no
+            // storage type, so the answer is checked as well as taken - the
+            // same check the derivation side makes of the same model. Handed on
+            // as though it were a storage type, it would differ from whatever
+            // the schema claims and mark the field contradicted: the strongest
+            // claim this engine makes, asserted about a value whose type was
+            // never read.
+            storageType = StorageTypeName.IsUsable(name) ? name : null;
         }
         catch (Exception)
         {
