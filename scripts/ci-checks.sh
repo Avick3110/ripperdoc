@@ -30,6 +30,7 @@ cd "$(dirname "$0")/.." || exit 2
 
 failed=()
 passed=()
+skipped=()
 
 run() { # label command...
   local label="$1"; shift
@@ -47,6 +48,7 @@ skip() { # label reason
   echo ""
   echo "=== $1 ==="
   echo "SKIPPED - $2"
+  skipped+=("$1 - $2")
 }
 
 run "debris sweep self-test" bash scripts/debris-sweep.sh --self-test
@@ -64,10 +66,24 @@ run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --fi
 
 # Tiers (ii) and (iii): see tests/fixtures/README.md. Named here rather than
 # left silent, so the gate's coverage is legible from its own output.
-if [ -n "$(printenv "$tweakdb_variable" || true)" ]; then
-  run "shipped-database checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=ShippedDatabase" -- RunConfiguration.TreatNoTestsAsError=true
+tweakdb_path="$(printenv "$tweakdb_variable" || true)"
+measured_sha="$(tr -d '[:space:]' < tests/measured-database.sha256)"
+
+if [ -z "$tweakdb_path" ]; then
+  skip "shipped-database checks" "needs the user's own installed game data - tier (ii), local only; set $tweakdb_variable to a shipped tweak database to run it"
+elif [ ! -f "$tweakdb_path" ]; then
+  skip "shipped-database checks" "$tweakdb_variable names a path with no file at it - tier (ii) has nothing to read"
 else
-  skip "shipped-database checks"     "needs the user's own installed game data - tier (ii), local only; set $tweakdb_variable to a shipped tweak database to run it"
+  # These checks reproduce counts measured against one game build. Any other
+  # database is a different input rather than a defect in the engine, so the
+  # tier is announced as unrunnable instead of run and failed. The gate decides
+  # this, because deciding it inside the checks can only ever produce a red run.
+  actual_sha="$(sha256sum "$tweakdb_path" | cut -d' ' -f1)"
+  if [ "$actual_sha" = "$measured_sha" ]; then
+    run "shipped-database checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=ShippedDatabase" -- RunConfiguration.TreatNoTestsAsError=true
+  else
+    skip "shipped-database checks" "the database at $tweakdb_variable is sha256 $actual_sha, and these counts were measured against $measured_sha - a different game build, so they do not apply to it"
+  fi
 fi
 
 skip "RTTI-dump checks"        "needs a dump generated from the user's own install - tier (iii), local only"
@@ -76,12 +92,16 @@ echo ""
 echo "================ gate summary ================"
 for label in "${passed[@]}"; do echo "  PASS  $label"; done
 for label in "${failed[@]}"; do echo "  FAIL  $label"; done
+# Skips belong in the summary, not only in the log above it. The summary is
+# where a reader decides what a run actually covered, and a tier missing from it
+# reads as a tier that passed.
+for label in "${skipped[@]}"; do echo "  SKIP  $label"; done
 
 if [ "${#failed[@]}" -gt 0 ]; then
   echo ""
-  echo "gate: RED (${#failed[@]} of $(( ${#passed[@]} + ${#failed[@]} )) checks failed)"
+  echo "gate: RED (${#failed[@]} of $(( ${#passed[@]} + ${#failed[@]} )) checks failed, ${#skipped[@]} skipped)"
   exit 1
 fi
 
 echo ""
-echo "gate: GREEN (${#passed[@]} checks)"
+echo "gate: GREEN (${#passed[@]} checks, ${#skipped[@]} skipped)"

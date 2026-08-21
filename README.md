@@ -97,6 +97,11 @@ game publisher's file rather than anything this project ships. Point
 RIPPERDOC_TWEAKDB_PATH="<your game>/r6/cache/tweakdb_ep1.bin" bash scripts/ci-checks.sh
 ```
 
+Those checks reproduce counts measured against one specific build — game 2.31
+with Phantom Liberty — so the gate compares the database's fingerprint before
+running them. Point it at any other build and the gate says so and skips that
+tier by name, rather than failing counts that were never about your copy.
+
 ## Credit, and licence
 
 ripperdoc builds on **[WolvenKit](https://github.com/WolvenKit/WolvenKit)**,

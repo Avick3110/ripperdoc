@@ -63,6 +63,13 @@ count is written into the check and a divergence is investigated as a defect.
 Moving the expected number to whatever the code now produces turns a check into
 a record of the bug.
 
+**Which input a measured number belongs to is part of the number.** The
+fingerprint of the database the tier (ii) counts were measured against lives in
+`tests/measured-database.sha256`, and both the gate script and the checks
+themselves read that one file. The gate compares it before running the tier, so
+a different game build is announced as a tier that cannot run rather than as a
+pile of failed counts blaming the engine for someone else's input.
+
 **Every ordering rule the engine implements is traceable to a measurement.**
 A fixture that encodes an ordering expectation names the finding it came from,
 in the fixture, so a later reader can tell a measured law from someone's
