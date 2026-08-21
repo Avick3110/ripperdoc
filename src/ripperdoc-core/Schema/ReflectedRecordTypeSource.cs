@@ -79,6 +79,8 @@ public sealed class ReflectedRecordTypeSource : IRecordTypeSource
 
         foreach (var recordType in recordTypes)
         {
+            Type? child = null;
+
             // Ancestors are followed rather than looked up, so a chain cannot
             // end early just because an ancestor was not in the type list. A
             // field an ancestor declares is a field the record carries.
@@ -88,16 +90,15 @@ public sealed class ReflectedRecordTypeSource : IRecordTypeSource
                 {
                     if (alreadyRead != type)
                     {
-                        // The schema addresses types by name, so two types
-                        // sharing one name cannot both be in it. Reported here
-                        // rather than resolved by arrival order, which would
-                        // silently give one type the other's fields.
-                        failures.Add(new DerivationFailure(
-                            type.Name,
-                            null,
-                            $"Two different types are both named '{type.Name}' ("
-                            + $"'{alreadyRead.FullName}' and '{type.FullName}'); the first was kept and this "
-                            + "chain was not followed past it."));
+                        // A schema addresses types by name, so two types
+                        // sharing one name cannot both be in it. The chain is
+                        // cut at the type below the clash and that type is told
+                        // it now has no base, because leaving it pointing at the
+                        // name would hand it the other type's fields - which is
+                        // a wrong field set rather than a missing one, and the
+                        // whole point of stopping here is to have neither
+                        // silently.
+                        RecordClash(failures, shapes, child, type, alreadyRead);
                     }
 
                     break;
@@ -105,6 +106,7 @@ public sealed class ReflectedRecordTypeSource : IRecordTypeSource
 
                 seen[type.Name] = type;
                 shapes[type.Name] = ShapeOf(type, failures);
+                child = type;
             }
         }
 
@@ -112,6 +114,38 @@ public sealed class ReflectedRecordTypeSource : IRecordTypeSource
             shapes.Values.OrderBy(shape => shape.TypeName, StringComparer.Ordinal).ToArray(),
             failures);
     }
+
+    private static void RecordClash(
+        List<DerivationFailure> failures,
+        Dictionary<string, RecordTypeShape> shapes,
+        Type? child,
+        Type clashing,
+        Type alreadyRead)
+    {
+        var bothNamed =
+            $"'{alreadyRead.FullName}' and '{clashing.FullName}' are different types with the same name "
+            + $"'{clashing.Name}', and a schema addresses types by name";
+
+        if (child is null)
+        {
+            failures.Add(new DerivationFailure(
+                clashing.Name,
+                null,
+                $"{bothNamed}; the first was kept and this one is not in this schema."));
+            return;
+        }
+
+        shapes[child.Name] = shapes[child.Name] with { BaseTypeName = null };
+        failures.Add(new DerivationFailure(
+            child.Name,
+            null,
+            $"{bothNamed}. Its inheritance chain was cut here rather than resolved by arrival order, so the "
+            + $"fields '{clashing.Name}' declares are not in this schema for this type."));
+    }
+
+    private static bool IsUsableStorageType(string storageType) =>
+        storageType.Length > 0
+        && !storageType.Split(':').Any(string.IsNullOrEmpty);
 
     private static bool IsUsableRedClass(Type type) =>
         type.IsPublic
@@ -140,16 +174,26 @@ public sealed class ReflectedRecordTypeSource : IRecordTypeSource
             }
             catch (Exception exception)
             {
-                // The whole method rests on the type model resolving every
-                // annotated property to a storage type. One that does not is
-                // reported and left out, because a field carried with a guessed
-                // storage type would validate against nothing and be believed
-                // anyway.
                 failures.Add(new DerivationFailure(
                     type.Name,
                     property.Name,
                     $"The type model does not resolve '{property.PropertyType.Name}' to a storage type: "
                     + exception.Message));
+                continue;
+            }
+
+            // The type model answers an unmappable property with an empty
+            // storage type rather than by refusing, so the answer is checked
+            // as well as taken. A field carried with no storage type would
+            // match no stored value, be marked unconfirmed, and read as
+            // ordinary residue - a wrong field wearing an innocent label.
+            if (!IsUsableStorageType(storageType))
+            {
+                failures.Add(new DerivationFailure(
+                    type.Name,
+                    property.Name,
+                    $"The type model resolves '{property.PropertyType.Name}' to '{storageType}', which names "
+                    + "no storage type, so this field is not in this schema."));
                 continue;
             }
 

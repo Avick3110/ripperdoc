@@ -57,12 +57,15 @@ run "debris sweep"           bash scripts/debris-sweep.sh
 # testing the previous answer while reporting on this one.
 run "clean"                  dotnet clean ripperdoc.sln --nologo -v minimal
 run "build"                  dotnet build ripperdoc.sln --nologo -v minimal
-run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase"
+# A filter that matches nothing exits 0, so without the last flag a mistyped
+# filter would print PASS having run no checks at all - the failure mode where
+# verification machinery fails toward green.
+run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase" -- RunConfiguration.TreatNoTestsAsError=true
 
 # Tiers (ii) and (iii): see tests/fixtures/README.md. Named here rather than
 # left silent, so the gate's coverage is legible from its own output.
-if [ -n "${tweakdb_variable:+x}" ] && [ -n "$(printenv "$tweakdb_variable" || true)" ]; then
-  run "shipped-database checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=ShippedDatabase"
+if [ -n "$(printenv "$tweakdb_variable" || true)" ]; then
+  run "shipped-database checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=ShippedDatabase" -- RunConfiguration.TreatNoTestsAsError=true
 else
   skip "shipped-database checks"     "needs the user's own installed game data - tier (ii), local only; set $tweakdb_variable to a shipped tweak database to run it"
 fi

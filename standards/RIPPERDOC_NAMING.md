@@ -61,6 +61,10 @@ Enumerated so that a rebrand is a one-change job and not an audit:
 3. The project directory and `AssemblyName` (§6).
 4. The solution file name.
 5. The repository name and the README.
+6. The environment variables the tool reads, in `scripts/ci-checks.sh`. Code
+   derives these from the constant; a shell script cannot, so the gate spells
+   one out. It is listed here rather than treated as an exception, because an
+   unlisted site is exactly what stops this list being a complete answer.
 
 If this list ever stops being complete, that is itself the defect — fix the
 scattering, then update the list.

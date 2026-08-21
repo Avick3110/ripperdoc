@@ -141,11 +141,22 @@ public sealed class SchemaIr
                 "No shipped data arbitrated this schema, so no field in it is confirmed - not one of them is "
                 + "known to describe a value that really exists.");
         }
-        else if (validation.RecordTypesNotInSchema.Count > 0)
+        else
         {
-            losses.Add(
-                $"{validation.RecordTypesNotInSchema.Count} record type(s) in the arbitrating database are "
-                + "absent from this schema, so their records were examined against nothing.");
+            if (validation.RecordTypesNotInSchema.Count > 0)
+            {
+                losses.Add(
+                    $"{validation.RecordTypesNotInSchema.Count} record type(s) in the arbitrating database are "
+                    + "absent from this schema, so their records were examined against nothing.");
+            }
+
+            if (validation.UnaddressableFieldProbes > 0)
+            {
+                losses.Add(
+                    $"{validation.UnaddressableFieldProbes} record-and-field pair(s) have no identifier at "
+                    + "all, because the combined name is longer than one can carry; nothing could be stored "
+                    + "under them and nothing was checked for them.");
+            }
         }
 
         return losses;
