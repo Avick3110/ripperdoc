@@ -1,0 +1,37 @@
+name: Gap
+description: ripperdoc could not answer something it should be able to answer.
+title: "[GAP] "
+labels: ["gap"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A gap is not a bug. Nothing is broken - the capability is missing or
+        stops short. These are worth filing separately because they shape what
+        gets built next, and a wrong answer and a missing answer need different
+        fixes.
+
+        Please remove your Windows username and personal folder names from
+        anything you paste.
+  - type: textarea
+    id: wanted
+    attributes:
+      label: What you were trying to find out or do
+    validations:
+      required: true
+  - type: textarea
+    id: stopped
+    attributes:
+      label: Where it stopped
+      description: What ripperdoc reported, or failed to report.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters
+      description: >
+        What you had to do instead. If the fallback was launching the game and
+        bisecting, say so - that is the cost this project exists to remove.
+    validations:
+      required: false

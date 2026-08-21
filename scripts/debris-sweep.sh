@@ -17,15 +17,20 @@
 # Both patterns are case-blind on the letter before the gap: the brand appears
 # capitalised in code identifiers, and that is a convention, not a defect.
 #
-# The sweep reads each file's INDEX BLOB, not the working copy - the bytes that
-# will actually land in a commit. Line endings are normalised on the way in
-# (.gitattributes), so a working copy with CRLF is not a defect while a blob
-# with CR is.
+# The sweep scans WORKING-TREE content - tracked files plus new files that are
+# not ignored. It deliberately does not read index blobs: an edit you have not
+# staged yet is exactly the content a pre-commit sweep needs to see, and a
+# sweep that reports clean on unstaged damage is a check that lies.
 #
 # The carriage-return check does NOT use grep. On a Windows shell, grep strips
 # CR before matching, so the obvious `grep $'\r'` reports clean on a file full
 # of them - a check that cannot fail, which is the failure this project refuses
 # by name. `tr -d` compares bytes and does not care about line-ending policy.
+#
+# That check also asks git whether it will normalise the file on the way in
+# (.gitattributes sets eol=lf for text). Where it will, a CRLF working copy is
+# a local editor artefact and not a defect - flagging it would train everyone
+# to ignore the sweep. Where it will not, a CR is real and gets reported.
 #
 #   --self-test   feed every pattern a string it must flag and one it must not,
 #                 then exit. Run it before trusting a clean sweep.
@@ -51,6 +56,9 @@ pat_word="$(gap_pattern "$word")-"
 pat_control='[\x00-\x08\x0b\x0c\x0e-\x1f]'
 
 has_cr() { ! tr -d '\r' < "$1" | cmp -s - "$1"; }
+
+# Does git normalise this path's line endings on the way into a commit?
+normalised() { git check-attr eol -- "$1" 2>/dev/null | grep -q ': eol: lf$'; }
 
 if [ "${1:-}" = "--self-test" ]; then
   fail=0
@@ -89,32 +97,29 @@ fi
 status=0
 report() { status=1; printf '%s\n' "$1"; }
 
-blob="$(mktemp)"
-trap 'rm -f "$blob"' EXIT
-
 while IFS= read -r file; do
-  git show ":$file" > "$blob" 2>/dev/null || continue
+  [ -f "$file" ] || continue
   # Skip anything git considers binary.
-  grep -Iq . -- "$blob" 2>/dev/null || continue
+  grep -Iq . -- "$file" 2>/dev/null || continue
 
-  if hits=$(grep -nP -- "$pat_brand" "$blob" 2>/dev/null); then
+  if hits=$(grep -nP -- "$pat_brand" "$file" 2>/dev/null); then
     report "DEBRIS  truncated brand name  $file"
     printf '%s\n' "$hits" | sed 's/^/          /'
   fi
 
-  if hits=$(grep -nP -- "$pat_word" "$blob" 2>/dev/null); then
+  if hits=$(grep -nP -- "$pat_word" "$file" 2>/dev/null); then
     report "DEBRIS  truncated word        $file"
     printf '%s\n' "$hits" | sed 's/^/          /'
   fi
 
-  if grep -qP -- "$pat_control" "$blob" 2>/dev/null; then
+  if grep -qP -- "$pat_control" "$file" 2>/dev/null; then
     report "DEBRIS  control bytes         $file"
   fi
 
-  if has_cr "$blob"; then
+  if has_cr "$file" && ! normalised "$file"; then
     report "DEBRIS  carriage return       $file"
   fi
-done < <(git ls-files)
+done < <(git ls-files --cached --others --exclude-standard)
 
 [ "$status" -eq 0 ] && echo "debris sweep: clean"
 exit "$status"

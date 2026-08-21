@@ -13,6 +13,10 @@ artifacts/
 *.suo
 .vs/
 
+# Worktrees. Every change is authored in one of these; they are checkouts of
+# this same repository, not content of it.
+.claude/worktrees/
+
 # Editor / tooling
 .obsidian/
 .idea/

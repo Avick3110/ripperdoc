@@ -1,0 +1,48 @@
+name: Bug
+description: ripperdoc did something wrong, or crashed.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before pasting logs or paths: **please remove your Windows username and
+        any personal folder names.** Reports get quoted in the issue tracker,
+        which is public, and nobody should have to publish their machine layout
+        to report a bug.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Exact steps to reproduce
+      description: >
+        The exact command or action, in order. "Exact" is doing real work here -
+        a bug that reproduces on the second try and not the first is a different
+        bug from the one you think you are reporting.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ripperdoc version
+      description: >
+        Which build. Fixes often land on main before they land in a release, so
+        this decides whether you are looking at something already fixed.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: >
+        Game version, how your mods are deployed (manual, Vortex, MO2077), and
+        anything unusual about the setup. Ordering behaviour differs between
+        deployment shapes, so this is often the answer rather than background.
+    validations:
+      required: true
