@@ -43,6 +43,13 @@ One constant, `Branding.Name` in `src/ripperdoc-core/Branding.cs`. Everything
 user-visible derives from it. **A bare string literal of the brand anywhere
 else is a defect**, not a style preference.
 
+**One carve-out, and being in it is the whole point.** A surface outside the
+compiled code cannot read a constant — a shell script, a workflow file — so it
+spells the brand out. Such a site is **enumerated in §4**, and being enumerated
+is what makes it not a defect: the rule exists so that a rebrand is one change
+rather than an audit, and a listed site costs a rebrand nothing. An unlisted
+one is exactly the defect this rule names.
+
 ## 3. Tool names
 
 Tools on the eventual surface are **`ripperdoc_<snake_case>`**, built from
