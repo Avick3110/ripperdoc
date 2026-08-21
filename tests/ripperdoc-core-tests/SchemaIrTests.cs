@@ -128,6 +128,40 @@ public class SchemaIrTests
     }
 
     [Fact]
+    public void AFieldNamedCafeIsNotReportedAsAOverlongName()
+    {
+        // A field named caf\u00e9 has a short name on a short record. Told that its
+        // pair has no identifier because the combined name is too long, a
+        // reader goes hunting for long record names and finds none, and the
+        // character that actually caused it is never mentioned.
+        var schema = SchemaOfOneField("caf\u00e9");
+        var manifest = ValidationManifest.Build(schema, new StubDatabase(("Thing.one", "gamedataThing_Record")));
+
+        var loss = Assert.Single(
+            SchemaIr.Create(schema, manifest, SchemaMode.InheritedTypeModel, When).Provenance.NamedLosses,
+            candidate => candidate.Contains("no identifier at all", StringComparison.Ordinal));
+
+        Assert.Contains("no defined place", loss, StringComparison.Ordinal);
+        Assert.DoesNotContain("longer than", loss, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnOverlongNameIsStillReportedAsAnOverlongName()
+    {
+        // The other arm: the reason the sentence used to give for everything
+        // has to keep being given for the case it is true of.
+        var schema = SchemaOfOneField(new string('f', 60));
+        var manifest = ValidationManifest.Build(schema, new StubDatabase((new string('r', 200), "gamedataThing_Record")));
+
+        var loss = Assert.Single(
+            SchemaIr.Create(schema, manifest, SchemaMode.InheritedTypeModel, When).Provenance.NamedLosses,
+            candidate => candidate.Contains("no identifier at all", StringComparison.Ordinal));
+
+        Assert.Contains("longer than", loss, StringComparison.Ordinal);
+        Assert.DoesNotContain("no defined place", loss, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ASweepThatCouldLookEverywhereClaimsNoSuchLoss()
     {
         var losses = SchemaIr.Create(Schema(), Manifest(), SchemaMode.InheritedTypeModel, When)
@@ -135,6 +169,18 @@ public class SchemaIrTests
 
         Assert.DoesNotContain(losses, loss => loss.Contains("no identifier at", StringComparison.Ordinal));
     }
+
+    private static RecordSchema SchemaOfOneField(string fieldName) => RecordSchemaDerivation.Derive(
+        new RecordTypeSourceReading(
+            new[]
+            {
+                new RecordTypeShape("gamedataThing_Record", null, true, new[]
+                {
+                    new RecordFieldShape(fieldName, "Float"),
+                }),
+            },
+            Array.Empty<DerivationFailure>()),
+        "a reading constructed for this test");
 
     private static RecordSchema Schema() => RecordSchemaDerivation.Derive(
         new RecordTypeSourceReading(

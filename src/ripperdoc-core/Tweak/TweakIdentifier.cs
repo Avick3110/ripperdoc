@@ -91,16 +91,16 @@ public static class TweakIdentifier
     /// <exception cref="ArgumentNullException"><paramref name="fieldName"/> is null.</exception>
     /// <exception cref="ArgumentException">
     /// <paramref name="fieldName"/> is empty, or the pair has no identifier.
-    /// Use <see cref="TryForField"/> wherever an unaddressable pair is data to
-    /// record rather than a mistake to stop for.
+    /// Use <see cref="TryForField(ulong, string, out ulong)"/> wherever an
+    /// unaddressable pair is data to record rather than a mistake to stop for.
     /// </exception>
     public static ulong ForField(ulong recordIdentifier, string fieldName)
     {
-        if (!TryForField(recordIdentifier, fieldName, out var identifier))
+        if (!TryForField(recordIdentifier, fieldName, out var identifier, out var reason))
         {
             throw new ArgumentException(
                 $"'{fieldName}' has no identifier on this record: "
-                + WhyUnaddressable(recordIdentifier, fieldName) + ".",
+                + WhyUnaddressable(reason, recordIdentifier, fieldName) + ".",
                 nameof(fieldName));
         }
 
@@ -134,7 +134,36 @@ public static class TweakIdentifier
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="fieldName"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="fieldName"/> is empty.</exception>
-    public static bool TryForField(ulong recordIdentifier, string fieldName, out ulong identifier)
+    public static bool TryForField(ulong recordIdentifier, string fieldName, out ulong identifier) =>
+        TryForField(recordIdentifier, fieldName, out identifier, out _);
+
+    /// <summary>
+    /// The identifier of a field on a record where one exists, and why not
+    /// where one does not.
+    /// </summary>
+    /// <param name="recordIdentifier">The owning record's identifier.</param>
+    /// <param name="fieldName">The field's name, without the separator.</param>
+    /// <param name="identifier">
+    /// The identifier of <c>&lt;record&gt;.&lt;field&gt;</c>, or zero if there is none.
+    /// </param>
+    /// <param name="reason">
+    /// Which reason applies, or <see cref="UnaddressableReason.None"/> where an
+    /// identifier was produced.
+    /// </param>
+    /// <returns>False if this pair has no identifier at all.</returns>
+    /// <remarks>
+    /// A caller that records unaddressable pairs will be asked which kind they
+    /// were, and the only place that can answer is the code that decided.
+    /// Working the reason out again afterwards would be a second decision, free
+    /// to disagree with the first.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="fieldName"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="fieldName"/> is empty.</exception>
+    public static bool TryForField(
+        ulong recordIdentifier,
+        string fieldName,
+        out ulong identifier,
+        out UnaddressableReason reason)
     {
         ArgumentNullException.ThrowIfNull(fieldName);
         if (fieldName.Length == 0)
@@ -144,14 +173,22 @@ public static class TweakIdentifier
 
         identifier = 0;
 
-        if (!IsWellFormed(recordIdentifier) || !IsWithinRange(fieldName))
+        if (!IsWellFormed(recordIdentifier))
         {
+            reason = UnaddressableReason.MalformedRecordIdentifier;
+            return false;
+        }
+
+        if (!IsWithinRange(fieldName))
+        {
+            reason = UnaddressableReason.FieldNameOutsideRange;
             return false;
         }
 
         var length = LengthOf(recordIdentifier) + 1 + fieldName.Length;
         if (length > MaxNameLength)
         {
+            reason = UnaddressableReason.CombinedNameTooLong;
             return false;
         }
 
@@ -159,8 +196,41 @@ public static class TweakIdentifier
         checksum = Checksum(checksum, fieldName);
 
         identifier = ((ulong)length << 32) | checksum;
+        reason = UnaddressableReason.None;
         return true;
     }
+
+    /// <summary>
+    /// What a reason means, in a sentence fit to appear in an artifact.
+    /// </summary>
+    /// <param name="reason">The reason to describe.</param>
+    /// <returns>The description, with no leading capital and no full stop.</returns>
+    /// <remarks>
+    /// The reason and its wording live together so that a report of
+    /// unaddressable pairs says which kind they actually were. A report giving
+    /// one reason for every kind sends most of its readers looking for a
+    /// problem that is not there.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="reason"/> is <see cref="UnaddressableReason.None"/>, or
+    /// is not a reason at all. Both mean the caller asked why a pair failed
+    /// when it did not fail.
+    /// </exception>
+    public static string Describe(UnaddressableReason reason) => reason switch
+    {
+        UnaddressableReason.MalformedRecordIdentifier =>
+            "the record's own identifier has bits set above its length field, so the length it appears to "
+            + "carry is not the length it was built from",
+        UnaddressableReason.FieldNameOutsideRange =>
+            "the field name carries a character with no defined place in an identifier, and the conversion "
+            + "this is checked against would replace it with a placeholder",
+        UnaddressableReason.CombinedNameTooLong =>
+            $"the combined name is longer than the {MaxNameLength} bytes the length field holds",
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(reason),
+            reason,
+            "There is no reason to describe: this names a pair that has an identifier."),
+    };
 
     /// <summary>
     /// Whether every character of <paramref name="text"/> has a defined place in
@@ -246,25 +316,20 @@ public static class TweakIdentifier
     }
 
     // The message names the reason that actually applies rather than the one
-    // that usually does. A caller told the wrong reason looks in the wrong
-    // place, which costs more than saying nothing would.
-    private static string WhyUnaddressable(ulong recordIdentifier, string fieldName)
-    {
-        if (!IsWellFormed(recordIdentifier))
+    // that usually does, and it names the reason the decision reached rather
+    // than working it out a second time. What it adds over Describe is this
+    // pair's own numbers, which are what a caller needs to find the pair.
+    private static string WhyUnaddressable(UnaddressableReason reason, ulong recordIdentifier, string fieldName)
+        => reason switch
         {
-            return $"the record identifier 0x{recordIdentifier:X} has bits set above its length field, so the "
-                + "length it appears to carry is not the length it was built from";
-        }
-
-        if (!IsWithinRange(fieldName))
-        {
-            return "the field name carries a character with no defined place in an identifier, and the "
-                + "conversion this is checked against would replace it with a placeholder";
-        }
-
-        return $"the combined name would be {LengthOf(recordIdentifier) + 1 + fieldName.Length} bytes and the "
-            + $"length field holds at most {MaxNameLength}";
-    }
+            UnaddressableReason.MalformedRecordIdentifier =>
+                $"the record identifier 0x{recordIdentifier:X} has bits set above its length field, so the "
+                + "length it appears to carry is not the length it was built from",
+            UnaddressableReason.CombinedNameTooLong =>
+                $"the combined name would be {LengthOf(recordIdentifier) + 1 + fieldName.Length} bytes and the "
+                + $"length field holds at most {MaxNameLength}",
+            _ => Describe(reason),
+        };
 
     private static uint[] BuildTable()
     {
@@ -284,4 +349,40 @@ public static class TweakIdentifier
 
         return table;
     }
+}
+
+/// <summary>
+/// Why a record-and-field pair has no identifier.
+/// </summary>
+/// <remarks>
+/// The reasons are told apart because each sends a reader somewhere different:
+/// one is a record that should not be in the database at all, one is a field
+/// name outside the range identifiers are defined over, and one is a name that
+/// is simply too long. Reported as a single reason, two of every three are a
+/// wrong lead.
+/// </remarks>
+public enum UnaddressableReason
+{
+    /// <summary>The pair has an identifier; nothing failed.</summary>
+    None,
+
+    /// <summary>
+    /// The record's identifier has bits set above its length field, so it was
+    /// built from a name too long to have an identifier and the length it
+    /// appears to carry is not the length it was built from.
+    /// </summary>
+    MalformedRecordIdentifier,
+
+    /// <summary>
+    /// The field name carries a character above
+    /// <see cref="TweakIdentifier.MaxCharacter"/>, which the conversion this is
+    /// checked against replaces with a placeholder.
+    /// </summary>
+    FieldNameOutsideRange,
+
+    /// <summary>
+    /// The record name and the field name together are longer than the length
+    /// field can hold.
+    /// </summary>
+    CombinedNameTooLong,
 }
