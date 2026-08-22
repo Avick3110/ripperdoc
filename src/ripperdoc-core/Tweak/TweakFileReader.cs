@@ -98,6 +98,12 @@ public sealed class TweakFileReader
         {
             stream.Load(reader);
         }
+        // A file the parser refuses is refused whole, which is what the
+        // framework does with the same file: it loads the document and reads
+        // it inside one try, and a parse that raises leaves the changeset
+        // untouched. So a duplicate key - which the framework's parser treats
+        // as an error rather than as a last-one-wins - costs that file every
+        // write it makes, in the game and here alike.
         catch (YamlException exception)
         {
             return new TweakDocument(
@@ -139,6 +145,20 @@ public sealed class TweakFileReader
             var name = Scalar(keyNode);
             if (name is null || name.Length == 0 || name[0] == AttributeMarker)
             {
+                // A key at the top level that is not a record's name is an
+                // instruction to the framework, and not all of them are
+                // decoration: a condition on the game build or on installed
+                // content that does not hold makes the framework read nothing
+                // from the file at all. This engine does not evaluate any of
+                // them. Naming each one is the difference between a report
+                // that says so and a report that replays in full a file the
+                // game never applied - which is a wrong answer with nothing
+                // in the layer to contradict it.
+                statements.Add(new TweakUnhandled(
+                    (int)keyNode.Start.Line,
+                    name is null or "" ? "<a key that is not a name>" : name,
+                    "an instruction at the top level, which this engine does not act on - a condition among "
+                    + "these can stop the framework reading the file at all"));
                 continue;
             }
 
@@ -251,13 +271,20 @@ public sealed class TweakFileReader
         return new TweakFlatWrite((int)node.Start.Line, flatName, valueText, kind, owningRecordName);
     }
 
-    // A sequence mutates rather than replaces when any of its items carries an
-    // operator tag. One tagged item is enough: the framework applies the tagged
-    // items and warns that the untagged ones are ignored, so a sequence with
-    // both is a mutation with a mistake in it rather than a replacement.
+    // A value mutates rather than replaces when it carries an operator tag, or
+    // when it is a sequence any of whose items does. The operators that take
+    // another value by name are written on the value itself and not on an item,
+    // so a test that only looked inside sequences would read one of those as a
+    // replacement - and a replacement and a mutation contest differently, so it
+    // would report composition as a contest somebody has to resolve.
+    //
+    // For a sequence, one tagged item is enough: the framework applies the
+    // tagged items and warns that the untagged ones are ignored, so a sequence
+    // with both is a mutation with a mistake in it rather than a replacement.
     private static bool IsMutation(YamlNode node) =>
-        node is YamlSequenceNode sequence
-        && sequence.Children.Any(item => MutationTags.Contains(item.Tag.ToString(), StringComparer.Ordinal));
+        MutationTags.Contains(node.Tag.ToString(), StringComparer.Ordinal)
+        || (node is YamlSequenceNode sequence
+            && sequence.Children.Any(item => MutationTags.Contains(item.Tag.ToString(), StringComparer.Ordinal)));
 
     // A value is a graph rather than a tree: an alias naming the anchor it
     // sits inside makes it circular. What is tracked is the path currently
