@@ -39,11 +39,13 @@ public sealed class TweakLayer
     private TweakLayer(
         IReadOnlyList<TweakFile> files,
         IReadOnlyList<TweakFile> present,
-        bool enumerationIsCollated)
+        bool enumerationIsCollated,
+        IReadOnlyList<TweakUnhandled> refused)
     {
         Files = files;
         Present = present;
         EnumerationIsCollated = enumerationIsCollated;
+        Refused = refused;
     }
 
     /// <summary>
@@ -98,6 +100,18 @@ public sealed class TweakLayer
     public bool EnumerationIsCollated { get; }
 
     /// <summary>
+    /// Anything under the directory the walk declined to enter, with the reason.
+    /// </summary>
+    /// <remarks>
+    /// A directory that is not walked is a set of files that are not in this
+    /// layer, and a report built from a layer that quietly stops short is a
+    /// report that says a mod wrote nothing. Carried here so that the resolved
+    /// state can say what it did not cover, rather than covering less than it
+    /// claims.
+    /// </remarks>
+    public IReadOnlyList<TweakUnhandled> Refused { get; }
+
+    /// <summary>
     /// The files present but not read by the framework, in walk order.
     /// </summary>
     public IEnumerable<TweakFile> Unread => Present.Where(file => file.Format == TweakFileFormat.NotRead);
@@ -119,10 +133,11 @@ public sealed class TweakLayer
         }
 
         var walked = new List<string>();
+        var refused = new List<TweakUnhandled>();
         var collated = true;
-        Walk(directoryPath, string.Empty, walked, ref collated);
+        Walk(directoryPath, string.Empty, walked, refused, [], ref collated);
 
-        return Of(walked, collated);
+        return Of(walked, collated, refused);
     }
 
     /// <summary>
@@ -160,8 +175,16 @@ public sealed class TweakLayer
     /// disagree with the one the walk applied.
     /// </para>
     /// </remarks>
+    /// <param name="refused">
+    /// Anything under the layer the walk declined to enter. Empty where the
+    /// walk reached everything, and empty for a caller that did not walk a
+    /// directory at all.
+    /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="walked"/> is null.</exception>
-    public static TweakLayer Of(IReadOnlyList<string> walked, bool enumerationIsCollated)
+    public static TweakLayer Of(
+        IReadOnlyList<string> walked,
+        bool enumerationIsCollated,
+        IReadOnlyList<TweakUnhandled>? refused = null)
     {
         ArgumentNullException.ThrowIfNull(walked);
 
@@ -200,7 +223,7 @@ public sealed class TweakLayer
                 : new TweakFile(relativePath, GroupOf(relativePath), TweakFileFormat.NotRead, 0));
         }
 
-        return new TweakLayer(read, present, enumerationIsCollated);
+        return new TweakLayer(read, present, enumerationIsCollated, refused ?? []);
     }
 
     /// <summary>
@@ -304,8 +327,16 @@ public sealed class TweakLayer
     // is used as it arrives, because that is what the framework consumes; what
     // a collation would have produced is computed alongside it only to say
     // whether the two agree.
-    private static void Walk(string directoryPath, string prefix, List<string> walked, ref bool collated)
+    private static void Walk(
+        string directoryPath,
+        string prefix,
+        List<string> walked,
+        List<TweakUnhandled> refused,
+        List<string> walking,
+        ref bool collated)
     {
+        walking.Add(Path.GetFullPath(directoryPath));
+
         var entries = Directory.EnumerateFileSystemEntries(directoryPath).ToArray();
 
         if (!IsCollated(entries))
@@ -319,15 +350,59 @@ public sealed class TweakLayer
                 ? Path.GetFileName(entry)
                 : prefix + TweakFile.PathSeparator + Path.GetFileName(entry);
 
-            if (Directory.Exists(entry))
-            {
-                Walk(entry, relativePath, walked, ref collated);
-            }
-            else
+            if (!Directory.Exists(entry))
             {
                 walked.Add(relativePath);
+                continue;
             }
+
+            if (LeadsBackInto(entry, walking, out var reason))
+            {
+                refused.Add(new TweakUnhandled(1, relativePath, reason));
+                continue;
+            }
+
+            Walk(entry, relativePath, walked, refused, walking, ref collated);
         }
+
+        walking.RemoveAt(walking.Count - 1);
+    }
+
+    // A link to a directory the walk is already inside makes the tree
+    // unbounded, and the walk does not fail on it - it does not return, and
+    // the process is gone on a stack overflow before anything can say which
+    // entry did it.
+    //
+    // What is tracked is the branch currently being walked and not everything
+    // seen, because two links to one directory are duplication rather than a
+    // cycle: that walk terminates, and refusing the second would drop files
+    // the framework does read. The test is on the resolved target of a link
+    // and not on any directory's path, so two ordinary directories cannot be
+    // read as one whatever a volume does with case.
+    private static bool LeadsBackInto(string entry, List<string> walking, out string reason)
+    {
+        FileSystemInfo? target;
+        try
+        {
+            target = Directory.ResolveLinkTarget(entry, returnFinalTarget: true);
+        }
+        catch (IOException)
+        {
+            // A chain of links that does not arrive anywhere. Whatever is
+            // behind it cannot be walked, and saying so is the whole duty here.
+            reason = "a link this walk could not follow to a directory";
+            return true;
+        }
+
+        if (target is null || !walking.Contains(target.FullName, StringComparer.OrdinalIgnoreCase))
+        {
+            reason = string.Empty;
+            return false;
+        }
+
+        reason = "a link back into a directory this walk is already inside, so the files under it are "
+            + "whatever is above it and are not read from here";
+        return true;
     }
 }
 
