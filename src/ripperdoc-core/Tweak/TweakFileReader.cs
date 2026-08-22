@@ -225,6 +225,22 @@ public sealed class TweakFileReader
             var key = Scalar(keyNode);
             if (key is null || key.Length == 0 || key[0] == AttributeMarker)
             {
+                // The two the declaration above consumed are read and need no
+                // saying. Anything else here is an instruction this engine does
+                // not act on, and skipping one in silence is how a write leaves
+                // the layer without trace: a $value with no $type alongside it
+                // lands here, and dropping it takes the write out of the state,
+                // out of any contest over the name, and out of the list of what
+                // was not read - so the file still counts as read in full.
+                if (key is not TypeAttribute and not BaseAttribute)
+                {
+                    statements.Add(new TweakUnhandled(
+                        (int)keyNode.Start.Line,
+                        recordName + PropertySeparator
+                        + (key is null or "" ? "<a key that is not a name>" : key),
+                        "an instruction inside a record, which this engine does not act on"));
+                }
+
                 continue;
             }
 
