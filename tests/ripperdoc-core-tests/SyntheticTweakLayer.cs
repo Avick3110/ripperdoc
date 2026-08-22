@@ -60,11 +60,17 @@ internal sealed class SyntheticTweakLayer : IDisposable
 
     /// <summary>Enumerate and replay this layer.</summary>
     /// <returns>The resolved state.</returns>
-    internal TweakResolvedState Replay()
+    internal TweakResolvedState Replay(
+        TweakInheritanceMap? inheritance = null,
+        ITweakValueSource? values = null)
     {
         var layer = Enumerate();
 
-        return TweakResolvedState.Replay(layer, TweakFileReader.ReadLayer(layer, Root));
+        return TweakResolvedState.Replay(
+            layer,
+            TweakFileReader.ReadLayer(layer, Root),
+            inheritance ?? TweakInheritanceMap.None,
+            values);
     }
 
     /// <inheritdoc />

@@ -25,17 +25,36 @@ public sealed class TweakResolvedState
         IReadOnlyList<ResolvedFlat> flats,
         IReadOnlyList<TweakCollision> collisions,
         IReadOnlyList<UnaddressableFlatName> unaddressable,
-        IReadOnlyList<TweakUnhandled> unhandled)
+        IReadOnlyList<TweakUnhandled> unhandled,
+        bool inheritanceWasReplayed,
+        string inheritanceDescription)
     {
         Layer = layer;
         Flats = flats;
         Collisions = collisions;
         Unaddressable = unaddressable;
         Unhandled = unhandled;
+        InheritanceWasReplayed = inheritanceWasReplayed;
+        InheritanceDescription = inheritanceDescription;
     }
 
     /// <summary>The layer this state was replayed from.</summary>
     public TweakLayer Layer { get; }
+
+    /// <summary>
+    /// Whether a value moving from a shipped record to the records cloned from
+    /// it was replayed at all.
+    /// </summary>
+    /// <remarks>
+    /// False where the inputs for that route were not supplied. It is the
+    /// difference between "no value moved" and "nothing looked", and a report
+    /// that cannot tell a reader which of those it means is telling them the
+    /// wrong one half the time.
+    /// </remarks>
+    public bool InheritanceWasReplayed { get; }
+
+    /// <summary>What the inheritance route was replayed against, or why it was not.</summary>
+    public string InheritanceDescription { get; }
 
     /// <summary>Every value the layer writes, by name, in a stable order.</summary>
     public IReadOnlyList<ResolvedFlat> Flats { get; }
@@ -74,15 +93,33 @@ public sealed class TweakResolvedState
     /// The layer's files as read, in the same order as
     /// <see cref="TweakLayer.Files"/>.
     /// </param>
+    /// <param name="inheritance">
+    /// Which shipped records were cloned from which.
+    /// <see cref="TweakInheritanceMap.None"/> turns that route off rather than
+    /// reporting that nothing travelled it.
+    /// </param>
+    /// <param name="values">
+    /// The values the database already holds, used to decide whether a copy
+    /// still agrees with what it was copied from. Null turns the route off for
+    /// the same reason.
+    /// </param>
     /// <returns>The resolved state.</returns>
-    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="layer"/>, <paramref name="documents"/> or
+    /// <paramref name="inheritance"/> is null.
+    /// </exception>
     /// <exception cref="ArgumentException">
     /// The documents do not correspond to the layer's read order.
     /// </exception>
-    public static TweakResolvedState Replay(TweakLayer layer, IReadOnlyList<TweakDocument> documents)
+    public static TweakResolvedState Replay(
+        TweakLayer layer,
+        IReadOnlyList<TweakDocument> documents,
+        TweakInheritanceMap inheritance,
+        ITweakValueSource? values)
     {
         ArgumentNullException.ThrowIfNull(layer);
         ArgumentNullException.ThrowIfNull(documents);
+        ArgumentNullException.ThrowIfNull(inheritance);
 
         if (documents.Count != layer.Files.Count)
         {
@@ -105,6 +142,13 @@ public sealed class TweakResolvedState
         }
 
         var flats = new Dictionary<string, List<TweakContribution>>(StringComparer.Ordinal);
+
+        // A record reached only through the inheritance metadata has no name
+        // anywhere - that metadata keys by identifier and carries no text - so
+        // its identifier is carried here rather than computed back from the
+        // stand-in name it is reported under, which would address something
+        // else entirely.
+        var identifiers = new Dictionary<string, ulong>(StringComparer.Ordinal);
         var unhandled = new List<TweakUnhandled>();
         var declarations = new List<(TweakFile File, TweakRecordDeclaration Declaration)>();
 
@@ -134,12 +178,36 @@ public sealed class TweakResolvedState
 
         InheritIntoClones(flats, declarations);
 
+        // Both inputs or neither. Deciding whether a copy still agrees with its
+        // source needs the values, and knowing which records are copies needs
+        // the map; with one of them the route can only be walked halfway, and a
+        // half-walked route reports some of the movement as though it were all
+        // of it.
+        var inheritanceWasReplayed = inheritance.IsPresent && values is not null;
+        if (inheritanceWasReplayed)
+        {
+            Reinherit(flats, identifiers, inheritance, values!);
+        }
+
         var resolved = new List<ResolvedFlat>(flats.Count);
         var unaddressable = new List<UnaddressableFlatName>();
         var collisions = new List<TweakCollision>();
 
         foreach (var (name, contributions) in flats.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
+            if (identifiers.TryGetValue(name, out var known))
+            {
+                var reached = new ResolvedFlat(name, known, contributions);
+                resolved.Add(reached);
+
+                if (TweakCollision.For(reached) is { } contested)
+                {
+                    collisions.Add(contested);
+                }
+
+                continue;
+            }
+
             var addressing = Address(name, out var identifier);
             if (addressing != FlatAddressing.Addressable)
             {
@@ -157,7 +225,16 @@ public sealed class TweakResolvedState
             }
         }
 
-        return new TweakResolvedState(layer, resolved, collisions, unaddressable, unhandled);
+        return new TweakResolvedState(
+            layer,
+            resolved,
+            collisions,
+            unaddressable,
+            unhandled,
+            inheritanceWasReplayed,
+            inheritanceWasReplayed
+                ? $"{inheritance.Description}, against {values!.Description}"
+                : "not replayed - " + (inheritance.IsPresent ? "no value source" : inheritance.Description));
     }
 
     // A clone takes the value its source holds at the moment the clone is
@@ -227,6 +304,137 @@ public sealed class TweakResolvedState
             }
         }
     }
+
+    // A value written to a record that shipped copies of itself moves onto
+    // those copies - but only where the copy still agrees with it, because a
+    // copy holding something different was overridden when the game's data was
+    // built and is not following its source any more. A copy the layer writes
+    // to by name is left alone for the same reason, whichever file did it and
+    // however late.
+    //
+    // It travels: a copy that is itself a source passes the value on, so one
+    // write can move a value across a whole family. The walk is by generation
+    // and a name already carried is never re-queued, so a family that records
+    // itself as its own ancestor terminates instead of circling.
+    private static void Reinherit(
+        Dictionary<string, List<TweakContribution>> flats,
+        Dictionary<string, ulong> identifiers,
+        TweakInheritanceMap inheritance,
+        ITweakValueSource values)
+    {
+        // Kept as identifiers, not names. A record reached through the metadata
+        // is only ever known by identifier, so a name comparison would fail to
+        // see the layer's own write to that same value and would carry a second
+        // answer for it under a different name.
+        var written = new HashSet<ulong>();
+        foreach (var (name, contributions) in flats)
+        {
+            if (contributions.Any(c => c.Route == TweakContributionRoute.Written)
+                && Addressable(name, out var writtenId))
+            {
+                written.Add(writtenId);
+            }
+        }
+
+        var carried = new HashSet<ulong>();
+        var generation = new List<(string FlatName, string RecordName, string Property)>();
+
+        foreach (var flatName in flats.Keys.OrderBy(name => name, StringComparer.Ordinal).ToArray())
+        {
+            var separator = flatName.LastIndexOf(TweakFileReader.PropertySeparator);
+            if (separator <= 0
+                || !Addressable(flatName, out var startId)
+                || !written.Contains(startId))
+            {
+                continue;
+            }
+
+            generation.Add((flatName, flatName[..separator], flatName[(separator + 1)..]));
+        }
+
+        while (generation.Count > 0)
+        {
+            var next = new List<(string FlatName, string RecordName, string Property)>();
+
+            foreach (var (flatName, recordName, property) in generation)
+            {
+                if (!identifiers.TryGetValue(flatName, out var flatId)
+                    && !Addressable(flatName, out flatId))
+                {
+                    continue;
+                }
+
+                if (!identifiers.TryGetValue(recordName, out var recordId)
+                    && !Addressable(recordName, out recordId))
+                {
+                    continue;
+                }
+
+                if (!values.HoldsRecord(recordId) || !values.HoldsValue(flatId))
+                {
+                    continue;
+                }
+
+                var source = flats[flatName]
+                    .LastOrDefault(c => c.Kind == TweakWriteKind.Assignment);
+                if (source is null)
+                {
+                    continue;
+                }
+
+                foreach (var descendantId in inheritance.Descendants(recordId))
+                {
+                    if (!values.HoldsRecord(descendantId))
+                    {
+                        continue;
+                    }
+
+                    if (!TweakIdentifier.TryForField(descendantId, property, out var descendantFlatId))
+                    {
+                        continue;
+                    }
+
+                    // Named without a name: the metadata keys records by
+                    // identifier and carries no text, so a record reached only
+                    // this way can be reported by identifier and never by name.
+                    var descendantName = $"<record 0x{descendantId:X}>";
+                    var descendantFlatName = descendantName + TweakFileReader.PropertySeparator + property;
+
+                    if (written.Contains(descendantFlatId) || !carried.Add(descendantFlatId))
+                    {
+                        continue;
+                    }
+
+                    if (!values.HoldsValue(descendantFlatId)
+                        || !values.ValuesMatch(descendantFlatId, flatId))
+                    {
+                        continue;
+                    }
+
+                    identifiers[descendantFlatName] = descendantFlatId;
+                    identifiers[descendantName] = descendantId;
+
+                    Contributions(flats, descendantFlatName).Add(new TweakContribution(
+                        source.File,
+                        source.Line,
+                        source.ValueText,
+                        TweakWriteKind.Assignment,
+                        TweakContributionRoute.InheritedFromShippedRecord,
+                        new TweakInheritance(flatName, source)));
+
+                    if (inheritance.IsSource(descendantId))
+                    {
+                        next.Add((descendantFlatName, descendantName, property));
+                    }
+                }
+            }
+
+            generation = next;
+        }
+    }
+
+    private static bool Addressable(string name, out ulong identifier) =>
+        Address(name, out identifier) == FlatAddressing.Addressable;
 
     private static List<TweakContribution> Contributions(
         Dictionary<string, List<TweakContribution>> flats,
@@ -363,6 +571,12 @@ public enum TweakContributionRoute
     /// across with the clone.
     /// </summary>
     InheritedFromBase,
+
+    /// <summary>
+    /// The file wrote to a record the shipped data was copied from, and the
+    /// value moved onto a copy the file never named.
+    /// </summary>
+    InheritedFromShippedRecord,
 }
 
 /// <summary>

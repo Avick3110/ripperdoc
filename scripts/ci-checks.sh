@@ -39,6 +39,14 @@ tweaks_variable="RIPPERDOC_TWEAKS_PATH"
 # small. The tier needs both inputs or it does not run.
 extra_flats_variable="RIPPERDOC_EXTRA_FLATS_PATH"
 
+# And its inheritance metadata, which records which shipped records were copied
+# from which. A value written to a source record moves onto those copies, and
+# without this the movement is invisible - so the tier reports the route as not
+# walked rather than reporting that nothing moved. Deciding whether a copy still
+# follows its source also needs the shipped database's own values, so this tier
+# needs that too.
+inheritance_variable="RIPPERDOC_INHERITANCE_PATH"
+
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 
@@ -126,6 +134,7 @@ fi
 # run.
 tweaks_path="$(printenv "$tweaks_variable" || true)"
 extra_flats_path="$(printenv "$extra_flats_variable" || true)"
+inheritance_path="$(printenv "$inheritance_variable" || true)"
 
 if [ -z "$tweaks_path" ]; then
   skip "installed-tweak-layer checks" "needs a real install's tweak directory - tier (ii), local only; set $tweaks_variable to one to run it"
@@ -135,6 +144,12 @@ elif [ -z "$extra_flats_path" ]; then
   skip "installed-tweak-layer checks" "needs the framework's own metadata as well as the layer - tier (ii), local only; set $extra_flats_variable to it to run this tier"
 elif [ ! -f "$extra_flats_path" ]; then
   skip "installed-tweak-layer checks" "$extra_flats_variable names a path with no file at it - the property set cannot be resolved without the framework's metadata"
+elif [ -z "$inheritance_path" ]; then
+  skip "installed-tweak-layer checks" "needs the framework's inheritance metadata as well - tier (ii), local only; set $inheritance_variable to it to run this tier"
+elif [ ! -f "$inheritance_path" ]; then
+  skip "installed-tweak-layer checks" "$inheritance_variable names a path with no file at it - a value moving from a shipped record to its copies cannot be replayed without it"
+elif [ -z "$tweakdb_path" ] || [ ! -f "$tweakdb_path" ]; then
+  skip "installed-tweak-layer checks" "needs the shipped database as well, to decide whether a copy still follows what it was copied from - set $tweakdb_variable to one to run this tier"
 else
   run "installed-tweak-layer checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=InstalledTweakLayer" -- RunConfiguration.TreatNoTestsAsError=true
 fi

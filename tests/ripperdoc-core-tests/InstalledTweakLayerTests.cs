@@ -45,6 +45,18 @@ public class InstalledTweakLayerTests
     /// </summary>
     public static string ExtraFlatsVariableName => Branding.Name.ToUpperInvariant() + "_EXTRA_FLATS_PATH";
 
+    /// <summary>
+    /// The environment variable naming the framework's inheritance metadata,
+    /// which records which shipped records were copied from which.
+    /// </summary>
+    public static string InheritanceVariableName => Branding.Name.ToUpperInvariant() + "_INHERITANCE_PATH";
+
+    /// <summary>
+    /// The environment variable naming the shipped database, whose values decide
+    /// whether a copy still follows what it was copied from.
+    /// </summary>
+    public static string DatabaseVariableName => Branding.Name.ToUpperInvariant() + "_TWEAKDB_PATH";
+
     private static string LayerPath => Required(VariableName);
 
     private static string Required(string variable)
@@ -63,7 +75,7 @@ public class InstalledTweakLayerTests
     public void EveryFileInTheLayerIsEitherReplayedOrNamedAsSomethingThatWasNot()
     {
         var layer = TweakLayer.Enumerate(LayerPath);
-        var state = TweakResolvedState.Replay(layer, TweakFileReader.ReadLayer(layer, LayerPath));
+        var state = Replay(layer);
 
         _output.WriteLine(Report(state));
 
@@ -98,8 +110,10 @@ public class InstalledTweakLayerTests
     public void EveryContestTheToolFindsIsExplainedRatherThanMerelyCounted()
     {
         var layer = TweakLayer.Enumerate(LayerPath);
-        var state = TweakResolvedState.Replay(layer, TweakFileReader.ReadLayer(layer, LayerPath));
+        var state = Replay(layer);
 
+        _output.WriteLine($"inheritance route: {state.InheritanceDescription}.");
+        Assert.True(state.InheritanceWasReplayed);
         _output.WriteLine(
             $"{state.Collisions.Count} contested value(s) in this layer.");
 
@@ -130,7 +144,7 @@ public class InstalledTweakLayerTests
     public void EveryValueTheLayerWritesIsAddressableOrIsNamedAsNotBeing()
     {
         var layer = TweakLayer.Enumerate(LayerPath);
-        var state = TweakResolvedState.Replay(layer, TweakFileReader.ReadLayer(layer, LayerPath));
+        var state = Replay(layer);
 
         _output.WriteLine(
             $"{state.Flats.Count} value(s) addressable, {state.Unaddressable.Count} not.");
@@ -193,6 +207,16 @@ public class InstalledTweakLayerTests
 
         Assert.Equal(writesOnRecords, reading.PropertiesChecked + attributed);
     }
+
+    // The whole tier reads one install's tweak lane, so the inputs are gathered
+    // in one place: the layer, the framework's inheritance metadata, and the
+    // shipped database whose values decide whether a copy still follows what it
+    // was copied from.
+    private static TweakResolvedState Replay(TweakLayer layer) => TweakResolvedState.Replay(
+        layer,
+        TweakFileReader.ReadLayer(layer, LayerPath),
+        TweakInheritanceMap.OpenReadOnly(Required(InheritanceVariableName)),
+        TweakDatabaseSource.OpenReadOnly(Required(DatabaseVariableName)));
 
     private static string Report(TweakResolvedState state)
     {
