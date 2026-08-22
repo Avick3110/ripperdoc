@@ -239,11 +239,14 @@ dump-free and free of any game-derived bytes.
 Tier (iii) runs locally; CI asserts that it ran and that its output is current.
 
 **Why tier (ii) exists rather than folding into (i).** In the pinned library
-version, a written TweakDB file **cannot be read back** by the same library's
-reader — reproduced on three variants and independently re-reproduced. This
-blocks nothing, because the write lane never emits binary. But it means the
-binary parse **cannot be synthesised**, and must be exercised against a real
-shipped database or not at all.
+version, a written TweakDB file **can be read back** by the same library's
+reader until a **stored value** is in it. An empty database round trips, and so
+does one carrying records; add a flat — loose, or set as a record's property —
+and the file ends before the structure the reader is following does. This
+blocks nothing, because the write lane never emits binary. A records-carrying
+database is enough to put the file-reading path's success under tier (i), but a
+**parse over stored values cannot be synthesised**, and must be exercised
+against a real shipped database or not at all.
 
 **Posture rules, binding wherever a check is written:**
 
