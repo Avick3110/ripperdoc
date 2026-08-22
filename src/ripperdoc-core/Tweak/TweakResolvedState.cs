@@ -530,17 +530,50 @@ public sealed record ResolvedFlat(
     }
 
     /// <summary>
-    /// Every write that replaces the value and was not the one that decided it.
+    /// Every write the winner left with no effect in the game, in apply order.
     /// </summary>
     /// <remarks>
-    /// A write that mutates the value did not decide it either, and is
-    /// deliberately not here. It composes with the winner instead of losing to
-    /// it - the game applies both - so listing it as overridden would send its
-    /// author looking for a contest they are not in.
+    /// A write that replaces the value and did not decide it was replaced in
+    /// turn. A write that mutates the value is asked where it sits, because the
+    /// two answers are opposite: the winner replaces the whole value, so a
+    /// mutation applied before it is discarded with what it mutated, while one
+    /// applied after it composes with the winner - the game applies both - and
+    /// listing that one would send its author looking for a contest they are
+    /// not in. The contributions are in apply order, so the position is the
+    /// answer.
     /// </remarks>
-    public IEnumerable<TweakContribution> Overridden => Contributions
-        .Where(contribution => contribution.Kind == TweakWriteKind.Assignment
-            && !ReferenceEquals(contribution, Winner));
+    public IEnumerable<TweakContribution> Overridden
+    {
+        get
+        {
+            if (Winner is not { } winner)
+            {
+                return [];
+            }
+
+            var winnerPosition = PositionOf(winner);
+
+            return Contributions.Where((contribution, position) =>
+                !ReferenceEquals(contribution, winner)
+                && (contribution.Kind == TweakWriteKind.Assignment || position < winnerPosition));
+        }
+    }
+
+    // By identity, not by equality: two files can write one value the same way
+    // on the same line of files with the same name, and a match on content
+    // would put the winner's position somewhere it is not.
+    private int PositionOf(TweakContribution contribution)
+    {
+        for (var position = 0; position < Contributions.Count; position++)
+        {
+            if (ReferenceEquals(Contributions[position], contribution))
+            {
+                return position;
+            }
+        }
+
+        return Contributions.Count;
+    }
 }
 
 /// <summary>

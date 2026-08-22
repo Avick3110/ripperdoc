@@ -83,17 +83,42 @@ public class TweakResolvedStateTests
     }
 
     [Fact]
-    public void AReplacementContestsAMutationsListButTheMutationIsNotTheLoser()
+    public void AMutationDiscardedByALaterReplacementIsReportedAsTheLoser()
     {
         using var layer = SyntheticTweakLayer.Of(
             ("alpha\\list.yaml", "Probe.registry.entries:\n  - !append Probe.one\n"),
             ("beta\\list.yaml", "Probe.registry.entries:\n  - Probe.two\n"));
 
         var state = layer.Replay();
+        var collision = Assert.Single(state.Collisions);
+        var overridden = Assert.Single(collision.Overridden);
 
-        // Only one party replaces the value, so there is nothing it overrode.
-        Assert.Empty(state.Collisions);
+        // beta replaces the whole value after alpha added to it, so alpha's
+        // append is not in the game at all. Composition is what happens to a
+        // mutation applied after the winner, not to one applied before it.
+        Assert.Equal("beta", collision.Winner.Origin);
+        Assert.Equal("alpha", overridden.Contribution.Origin);
+        Assert.Equal(TweakWriteKind.Mutation, overridden.Contribution.Kind);
         Assert.Equal("[Probe.two]", Assert.Single(state.Flats).Winner!.ValueText);
+    }
+
+    [Fact]
+    public void AMutationAppliedAfterTheReplacementComposesWithItRatherThanLosingToIt()
+    {
+        using var layer = SyntheticTweakLayer.Of(
+            ("alpha\\list.yaml", "Probe.registry.entries:\n  - Probe.one\n"),
+            ("beta\\list.yaml", "Probe.registry.entries:\n  - !append Probe.two\n"));
+
+        var state = layer.Replay();
+
+        // The game applies alpha's array and then beta's addition to it, so
+        // beta lost nothing and has no contest to be sent looking for.
+        Assert.Empty(state.Collisions);
+
+        var flat = Assert.Single(state.Flats);
+        Assert.Equal(2, flat.Contributions.Count);
+        Assert.Equal("alpha", flat.Winner!.Origin);
+        Assert.Empty(flat.Overridden);
     }
 
     [Fact]
