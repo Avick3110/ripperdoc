@@ -87,15 +87,15 @@ public sealed class TweakFileReader
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(relativePath);
 
-        // The layer is written by hand in many editors and a byte order mark is
-        // ordinary in it. Detected rather than assumed either way, because a
-        // mark read as content turns the first record's name into one nothing
-        // else in the layer can match.
-        using var reader = new StreamReader(path, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-
         var stream = new YamlStream();
         try
         {
+            // The layer is written by hand in many editors and a byte order
+            // mark is ordinary in it. Detected rather than assumed either way,
+            // because a mark read as content turns the first record's name into
+            // one nothing else in the layer can match.
+            using var reader = new StreamReader(path, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+
             stream.Load(reader);
         }
         // A file the parser refuses is refused whole, which is what the
@@ -109,6 +109,18 @@ public sealed class TweakFileReader
             return new TweakDocument(
                 relativePath,
                 [new TweakUnhandled((int)exception.Start.Line, relativePath, $"the file could not be parsed: {exception.Message}")],
+                IsReadable: false);
+        }
+        // A file the system will not hand over is this file's problem and no
+        // other file's. Left to escape, it comes out through the layer read and
+        // takes the whole replay with it - every contest in every other file
+        // lost with it - where a file three lines above that cannot be parsed
+        // is reported by name and costs only its own writes.
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return new TweakDocument(
+                relativePath,
+                [new TweakUnhandled(1, relativePath, $"the file could not be read: {WhyNot(exception)}")],
                 IsReadable: false);
         }
 
@@ -167,6 +179,18 @@ public sealed class TweakFileReader
 
         return new TweakDocument(relativePath, statements, IsReadable: true);
     }
+
+    // Classified rather than passed through: the system's own message for these
+    // carries the machine path, and a report names a file by its place in the
+    // layer. What each one says is what this engine knows - that the file was
+    // not there, or that opening it was refused - and nothing about why.
+    private static string WhyNot(Exception exception) => exception switch
+    {
+        FileNotFoundException or DirectoryNotFoundException =>
+            "it was not there when the layer came to be read",
+        UnauthorizedAccessException => "access to it was refused",
+        _ => "the system would not open it",
+    };
 
     private static void ReadTopLevel(string name, YamlNode node, List<TweakStatement> statements)
     {
@@ -374,8 +398,8 @@ public sealed class TweakFileReader
 /// <param name="RelativePath">The file's path within the layer.</param>
 /// <param name="Statements">What it says, in the order it says it.</param>
 /// <param name="IsReadable">
-/// False where the file could not be parsed at all, in which case the only
-/// statement is the reason.
+/// False where the file could not be opened or could not be parsed at all, in
+/// which case the only statement is the reason.
 /// </param>
 public sealed record TweakDocument(
     string RelativePath,
