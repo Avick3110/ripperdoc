@@ -25,6 +25,13 @@
 # could have run.
 tweakdb_variable="RIPPERDOC_TWEAKDB_PATH"
 
+# The tier (ii) tweak-layer checks read a real install's tweak directory. That
+# is a different input from the database above - a machine can have one and not
+# the other - so it gets its own variable and its own skip, rather than being
+# folded into a tier whose name would then be half true. The layer is other
+# people's mod content and no more this project's to carry than the database is.
+tweaks_variable="RIPPERDOC_TWEAKS_PATH"
+
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 
@@ -62,7 +69,7 @@ run "build"                  dotnet build ripperdoc.sln --nologo -v minimal
 # A filter that matches nothing exits 0, so without the last flag a mistyped
 # filter would print PASS having run no checks at all - the failure mode where
 # verification machinery fails toward green.
-run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase" -- RunConfiguration.TreatNoTestsAsError=true
+run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase&Tier!=InstalledTweakLayer" -- RunConfiguration.TreatNoTestsAsError=true
 
 # Tiers (ii) and (iii): see tests/fixtures/README.md. Named here rather than
 # left silent, so the gate's coverage is legible from its own output.
@@ -103,6 +110,21 @@ else
       skip "shipped-database checks" "the database at $tweakdb_variable is sha256 $actual_sha, and these counts were measured against $measured_sha - a different game build, so they do not apply to it"
     fi
   fi
+fi
+
+# The tweak-layer tier reads a directory rather than a fingerprintable file, so
+# there is no build to tell apart here: the checks assert what holds of any
+# layer and report the numbers instead of asserting them, which is what lets
+# them run against an install whose mods change without turning that into a red
+# run.
+tweaks_path="$(printenv "$tweaks_variable" || true)"
+
+if [ -z "$tweaks_path" ]; then
+  skip "installed-tweak-layer checks" "needs a real install's tweak directory - tier (ii), local only; set $tweaks_variable to one to run it"
+elif [ ! -d "$tweaks_path" ]; then
+  skip "installed-tweak-layer checks" "$tweaks_variable names a path with no directory at it - tier (ii) has nothing to read"
+else
+  run "installed-tweak-layer checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=InstalledTweakLayer" -- RunConfiguration.TreatNoTestsAsError=true
 fi
 
 skip "RTTI-dump checks"        "needs a dump generated from the user's own install - tier (iii), local only"

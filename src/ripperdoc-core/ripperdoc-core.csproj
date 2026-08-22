@@ -8,6 +8,7 @@
   <ItemGroup>
     <PackageReference Include="WolvenKit.RED4" />
     <PackageReference Include="WolvenKit.Core" />
+    <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 
 </Project>

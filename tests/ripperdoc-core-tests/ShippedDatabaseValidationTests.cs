@@ -238,4 +238,6 @@ public static class TierTrait
     public const string Name = "Tier";
 
     public const string ShippedDatabase = "ShippedDatabase";
+
+    public const string InstalledTweakLayer = "InstalledTweakLayer";
 }
