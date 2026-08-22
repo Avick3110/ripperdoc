@@ -32,6 +32,13 @@ tweakdb_variable="RIPPERDOC_TWEAKDB_PATH"
 # people's mod content and no more this project's to carry than the database is.
 tweaks_variable="RIPPERDOC_TWEAKS_PATH"
 
+# The same tier also reads the framework's own metadata, which declares the
+# properties it adds to record types beyond the ones the type model has. Without
+# it a property the game accepts reads as one the schema lacks - and the
+# additions land on exactly the record types mods edit most, so the error is not
+# small. The tier needs both inputs or it does not run.
+extra_flats_variable="RIPPERDOC_EXTRA_FLATS_PATH"
+
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 
@@ -118,11 +125,16 @@ fi
 # them run against an install whose mods change without turning that into a red
 # run.
 tweaks_path="$(printenv "$tweaks_variable" || true)"
+extra_flats_path="$(printenv "$extra_flats_variable" || true)"
 
 if [ -z "$tweaks_path" ]; then
   skip "installed-tweak-layer checks" "needs a real install's tweak directory - tier (ii), local only; set $tweaks_variable to one to run it"
 elif [ ! -d "$tweaks_path" ]; then
   skip "installed-tweak-layer checks" "$tweaks_variable names a path with no directory at it - tier (ii) has nothing to read"
+elif [ -z "$extra_flats_path" ]; then
+  skip "installed-tweak-layer checks" "needs the framework's own metadata as well as the layer - tier (ii), local only; set $extra_flats_variable to it to run this tier"
+elif [ ! -f "$extra_flats_path" ]; then
+  skip "installed-tweak-layer checks" "$extra_flats_variable names a path with no file at it - the property set cannot be resolved without the framework's metadata"
 else
   run "installed-tweak-layer checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=InstalledTweakLayer" -- RunConfiguration.TreatNoTestsAsError=true
 fi
