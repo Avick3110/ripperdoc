@@ -25,10 +25,21 @@ namespace Ripperdoc.Core.Tweak;
 public sealed class TweakExtraFlats
 {
     /// <summary>
-    /// The fewest bytes one addition can occupy - a length byte, at least one
-    /// name byte, and the two type hashes.
+    /// The fewest bytes one addition can occupy - a length byte and the two
+    /// type hashes.
     /// </summary>
-    private const int SmallestFlatSize = 1 + 1 + sizeof(ulong) + sizeof(ulong);
+    /// <remarks>
+    /// A lower bound and not a typical size, because it guards an allocation
+    /// and the only safe error is downward. Counting a name byte would make it
+    /// a bound the file can legitimately beat, and a file that beat it would be
+    /// refused as truncated when it is nothing of the kind.
+    /// </remarks>
+    private const int SmallestFlatSize = 1 + sizeof(ulong) + sizeof(ulong);
+
+    /// <summary>
+    /// The declared and the referenced type that follow each addition's name.
+    /// </summary>
+    private const int FlatTypeHashesSize = sizeof(ulong) + sizeof(ulong);
 
     private readonly IReadOnlyDictionary<ulong, IReadOnlyList<string>> _byTypeName;
 
@@ -128,7 +139,21 @@ public sealed class TweakExtraFlats
                     // follow the name. Neither is needed to answer whether a
                     // property exists, so both are stepped over rather than
                     // read into a shape nothing consumes.
-                    offset += 16;
+                    //
+                    // Stepping over is arithmetic rather than a read, which
+                    // makes it the one advance here that cannot fail by itself.
+                    // Left unchecked it walks past the end of a truncated file
+                    // and the tail below then reports how many bytes remain as
+                    // a negative number - a file that ended early, described as
+                    // one with something left over.
+                    if (bytes.Length - offset < FlatTypeHashesSize)
+                    {
+                        throw new InvalidDataException(
+                            $"'{Path.GetFileName(path)}' could not be read as framework metadata: it ends "
+                            + "before the structure it declares does.");
+                    }
+
+                    offset += FlatTypeHashesSize;
                 }
 
                 // Merged rather than replaced. The framework appends each entry

@@ -214,7 +214,7 @@ public sealed class TweakResolvedState
             }
         }
 
-        InheritIntoClones(flats, declarations);
+        InheritIntoClones(flats, declarations, unhandled);
 
         // Both inputs or neither. Knowing which records the shipped data was
         // copied from needs the map, and telling one of those records from a
@@ -273,19 +273,38 @@ public sealed class TweakResolvedState
     // it, so nothing can be contesting it and it cannot be part of a verdict.
     private static void InheritIntoClones(
         Dictionary<string, List<TweakContribution>> flats,
-        IReadOnlyList<(TweakFile File, TweakRecordDeclaration Declaration)> declarations)
+        IReadOnlyList<(TweakFile File, TweakRecordDeclaration Declaration)> declarations,
+        List<TweakUnhandled> unhandled)
     {
         // A record declared twice keeps the first declaration's source, so a
         // later one naming a different base changes nothing and must not be
         // replayed as though it did.
         var declared = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var (file, declaration) in declarations)
+        // Where each record is first declared. A clone whose base the layer
+        // declares later is the one case where the order the files were read in
+        // decides what a record ends up holding, and telling that base apart
+        // from one the shipped data already carries needs this.
+        var declaredAt = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var position = 0; position < declarations.Count; position++)
         {
+            var name = declarations[position].Declaration.RecordName;
+            if (!declaredAt.ContainsKey(name))
+            {
+                declaredAt[name] = position;
+            }
+        }
+
+        for (var position = 0; position < declarations.Count; position++)
+        {
+            var (file, declaration) = declarations[position];
+
             if (!declared.Add(declaration.RecordName) || declaration.BaseName is null)
             {
                 continue;
             }
+
+            NameWhatDeclarationOrderCosts(declarations, declaredAt, position, declaration, unhandled);
 
             var prefix = declaration.BaseName + TweakFileReader.PropertySeparator;
 
@@ -333,6 +352,40 @@ public sealed class TweakResolvedState
                     new TweakInheritance(baseName, source)));
             }
         }
+    }
+
+    // The framework builds a clone's values as it walks the records in the
+    // order they were declared, reading each base's properties out of the
+    // batch as it goes. A base's own writes are already staged by then, so a
+    // clone gets those whatever the order; what a base *inherits* is produced
+    // during that same walk, so a clone declared ahead of a base that is
+    // itself a clone gets none of it.
+    //
+    // That is reproduced rather than corrected - correcting it would hand back
+    // a value the game does not have. What is not reproduced is the silence.
+    // Nothing else in the layer contradicts a record that quietly came up
+    // short, so a reader who is not told has no way to find out.
+    private static void NameWhatDeclarationOrderCosts(
+        IReadOnlyList<(TweakFile File, TweakRecordDeclaration Declaration)> declarations,
+        IReadOnlyDictionary<string, int> declaredAt,
+        int position,
+        TweakRecordDeclaration declaration,
+        List<TweakUnhandled> unhandled)
+    {
+        if (declaration.BaseName is not { } baseName
+            || !declaredAt.TryGetValue(baseName, out var basePosition)
+            || basePosition <= position
+            || declarations[basePosition].Declaration.BaseName is not { } grandBaseName)
+        {
+            return;
+        }
+
+        unhandled.Add(new TweakUnhandled(
+            declaration.Line,
+            declaration.RecordName,
+            $"declared as a clone of {baseName}, which this layer declares later and which is itself a "
+            + $"clone of {grandBaseName}; the framework builds a clone's values in declaration order, so "
+            + $"whatever {baseName} inherits does not reach this record"));
     }
 
     // Which of the layer's writes sit on a record the shipped data was copied

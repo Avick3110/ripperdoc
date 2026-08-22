@@ -178,4 +178,41 @@ public class TweakExtraFlatsTests
         Assert.False(extraFlats.IsPresent);
         Assert.Equal(0, extraFlats.TypeCount);
     }
+    [Fact]
+    public void AnAdditionWithNoNameIsReadRatherThanCalledATruncatedFile()
+    {
+        // The lower bound that guards the allocation used to count a name byte,
+        // so a file declaring an addition with an empty name beat the bound and
+        // was refused as ending early. It does not end early; it says something
+        // odd, and the two are different reports to give a reader chasing a
+        // property the game accepts and this tool does not.
+        var extraFlats = WithFile(
+            Metadata(("gamedataProbeWidget_Record", ["", "addedOne"])),
+            TweakExtraFlats.OpenReadOnly);
+
+        Assert.Equal(2, extraFlats.PropertyCount);
+        Assert.True(extraFlats.Declares("gamedataProbeWidget_Record", "addedOne"));
+    }
+
+    [Fact]
+    public void AFileThatEndsInsideItsLastAdditionSaysThatRatherThanCountingBackwards()
+    {
+        // The type hashes after a name are stepped over rather than read, so a
+        // file ending inside them left the walk past the end of the buffer. The
+        // tail then subtracted one from the other and reported a negative count
+        // of bytes remaining - a file that stopped short, described as one with
+        // something left over.
+        var whole = Metadata(("gamedataProbeWidget_Record", ["addedOne"]));
+        var truncated = whole[..^8];
+
+        var exception = Assert.Throws<InvalidDataException>(
+            () => WithFile(truncated, TweakExtraFlats.OpenReadOnly));
+
+        Assert.Contains("ends before", exception.Message, StringComparison.Ordinal);
+        // The temporary file's own name carries a hyphen, so what is asserted is
+        // the wording rather than the absence of a minus sign: it ends early,
+        // and nothing remains.
+        Assert.DoesNotContain("remain", exception.Message, StringComparison.Ordinal);
+    }
+
 }

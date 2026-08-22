@@ -215,6 +215,42 @@ public class TweakLayerTests
     }
 
     [Fact]
+    public void EveryShapeOfFileALayerCanHoldIsAccountedForOneWayOrAnother()
+    {
+        // The rule this exercises is asserted against a real install, which no
+        // runner has - so without this it would only ever run on a machine with
+        // the game on it, against whichever shapes that one install happens to
+        // contain. An empty file and a file of nothing but comments are ordinary
+        // things to ship and neither yields a statement; counted as unaccounted
+        // they turn an install nobody has done anything wrong with into a red
+        // run.
+        using var layer = SyntheticTweakLayer.Of(
+            ("alpha\\writes.yaml", "Probe.thing.amount: 1\n"),
+            ("alpha\\empty.yaml", ""),
+            ("alpha\\comments.yaml", "# nothing but a comment\n"),
+            ("alpha\\broken.yaml", "Probe.thing: [unclosed\n"),
+            ("alpha\\instruction.yaml", "$game: 2.31\n"),
+            ("alpha\\notes.txt", "not a tweak file at all\n"));
+
+        var enumerated = layer.Enumerate();
+        var documents = TweakFileReader.ReadLayer(enumerated, layer.Root);
+        var reported = new List<string>();
+
+        Assert.Empty(InstalledTweakLayerTests.FilesNeitherReadFromNorNamed(
+            enumerated,
+            documents,
+            reported.Add));
+
+        // And the two that hold nothing are accounted as that rather than as
+        // something read, which is the distinction the rule turns on.
+        Assert.Equal(
+            new[] { "alpha\\comments.yaml", "alpha\\empty.yaml" },
+            reported.Select(line => line.Replace("  read and empty: ", string.Empty)).OrderBy(
+                path => path,
+                StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void EnumeratingSomethingThatIsNotThereFailsByName()
     {
         var missing = Path.Combine(Path.GetTempPath(), "no-tweak-layer-" + Guid.NewGuid().ToString("N")[..12]);
