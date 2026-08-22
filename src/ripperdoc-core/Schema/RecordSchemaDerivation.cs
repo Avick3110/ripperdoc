@@ -70,11 +70,10 @@ public static class RecordSchemaDerivation
             declared[typeName] = DeclaredFieldsOf(typeName, shape, failures);
         }
 
-        var resolved = new Dictionary<string, IReadOnlyDictionary<string, RecordField>>(StringComparer.Ordinal);
         var types = new Dictionary<string, RecordType>(StringComparer.Ordinal);
         foreach (var (typeName, shape) in shapes.OrderBy(entry => entry.Key, StringComparer.Ordinal))
         {
-            var fields = Resolve(typeName, shapes, declared, resolved, failures);
+            var fields = Resolve(typeName, shapes, declared, failures);
             types[typeName] = new RecordType(
                 typeName,
                 shape.BaseTypeName,
@@ -119,18 +118,16 @@ public static class RecordSchemaDerivation
         return fields;
     }
 
+    // Every type in the reading is resolved exactly once, from itself outward,
+    // so there is nothing to remember between calls. A memo here would be a
+    // lookup that never hit, and one that reads as memoisation to whoever
+    // touches this next.
     private static IReadOnlyDictionary<string, RecordField> Resolve(
         string typeName,
         IReadOnlyDictionary<string, RecordTypeShape> shapes,
         IReadOnlyDictionary<string, Dictionary<string, RecordField>> declared,
-        Dictionary<string, IReadOnlyDictionary<string, RecordField>> resolved,
         List<DerivationFailure> failures)
     {
-        if (resolved.TryGetValue(typeName, out var alreadyDone))
-        {
-            return alreadyDone;
-        }
-
         var fields = new Dictionary<string, RecordField>(StringComparer.Ordinal);
         var visited = new HashSet<string>(StringComparer.Ordinal);
         var current = typeName;
@@ -167,7 +164,7 @@ public static class RecordSchemaDerivation
             current = shape.BaseTypeName;
         }
 
-        return resolved[typeName] = fields;
+        return fields;
     }
 
     private static IReadOnlyList<DerivationFailure> Ordered(IEnumerable<DerivationFailure> failures) => failures
