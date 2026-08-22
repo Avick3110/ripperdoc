@@ -108,6 +108,28 @@ public class TweakFileReaderTests
 
         Assert.Equal("Probe.widget.amount", Assert.Single(document.Writes).FlatName);
         Assert.Single(document.Declarations);
+
+        // Not read as a property, and not passed over in silence either. The
+        // two the declaration consumed are read; an instruction beyond them is
+        // named wherever it sits, because a reader who is told the file was
+        // read in full has no way to find out otherwise.
+        Assert.Equal(
+            new[] { "$game", "Probe.widget.$props" },
+            document.Unhandled.Select(entry => entry.Path));
+    }
+
+    [Fact]
+    public void AValueGivenWithNoTypeIsNamedRatherThanDroppedInSilence()
+    {
+        // The $value shorthand is read only alongside a $type, so this mapping
+        // is read as a record's properties and the key is an instruction the
+        // engine does not act on. Naming it is the difference between a write
+        // that is absent and a write that is absent and said to be.
+        var document = ReadText("Probe.thing.amount:\n  $value: 42\n");
+
+        Assert.Empty(document.Writes);
+        Assert.Empty(document.Declarations);
+        Assert.Equal("Probe.thing.amount.$value", Assert.Single(document.Unhandled).Path);
     }
 
     [Theory]
