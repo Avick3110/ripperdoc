@@ -23,9 +23,31 @@ public sealed record TweakCollision(
     string FlatName,
     ulong Identifier,
     TweakContribution Winner,
-    IReadOnlyList<TweakContribution> Overridden,
-    TweakDecisionRule Rule)
+    IReadOnlyList<OverriddenWrite> Overridden)
 {
+    /// <summary>
+    /// How many origins set this value, the winner included.
+    /// </summary>
+    /// <remarks>
+    /// Origins, not writes. Two files in one mod that both lose to a third are
+    /// one loser as far as a reader is concerned, and counting them as two
+    /// sends that reader looking for a mod which is not there.
+    /// </remarks>
+    public int OriginCount => Overridden
+        .Select(write => write.Contribution.OriginDirectory)
+        .Append(Winner.OriginDirectory)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .Count();
+
+    /// <summary>
+    /// Every rule that decided some part of this contest, in a stable order.
+    /// </summary>
+    public IReadOnlyList<TweakDecisionRule> Rules => Overridden
+        .Select(write => write.Rule)
+        .Distinct()
+        .OrderBy(rule => rule)
+        .ToArray();
+
     /// <summary>
     /// The contest over a value, or null where there is none.
     /// </summary>
@@ -47,6 +69,7 @@ public sealed record TweakCollision(
                 contribution.OriginDirectory,
                 winner.OriginDirectory,
                 StringComparison.OrdinalIgnoreCase))
+            .Select(contribution => new OverriddenWrite(contribution, RuleFor(winner, contribution)))
             .ToArray();
 
         if (overridden.Length == 0)
@@ -54,7 +77,7 @@ public sealed record TweakCollision(
             return null;
         }
 
-        return new TweakCollision(flat.Name, flat.Identifier, winner, overridden, RuleFor(winner, overridden));
+        return new TweakCollision(flat.Name, flat.Identifier, winner, overridden);
     }
 
     /// <summary>
@@ -66,16 +89,19 @@ public sealed record TweakCollision(
         var lines = new List<string>
         {
             $"{FlatName} (identifier 0x{Identifier.ToString("X", CultureInfo.InvariantCulture)}) "
-            + $"is set by {Overridden.Count + 1} origins.",
+            + $"is set by {OriginCount} origins.",
             $"  winner: {Describe(Winner)}",
         };
 
-        foreach (var contribution in Overridden)
+        // The rule goes with the loser it applies to, not with the contest. In
+        // a contest of three, one may have lost to the grouping and another to
+        // read order inside its own group - and those two authors have to do
+        // different things about it.
+        foreach (var write in Overridden)
         {
-            lines.Add($"  overridden: {Describe(contribution)}");
+            lines.Add($"  overridden: {Describe(write.Contribution)}");
+            lines.Add($"      rule: {Describe(write.Rule)}");
         }
-
-        lines.Add($"  rule: {Describe(Rule)}");
 
         return string.Join(Environment.NewLine, lines);
     }
@@ -103,24 +129,30 @@ public sealed record TweakCollision(
             + "read first",
         TweakDecisionRule.GroupBeforeReadOrder =>
             "the files are read in groups taken from the first character of each file's own name, and the "
-            + "winner is in a later group than the others, so read order within a group never came into it",
+            + "winner is in a later group than this one, so read order never came into it",
         _ => throw new ArgumentOutOfRangeException(nameof(rule), rule, "There is no such rule."),
     };
 
-    private static TweakDecisionRule RuleFor(
-        TweakContribution winner,
-        IReadOnlyList<TweakContribution> overridden)
+    // Decided per loser, because that is the grain at which it is actionable.
+    // In a contest of three, one write can lose to the grouping while another
+    // loses to read order inside its own group, and those two authors have to
+    // do different things about it - so a single rule for the whole contest
+    // tells one of them to change something that would not have helped.
+    //
+    // Asked most-specific first: every one of these is true of a contest the
+    // later ones also describe, and naming the general rule where a specific
+    // one decided it sends the reader to change the wrong thing. Both indirect
+    // routes are asked together, because what makes the rule apply is that the
+    // value arrived without being named, not which way it arrived.
+    private static TweakDecisionRule RuleFor(TweakContribution winner, TweakContribution overridden)
     {
-        // Asked most-specific first. Every one of these is true of a contest the
-        // later ones also describe, and naming the general rule where a specific
-        // one decided it sends the reader to change the wrong thing.
         if (winner.Route == TweakContributionRoute.Written
-            && overridden.Any(contribution => contribution.Route == TweakContributionRoute.InheritedFromBase))
+            && overridden.Route != TweakContributionRoute.Written)
         {
             return TweakDecisionRule.WrittenBeatsInherited;
         }
 
-        return overridden.Any(contribution => contribution.File.Group != winner.File.Group)
+        return overridden.File.Group != winner.File.Group
             ? TweakDecisionRule.GroupBeforeReadOrder
             : TweakDecisionRule.LastWriterInReadOrder;
     }
@@ -128,7 +160,7 @@ public sealed record TweakCollision(
     private static string Describe(TweakContribution contribution)
     {
         var where = $"{contribution.OriginDirectory} - {contribution.File.RelativePath}:{contribution.Line}, "
-            + $"read {Ordinal(contribution.File.ReadPosition)} of the layer";
+            + $"read {Position(contribution.File.ReadPosition)} of the layer";
 
         if (contribution.Inheritance is not { } inheritance)
         {
@@ -143,10 +175,10 @@ public sealed record TweakCollision(
         return $"{source.OriginDirectory} - set at {source.File.RelativePath}:{source.Line} as "
             + $"{source.ValueText}, on {inheritance.SourceFlatName}, and carried here by the clone "
             + $"declared at {contribution.File.RelativePath}:{contribution.Line} "
-            + $"(read {Ordinal(contribution.File.ReadPosition)} of the layer)";
+            + $"(read {Position(contribution.File.ReadPosition)} of the layer)";
     }
 
-    private static string Ordinal(int position) => position.ToString(CultureInfo.InvariantCulture);
+    private static string Position(int position) => position.ToString(CultureInfo.InvariantCulture);
 }
 
 /// <summary>
@@ -174,3 +206,10 @@ public enum TweakDecisionRule
     /// </summary>
     GroupBeforeReadOrder,
 }
+
+/// <summary>
+/// One write that did not decide a value, and the rule that beat it.
+/// </summary>
+/// <param name="Contribution">The write.</param>
+/// <param name="Rule">Why this one lost, which is not necessarily why another did.</param>
+public sealed record OverriddenWrite(TweakContribution Contribution, TweakDecisionRule Rule);

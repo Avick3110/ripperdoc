@@ -183,7 +183,7 @@ public sealed class TweakResolvedState
         // the map; with one of them the route can only be walked halfway, and a
         // half-walked route reports some of the movement as though it were all
         // of it.
-        var inheritanceWasReplayed = inheritance.IsPresent && values is not null;
+        var inheritanceWasReplayed = inheritance.WasRead && values is not null;
         if (inheritanceWasReplayed)
         {
             Reinherit(flats, identifiers, inheritance, values!);
@@ -234,7 +234,7 @@ public sealed class TweakResolvedState
             inheritanceWasReplayed,
             inheritanceWasReplayed
                 ? $"{inheritance.Description}, against {values!.Description}"
-                : "not replayed - " + (inheritance.IsPresent ? "no value source" : inheritance.Description));
+                : "not replayed - " + (inheritance.WasRead ? "no value source" : inheritance.Description));
     }
 
     // A clone takes the value its source holds at the moment the clone is
@@ -273,7 +273,6 @@ public sealed class TweakResolvedState
                 }
 
                 var inheritedName = declaration.RecordName + TweakFileReader.PropertySeparator + property;
-                var contributions = Contributions(flats, inheritedName);
 
                 // A property the declaring file sets itself never inherits: the
                 // file chose both the base and the override, so there is nothing
@@ -281,20 +280,26 @@ public sealed class TweakResolvedState
                 // inheritance being recorded, because that is a value moving
                 // between mods that neither of them asked for and it is the
                 // whole reason this route is modelled.
-                if (contributions.Any(contribution =>
+                if (flats.TryGetValue(inheritedName, out var existing)
+                    && existing.Any(contribution =>
                         contribution.Route == TweakContributionRoute.Written
                         && contribution.File.RelativePath == file.RelativePath))
                 {
                     continue;
                 }
 
-                var source = flats[baseName].LastOrDefault(c => c.Kind == TweakWriteKind.Assignment);
+                // What comes across is what the source resolves to, which is not
+                // the same as its last write: a value written by name beats one
+                // the source itself inherited, whatever order they arrived in.
+                // Asked before the entry is created, so a base whose value is
+                // only ever mutated leaves no empty value behind here.
+                var source = ResolvedFlat.Decide(flats[baseName]);
                 if (source is null)
                 {
                     continue;
                 }
 
-                contributions.Add(new TweakContribution(
+                Contributions(flats, inheritedName).Add(new TweakContribution(
                     file,
                     declaration.Line,
                     source.ValueText,
@@ -375,8 +380,7 @@ public sealed class TweakResolvedState
                     continue;
                 }
 
-                var source = flats[flatName]
-                    .LastOrDefault(c => c.Kind == TweakWriteKind.Assignment);
+                var source = ResolvedFlat.Decide(flats[flatName]);
                 if (source is null)
                 {
                     continue;
@@ -400,7 +404,7 @@ public sealed class TweakResolvedState
                     var descendantName = $"<record 0x{descendantId:X}>";
                     var descendantFlatName = descendantName + TweakFileReader.PropertySeparator + property;
 
-                    if (written.Contains(descendantFlatId) || !carried.Add(descendantFlatId))
+                    if (written.Contains(descendantFlatId) || carried.Contains(descendantFlatId))
                     {
                         continue;
                     }
@@ -410,6 +414,12 @@ public sealed class TweakResolvedState
                     {
                         continue;
                     }
+
+                    // Marked only once it is actually being carried. Marked
+                    // before the value was compared, a source that reaches this
+                    // record and does not match would consume the mark and
+                    // silence a later source that does.
+                    carried.Add(descendantFlatId);
 
                     identifiers[descendantFlatName] = descendantFlatId;
                     identifiers[descendantName] = descendantId;
@@ -489,15 +499,36 @@ public sealed record ResolvedFlat(
     /// contribution mutates rather than replaces.
     /// </summary>
     /// <remarks>
-    /// A value written by name is never replaced by one arriving through a
-    /// clone, whichever was read first, so the written ones are asked before
-    /// read order is. Among writes of the same route the last one applied wins.
+    /// A value written by name is never replaced by one arriving through
+    /// inheritance, whichever was read first, so the written ones are asked
+    /// before read order is. Among writes of the same route the last one
+    /// applied wins.
     /// </remarks>
-    public TweakContribution? Winner => Contributions
-            .LastOrDefault(contribution =>
-                contribution.Kind == TweakWriteKind.Assignment
-                && contribution.Route == TweakContributionRoute.Written)
-        ?? Contributions.LastOrDefault(contribution => contribution.Kind == TweakWriteKind.Assignment);
+    public TweakContribution? Winner => Decide(Contributions);
+
+    /// <summary>
+    /// Which of these writes decides the value.
+    /// </summary>
+    /// <param name="contributions">The writes, in the order they were applied.</param>
+    /// <returns>The one that decides, or null where none replaces the value.</returns>
+    /// <remarks>
+    /// The rule has one home because it is asked in more than one place. What a
+    /// value resolves to is also what a record cloned from it inherits, so a
+    /// second copy of this rule that fell behind would hand a clone a value its
+    /// own source had already lost - and nothing else in the layer would
+    /// contradict it.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="contributions"/> is null.</exception>
+    public static TweakContribution? Decide(IReadOnlyList<TweakContribution> contributions)
+    {
+        ArgumentNullException.ThrowIfNull(contributions);
+
+        return contributions
+                .LastOrDefault(contribution =>
+                    contribution.Kind == TweakWriteKind.Assignment
+                    && contribution.Route == TweakContributionRoute.Written)
+            ?? contributions.LastOrDefault(contribution => contribution.Kind == TweakWriteKind.Assignment);
+    }
 
     /// <summary>Everyone whose write did not decide the value.</summary>
     public IEnumerable<TweakContribution> Overridden => Contributions

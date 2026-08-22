@@ -105,6 +105,56 @@ public class TweakExtraFlatsTests
     }
 
     [Fact]
+    public void ACountLargerThanTheFileCouldHoldIsRefusedRatherThanAllocatedOn()
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true))
+        {
+            writer.Write(1UL);
+            writer.Write(TweakExtraFlats.NameHash("gamedataProbeWidget_Record"));
+            writer.Write(0x7FFF_FFFFUL);
+        }
+
+        var exception = WithFile(stream.ToArray(), path =>
+            Assert.Throws<InvalidDataException>(() => TweakExtraFlats.OpenReadOnly(path)));
+
+        Assert.Contains("bytes left to read them from", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ATypeNamedTwiceContributesBothSetsRatherThanLosingOne()
+    {
+        // The framework appends each entry to whatever it already holds for a
+        // record type. Replacing would drop additions the game accepts while
+        // the count went on reporting them, so a property that works would be
+        // reported as one the schema lacks.
+        var extraFlats = WithFile(
+            Metadata(
+                ("gamedataProbeWidget_Record", ["first"]),
+                ("gamedataProbeWidget_Record", ["second"])),
+            TweakExtraFlats.OpenReadOnly);
+
+        Assert.True(extraFlats.Declares("gamedataProbeWidget_Record", "first"));
+        Assert.True(extraFlats.Declares("gamedataProbeWidget_Record", "second"));
+        Assert.Equal(2, extraFlats.PropertyCount);
+        Assert.Equal(1, extraFlats.TypeCount);
+    }
+
+    [Fact]
+    public void APropertyNameIsMatchedExactlyRatherThanWithoutRegardToCase()
+    {
+        // Tweak property names are case-sensitive, so a lookup that ignored case
+        // would accept a misspelling the game rejects and report nothing wrong.
+        var extraFlats = WithFile(
+            Metadata(("gamedataProbeWidget_Record", ["addedOne"])),
+            TweakExtraFlats.OpenReadOnly);
+
+        Assert.True(extraFlats.Declares("gamedataProbeWidget_Record", "addedOne"));
+        Assert.False(extraFlats.Declares("gamedataProbeWidget_Record", "addedone"));
+        Assert.False(extraFlats.Declares("gamedataprobewidget_Record", "addedOne"));
+    }
+
+    [Fact]
     public void MetadataThatIsNotThereFailsByName()
     {
         var missing = Path.Combine(Path.GetTempPath(), "no-extra-flats-" + Guid.NewGuid().ToString("N")[..12] + ".dat");

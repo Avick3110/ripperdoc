@@ -160,6 +160,33 @@ public class TweakLayerTests
         Assert.True(layer.Enumerate().EnumerationIsCollated);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void BothAnswersAboutTheCollationAreReachable(bool collated)
+    {
+        // The false arm decides whether an ordering conclusion over a layer can
+        // be stated plainly, and no directory on a case-insensitively collated
+        // volume can produce it - so it is checked against a sequence directly
+        // rather than left as a branch nobody has seen run.
+        string[] entries = collated
+            ? ["aaa.yaml", "Bbb.yaml", "ccc.yaml"]
+            : ["ccc.yaml", "aaa.yaml"];
+
+        Assert.Equal(collated, TweakLayer.IsCollated(entries));
+    }
+
+    [Fact]
+    public void CollationIsJudgedWithoutRegardToCase()
+    {
+        // Case-sensitive ordinal would call this pair out of order; the
+        // measurement the walk implements was taken under a case-insensitive
+        // collation, so this is the comparison that has to agree.
+        Assert.True(TweakLayer.IsCollated(new[] { "apple.yaml", "Banana.yaml" }));
+        Assert.True(TweakLayer.IsCollated(Array.Empty<string>()));
+        Assert.True(TweakLayer.IsCollated(new[] { "only.yaml" }));
+    }
+
     [Fact]
     public void EnumeratingSomethingThatIsNotThereFailsByName()
     {

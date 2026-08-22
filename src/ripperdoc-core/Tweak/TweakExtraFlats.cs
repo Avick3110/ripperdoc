@@ -24,6 +24,12 @@ namespace Ripperdoc.Core.Tweak;
 /// </remarks>
 public sealed class TweakExtraFlats
 {
+    /// <summary>
+    /// The fewest bytes one addition can occupy - a length byte, at least one
+    /// name byte, and the two type hashes.
+    /// </summary>
+    private const int SmallestFlatSize = 1 + 1 + sizeof(ulong) + sizeof(ulong);
+
     private readonly IReadOnlyDictionary<ulong, IReadOnlyList<string>> _byTypeName;
 
     private TweakExtraFlats(
@@ -84,8 +90,7 @@ public sealed class TweakExtraFlats
         }
 
         var bytes = File.ReadAllBytes(path);
-        var byTypeName = new Dictionary<ulong, IReadOnlyList<string>>();
-        var propertyCount = 0;
+        var byTypeName = new Dictionary<ulong, List<string>>();
         var offset = 0;
 
         try
@@ -96,6 +101,21 @@ public sealed class TweakExtraFlats
             {
                 var typeName = ReadUInt64(bytes, ref offset);
                 var flatCount = ReadUInt64(bytes, ref offset);
+
+                // The count is a number out of a file that may be corrupt, and
+                // it is used to size an allocation. Checked against what is left
+                // to read before anything is reserved: a count larger than the
+                // file could possibly satisfy is the file ending early, and
+                // allocating on it first raises something this method does not
+                // promise - or exhausts memory before it can raise anything.
+                if (flatCount > (ulong)(bytes.Length - offset) / SmallestFlatSize)
+                {
+                    throw new InvalidDataException(
+                        $"'{Path.GetFileName(path)}' could not be read as framework metadata: it declares "
+                        + $"{flatCount} additions for one record type with {bytes.Length - offset} bytes left "
+                        + "to read them from.");
+                }
+
                 var names = new List<string>((int)flatCount);
 
                 for (var flat = 0UL; flat < flatCount; flat++)
@@ -111,8 +131,17 @@ public sealed class TweakExtraFlats
                     offset += 16;
                 }
 
+                // Merged rather than replaced. The framework appends each entry
+                // to whatever it already holds for that record type, so a type
+                // named twice contributes both sets - and replacing would drop
+                // additions the game accepts while the count went on reporting
+                // them.
+                if (byTypeName.TryGetValue(typeName, out var already))
+                {
+                    names.InsertRange(0, already);
+                }
+
                 byTypeName[typeName] = names;
-                propertyCount += names.Count;
             }
         }
         // The three ways this walk can run off the end of the file each raise a
@@ -138,8 +167,10 @@ public sealed class TweakExtraFlats
                 + $"of {bytes.Length} bytes remain after the {byTypeName.Count} record types it declares.");
         }
 
+        var propertyCount = byTypeName.Values.Sum(names => names.Count);
+
         return new TweakExtraFlats(
-            byTypeName,
+            byTypeName.ToDictionary(pair => pair.Key, pair => (IReadOnlyList<string>)pair.Value),
             $"{Path.GetFileName(path)}, {propertyCount} additions over {byTypeName.Count} record types",
             byTypeName.Count,
             propertyCount);

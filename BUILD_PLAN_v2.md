@@ -234,7 +234,16 @@ dump-free and free of any game-derived bytes.
 |---|---|---|
 | **(i) synthetic** | Most of the engine — replay ordering, collision detection, provenance, contributor chains, budget arithmetic | CI |
 | **(ii) local, shipped database** | Binary parse over stored values; the validation sweep | Developer machine |
+| **(ii) local, installed tweak layer** | The slice end to end over a real tweak lane — the tweak directory, the framework's own metadata, and the database whose values decide inheritance | Developer machine |
 | **(iii) local, dump** | Drift gate; typed reference graph | Developer machine |
+
+The two tier (ii) lanes are separate inputs, not one. A machine can have the
+game's database and no mods, or the reverse. They also behave differently under
+a check: the database can be fingerprinted, so checks over it reproduce counts
+measured against one build and announce any other build as an input they do not
+apply to — an installed layer changes whenever its owner installs a mod, so
+checks over it **assert what holds of any layer and report the numbers rather
+than asserting them**.
 
 Tier (iii) runs locally; CI asserts that it ran and that its output is current.
 
@@ -332,7 +341,7 @@ and its status: `OPEN`, `RUN <date> → result`, or `WAIVED <date>, Aaron,
 | 1 | Ordering among archives that are all unlisted | Archive-order measurement; unobservable in that design | **OPEN** — labelled assumption in the finding |
 | 2 | Whether the tweak framework sorts, or consumes an already-collated enumeration | Tweak-order measurement, single NTFS volume | **RUN 2026-08-22 → it consumes; there is no sort.** Settled from the framework's source at the shipped tag, [published](findings/2026-08-22-tweak-file-order-groups.md). The limit the finding labelled is therefore real rather than open: on a volume whose enumeration is not collated the winner differs. The engine takes the enumeration as it comes and reports per run whether it was collated |
 | 3 | Per-mod apportionment of shared pooled values | Buffer-ceiling measurement | **OPEN** — wave 6 |
-| 4 | Whether mods name properties the schema lacks, and how often | Mod-declared-types measurement | **RUN 2026-08-22 → none, on one install.** 1,249 property writes across 509 records whose type resolved: **0** named anything absent from the type model plus the framework's own extra-flats metadata, and 0 declared type failed to resolve. The metadata is load-bearing — without it 382 of the same 1,249 read as unknown, because the framework's additions land on the record types mods edit most. Scope: one install's 16-file layer; 66 records written to had types only the shipped database can give, and were not checked |
+| 4 | Whether mods name properties the schema lacks, and how often | Mod-declared-types measurement | **RUN 2026-08-22 → none, on one install.** 1,249 property writes on records whose type resolved (451 of them): **0** named anything absent from the type model plus the framework's own extra-flats metadata, and 0 declared type failed to resolve. **382 of the same writes name something the type model alone lacks**, so the metadata is carrying most of the answer — both counts come from the same instrument and are re-runnable. Scope: one install, one layer; 70 records written to had types this reading could not work out, and their writes were not checked |
 | 5 | How the game addresses a name carrying a character outside ASCII | Wave 1a. The pinned conversion replaces such a character with a placeholder, so two different names come out as one identifier; the engine refuses the name rather than reproduce the collision | **OPEN** — would be settled by a mod-authored name outside ASCII, resolved in game and read back. Until then the refusal is a labelled limit, not a measured rule |
 
 **The ship gate is: this table empty, or every remaining line waived by name.**

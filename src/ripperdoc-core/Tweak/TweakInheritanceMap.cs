@@ -25,11 +25,13 @@ public sealed class TweakInheritanceMap
     private TweakInheritanceMap(
         IReadOnlyDictionary<ulong, IReadOnlyList<ulong>> descendants,
         string description,
-        int edgeCount)
+        int edgeCount,
+        bool wasRead)
     {
         _descendants = descendants;
         Description = description;
         EdgeCount = edgeCount;
+        WasRead = wasRead;
     }
 
     /// <summary>
@@ -45,7 +47,8 @@ public sealed class TweakInheritanceMap
     public static TweakInheritanceMap None { get; } = new(
         new Dictionary<ulong, IReadOnlyList<ulong>>(),
         "no inheritance metadata",
-        0);
+        0,
+        wasRead: false);
 
     /// <summary>What was read, in words fit for a provenance block.</summary>
     public string Description { get; }
@@ -56,8 +59,17 @@ public sealed class TweakInheritanceMap
     /// <summary>How many records have descendants.</summary>
     public int BaseCount => _descendants.Count;
 
-    /// <summary>Whether this map has anything in it.</summary>
-    public bool IsPresent => EdgeCount > 0;
+    /// <summary>
+    /// Whether a map was supplied at all.
+    /// </summary>
+    /// <remarks>
+    /// This is not "has edges". A metadata file that reads cleanly and declares
+    /// no descendants is a map that was consulted and found nothing, which is a
+    /// different fact from no map having been given - and collapsing the two
+    /// would have a replay announce that it did not look at a file it had just
+    /// read.
+    /// </remarks>
+    public bool WasRead { get; }
 
     /// <summary>
     /// Read the framework's inheritance metadata.
@@ -78,7 +90,6 @@ public sealed class TweakInheritanceMap
 
         var bytes = File.ReadAllBytes(path);
         var descendants = new Dictionary<ulong, IReadOnlyList<ulong>>();
-        var edges = 0;
         var offset = 0;
 
         try
@@ -89,6 +100,21 @@ public sealed class TweakInheritanceMap
             {
                 var recordId = ReadUInt64(bytes, ref offset);
                 var count = ReadUInt64(bytes, ref offset);
+
+                // Checked against what is left to read before anything is
+                // reserved. The count comes out of a file that may be corrupt
+                // and it sizes an allocation, so a count larger than the file
+                // could satisfy is the file ending early - and allocating on it
+                // first raises something this method does not promise, or
+                // exhausts memory before it can raise anything.
+                if (count > (ulong)(bytes.Length - offset) / sizeof(ulong))
+                {
+                    throw new InvalidDataException(
+                        $"'{Path.GetFileName(path)}' could not be read as inheritance metadata: it declares "
+                        + $"{count} records cloned from one source with {bytes.Length - offset} bytes left to "
+                        + "read them from.");
+                }
+
                 var children = new ulong[count];
 
                 for (var child = 0UL; child < count; child++)
@@ -96,8 +122,18 @@ public sealed class TweakInheritanceMap
                     children[child] = ReadUInt64(bytes, ref offset);
                 }
 
-                descendants[recordId] = children;
-                edges += children.Length;
+                // Merged rather than replaced, because the framework adds each
+                // entry to whatever it already holds for that source. A source
+                // named twice contributes both sets, and replacing would lose
+                // records whose values really do move.
+                if (descendants.TryGetValue(recordId, out var already))
+                {
+                    descendants[recordId] = already.Concat(children).Distinct().ToArray();
+                }
+                else
+                {
+                    descendants[recordId] = children;
+                }
             }
         }
         catch (Exception exception) when (exception is IndexOutOfRangeException or ArgumentException)
@@ -118,10 +154,14 @@ public sealed class TweakInheritanceMap
                 + $"of {bytes.Length} bytes remain after the {descendants.Count} records it declares.");
         }
 
+        var edges = descendants.Values.Sum(children => children.Count);
+
         return new TweakInheritanceMap(
             descendants,
-            $"{Path.GetFileName(path)}, {edges} records cloned from {descendants.Count} sources",
-            edges);
+            $"{Path.GetFileName(path)}, {edges} records cloned from {descendants.Count} "
+            + (descendants.Count == 1 ? "source" : "sources"),
+            edges,
+            wasRead: true);
     }
 
     /// <summary>
@@ -141,7 +181,8 @@ public sealed class TweakInheritanceMap
         return new TweakInheritanceMap(
             descendants,
             description,
-            descendants.Values.Sum(children => children.Count));
+            descendants.Values.Sum(children => children.Count),
+            wasRead: true);
     }
 
     /// <summary>Whether anything was cloned from this record.</summary>

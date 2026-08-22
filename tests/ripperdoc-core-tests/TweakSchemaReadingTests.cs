@@ -43,7 +43,7 @@ public class TweakSchemaReadingTests
         var reading = TweakSchemaReading.Of(documents, Schema(), TweakExtraFlats.None);
 
         Assert.Empty(reading.TypesTheSchemaLacks);
-        Assert.Equal(1, reading.PropertiesChecked);
+        Assert.Equal(1, reading.PropertyWritesOnAResolvedType);
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class TweakSchemaReadingTests
 
         var reading = TweakSchemaReading.Of(documents, Schema(), TweakExtraFlats.None);
 
-        Assert.Equal(3, reading.PropertiesChecked);
+        Assert.Equal(3, reading.PropertyWritesOnAResolvedType);
         Assert.Empty(reading.RecordsWithNoResolvedType);
     }
 
@@ -92,7 +92,7 @@ public class TweakSchemaReadingTests
 
         var reading = TweakSchemaReading.Of(documents, Schema(), TweakExtraFlats.None);
 
-        Assert.Equal(2, reading.PropertiesChecked);
+        Assert.Equal(2, reading.PropertyWritesOnAResolvedType);
         Assert.Empty(reading.RecordsWithNoResolvedType);
     }
 
@@ -105,7 +105,7 @@ public class TweakSchemaReadingTests
 
         var reading = TweakSchemaReading.Of(documents, Schema(), TweakExtraFlats.None);
 
-        Assert.Equal(0, reading.PropertiesChecked);
+        Assert.Equal(0, reading.PropertyWritesOnAResolvedType);
         Assert.Equal(new[] { "Probe.one", "Probe.two" }, reading.RecordsWithNoResolvedType);
     }
 
@@ -116,7 +116,7 @@ public class TweakSchemaReadingTests
 
         var reading = TweakSchemaReading.Of(documents, Schema(), TweakExtraFlats.None);
 
-        Assert.Equal(0, reading.PropertiesChecked);
+        Assert.Equal(0, reading.PropertyWritesOnAResolvedType);
         Assert.Equal("Probe.shipped", Assert.Single(reading.RecordsWithNoResolvedType));
     }
 
@@ -164,11 +164,67 @@ public class TweakSchemaReadingTests
 
         // The property is not in the schema, and without the framework's own
         // metadata there is no way to tell that from a property that does not
-        // exist. The reading says it did not count rather than counting wrong.
+        // exist. The reading says it did not count rather than counting wrong,
+        // and the count of checks is zero because no check ran - the writes
+        // were attributed, which is a different number and reported as one.
         Assert.False(reading.UnknownPropertiesWereCounted);
         Assert.Empty(reading.PropertiesTheSchemaLacks);
-        Assert.Equal(2, reading.PropertiesChecked);
+        Assert.Equal(0, reading.PropertiesChecked);
+        Assert.Equal(2, reading.PropertyWritesOnAResolvedType);
         Assert.Contains("no framework metadata", reading.PropertySourceDescription, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WhatTheFrameworksMetadataIsCarryingIsCountedWhetherOrNotItWasSupplied()
+    {
+        var documents = Documents((
+            "alpha\\a.yaml",
+            $"Probe.one:\n  $type: {WidgetType}\n  price: 1\n  addedByTheFramework: 2\n"));
+
+        // The difference between these two numbers is the framework's
+        // contribution. Without a count for it there is no way to say whether
+        // consulting the metadata mattered, and the claim that it does would
+        // rest on nothing that can be re-run.
+        var withMetadata = TweakSchemaReading.Of(
+            documents,
+            Schema(),
+            ExtraFlatsDeclaring((WidgetType, "addedByTheFramework")));
+        var without = TweakSchemaReading.Of(documents, Schema(), TweakExtraFlats.None);
+
+        Assert.Equal(1, withMetadata.PropertiesTheTypeModelAloneLacks);
+        Assert.Equal(1, without.PropertiesTheTypeModelAloneLacks);
+        Assert.Empty(withMetadata.PropertiesTheSchemaLacks);
+    }
+
+    [Fact]
+    public void ARecordDeclaredWithATypeThatResolvesToNothingIsNotCountedAsResolved()
+    {
+        var documents = Documents((
+            "alpha\\a.yaml",
+            $"Probe.known:\n  $type: {WidgetType}\n  price: 1\nProbe.invented:\n  $type: gamedataInventedThing_Record\n  price: 2\n"));
+
+        var reading = TweakSchemaReading.Of(documents, Schema(), TweakExtraFlats.None);
+
+        // The two counts partition the records the layer writes to. A record in
+        // both would let a report state them as though they did not overlap.
+        Assert.Equal(1, reading.RecordsWithAResolvedType);
+        Assert.Equal("Probe.invented", Assert.Single(reading.RecordsWithNoResolvedType));
+    }
+
+    [Fact]
+    public void AValueWrittenByItsFullNameIsAttributedToItsRecordRatherThanPassedOver()
+    {
+        var documents = Documents((
+            "alpha\\a.yaml",
+            $"Probe.one:\n  $type: {WidgetType}\nProbe.one.price: 1\nProbe.shipped.invented: 2\n"));
+
+        var reading = TweakSchemaReading.Of(documents, Schema(), TweakExtraFlats.None);
+
+        // Both are top-level writes with no record block around them. One
+        // belongs to a record the layer declares and one does not, and neither
+        // may fall outside both counts.
+        Assert.Equal(1, reading.PropertyWritesOnAResolvedType);
+        Assert.Equal("Probe.shipped", Assert.Single(reading.RecordsWithNoResolvedType));
     }
 
     private static TweakExtraFlats ExtraFlatsDeclaring(params (string TypeName, string Property)[] additions)
