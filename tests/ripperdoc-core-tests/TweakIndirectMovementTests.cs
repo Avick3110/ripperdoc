@@ -152,16 +152,20 @@ public class TweakIndirectMovementTests
         // Neither found a write on such a record, and neither is entitled to
         // report that as an answer. An empty list plus a silent limit would say
         // the layer was fully accounted for when nothing looked.
-        foreach (var state in new[] { withoutDatabase, withoutMap })
-        {
-            Assert.NotNull(state.IndirectMovementLimit);
-            Assert.Contains("not established", state.IndirectMovementLimit, StringComparison.Ordinal);
-        }
+        //
+        // The whole sentence is asserted, not a phrase inside it. This one is
+        // built from two parts and printed verbatim into the tier (ii) report,
+        // and a check looking for a phrase passes just as well when both parts
+        // supply it and the reader is told the question was not established
+        // twice over.
+        const string Unasked = "whether any value this layer writes sits on a record the shipped data was "
+            + "copied from was not established - ";
+        const string Consequence = "; a write to such a record moves the copies of it too";
 
-        Assert.Contains("no database", withoutDatabase.InheritanceDescription, StringComparison.Ordinal);
-        Assert.Contains(
-            "no inheritance metadata",
-            withoutMap.InheritanceDescription,
-            StringComparison.Ordinal);
+        Assert.Equal(Unasked + "no database" + Consequence, withoutDatabase.IndirectMovementLimit);
+        Assert.Equal(Unasked + "no inheritance metadata" + Consequence, withoutMap.IndirectMovementLimit);
+
+        Assert.Equal("not established - no database", withoutDatabase.InheritanceDescription);
+        Assert.Equal("not established - no inheritance metadata", withoutMap.InheritanceDescription);
     }
 }
