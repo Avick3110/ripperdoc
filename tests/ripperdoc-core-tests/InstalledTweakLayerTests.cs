@@ -1,5 +1,6 @@
 using System.Globalization;
 using Ripperdoc.Core;
+using Ripperdoc.Core.Schema;
 using Ripperdoc.Core.Tweak;
 using Xunit;
 using Xunit.Abstractions;
@@ -37,19 +38,25 @@ public class InstalledTweakLayerTests
     /// </summary>
     public static string VariableName => Branding.Name.ToUpperInvariant() + "_TWEAKS_PATH";
 
-    private static string LayerPath
-    {
-        get
-        {
-            var path = Environment.GetEnvironmentVariable(VariableName);
+    /// <summary>
+    /// The environment variable naming the framework's own metadata file, which
+    /// declares the properties it adds to record types beyond the ones the type
+    /// model has.
+    /// </summary>
+    public static string ExtraFlatsVariableName => Branding.Name.ToUpperInvariant() + "_EXTRA_FLATS_PATH";
 
-            return string.IsNullOrWhiteSpace(path)
-                ? throw new InvalidOperationException(
-                    $"These checks read an installed tweak layer, which no runner has. Set {VariableName} to "
-                    + "one to run them. The gate script announces them as skipped, by name, when it cannot "
-                    + "run them - an absent layer is never reported as a pass.")
-                : path;
-        }
+    private static string LayerPath => Required(VariableName);
+
+    private static string Required(string variable)
+    {
+        var path = Environment.GetEnvironmentVariable(variable);
+
+        return string.IsNullOrWhiteSpace(path)
+            ? throw new InvalidOperationException(
+                $"These checks read a real install's tweak lane, which no runner has. Set {variable} to run "
+                + "them. The gate script announces them as skipped, by name, when it cannot run them - an "
+                + "absent input is never reported as a pass.")
+            : path;
     }
 
     [Fact]
@@ -135,6 +142,56 @@ public class InstalledTweakLayerTests
 
         Assert.All(state.Flats, flat => Assert.NotEqual(0UL, flat.Identifier));
         Assert.All(state.Unaddressable, name => Assert.NotEmpty(name.Contributions));
+    }
+
+    [Fact]
+    public void PropertiesTheSchemaLacksAreCountedAndNamedRatherThanPassedOver()
+    {
+        var layer = TweakLayer.Enumerate(LayerPath);
+        var documents = TweakFileReader.ReadLayer(layer, LayerPath);
+        var schema = RecordSchemaDerivation.Derive(
+            ReflectedRecordTypeSource.FromPinnedTypeModel().Read(),
+            "the pinned type model");
+
+        var extraFlats = TweakExtraFlats.OpenReadOnly(Required(ExtraFlatsVariableName));
+        var reading = TweakSchemaReading.Of(documents, schema, extraFlats);
+
+        _output.WriteLine($"resolved against {reading.PropertySourceDescription}.");
+        Assert.True(reading.UnknownPropertiesWereCounted);
+
+        _output.WriteLine(
+            $"{reading.RecordsWithAResolvedType} record(s) declared with a resolvable type; "
+            + $"{reading.RecordsWithNoResolvedType.Count} record(s) written to whose type needs the shipped database.");
+        _output.WriteLine(
+            $"{reading.PropertiesChecked} property write(s) checked against the schema; "
+            + $"{reading.PropertiesTheSchemaLacks.Count} name(s) the schema does not have.");
+        _output.WriteLine($"{reading.TypesTheSchemaLacks.Count} declared type(s) the schema does not have.");
+
+        foreach (var unknown in reading.TypesTheSchemaLacks)
+        {
+            _output.WriteLine($"  unknown type: {unknown.SpelledAs} (as {unknown.Canonical}) on {unknown.RecordName}");
+        }
+
+        foreach (var unknown in reading.PropertiesTheSchemaLacks)
+        {
+            _output.WriteLine(
+                $"  unknown property: {unknown.RecordName}.{unknown.PropertyName} on {unknown.TypeName} "
+                + $"at {unknown.RelativePath}:{unknown.Line}");
+        }
+
+        // The accounting, not the count: every property write is either checked
+        // against a type or attributed to a record whose type this run could not
+        // resolve. A write that is neither would be one the reading passed over
+        // while reporting on the rest.
+        var writesOnRecords = documents
+            .SelectMany(document => document.Writes)
+            .Count(write => write.OwningRecordName is not null);
+        var attributed = documents
+            .SelectMany(document => document.Writes)
+            .Count(write => write.OwningRecordName is { } name
+                && reading.RecordsWithNoResolvedType.Contains(name, StringComparer.Ordinal));
+
+        Assert.Equal(writesOnRecords, reading.PropertiesChecked + attributed);
     }
 
     private static string Report(TweakResolvedState state)
