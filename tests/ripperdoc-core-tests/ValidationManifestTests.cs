@@ -256,10 +256,7 @@ public class ValidationManifestTests
         var fieldName = reason == "field name outside the range" ? "caf\u00e9" : "speed";
         var schema = SchemaWith(Field(fieldName, "Float"));
 
-        var records = reason == "malformed record identifier"
-            ? new[] { ("Vehicle.quadra", "gamedataThing_Record") }
-            : new[] { ("Vehicle.quadra", "gamedataThing_Record") };
-        var shipped = new FakeDatabase(records);
+        var shipped = new FakeDatabase(("Vehicle.quadra", "gamedataThing_Record"));
         if (reason == "malformed record identifier")
         {
             shipped.AddRawRecord((ulong)(WolvenKit.RED4.Types.TweakDBID)new string('a', 300), "gamedataThing_Record");
