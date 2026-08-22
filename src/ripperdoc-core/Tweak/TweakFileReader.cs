@@ -230,11 +230,25 @@ public sealed class TweakFileReader
         }
     }
 
-    private static TweakFlatWrite WriteFor(string flatName, YamlNode node, string? owningRecordName)
+    private static TweakStatement WriteFor(string flatName, YamlNode node, string? owningRecordName)
     {
+        if (!TryRender(node, [], out var valueText))
+        {
+            // There is no text for a value that contains itself, and the
+            // attempt to find one is what makes this worth refusing rather
+            // than guessing at: it does not fail, it does not return, and the
+            // process is gone before anything can say which file did it.
+            // Named here instead, in the same list every other construct this
+            // reader declines to replay goes into.
+            return new TweakUnhandled(
+                (int)node.Start.Line,
+                flatName,
+                "a value that contains itself through an alias, which this engine does not render");
+        }
+
         var kind = IsMutation(node) ? TweakWriteKind.Mutation : TweakWriteKind.Assignment;
 
-        return new TweakFlatWrite((int)node.Start.Line, flatName, Render(node), kind, owningRecordName);
+        return new TweakFlatWrite((int)node.Start.Line, flatName, valueText, kind, owningRecordName);
     }
 
     // A sequence mutates rather than replaces when any of its items carries an
@@ -245,13 +259,60 @@ public sealed class TweakFileReader
         node is YamlSequenceNode sequence
         && sequence.Children.Any(item => MutationTags.Contains(item.Tag.ToString(), StringComparer.Ordinal));
 
-    private static string Render(YamlNode node) => node switch
+    // A value is a graph rather than a tree: an alias naming the anchor it
+    // sits inside makes it circular. What is tracked is the path currently
+    // being walked and not everything seen, because one anchor aliased more
+    // than once alongside itself is an ordinary way to write a file - a value
+    // the game applies, and refusing it would report the layer as less read
+    // than it is. Identity is by reference: comparing these nodes by value
+    // walks their children, which on a circular value is the same
+    // non-return this guard exists to prevent. The path is a list scanned by
+    // reference rather than a set, because a set would compare by value to
+    // find its bucket; it holds one entry per level of nesting, not one per
+    // item, so scanning it costs nothing worth naming.
+    private static bool TryRender(YamlNode node, List<YamlNode> walking, out string text)
     {
-        YamlScalarNode scalar => scalar.Value ?? string.Empty,
-        YamlSequenceNode sequence => "[" + string.Join(", ", sequence.Children.Select(Render)) + "]",
-        YamlMappingNode => "<defined in place>",
-        _ => "<unreadable>",
-    };
+        switch (node)
+        {
+            case YamlScalarNode scalar:
+                text = scalar.Value ?? string.Empty;
+                return true;
+
+            case YamlMappingNode:
+                text = "<defined in place>";
+                return true;
+
+            case YamlSequenceNode sequence:
+                text = string.Empty;
+
+                if (walking.Any(entered => ReferenceEquals(entered, sequence)))
+                {
+                    return false;
+                }
+
+                walking.Add(sequence);
+
+                var items = new List<string>(sequence.Children.Count);
+                foreach (var item in sequence.Children)
+                {
+                    if (!TryRender(item, walking, out var rendered))
+                    {
+                        walking.RemoveAt(walking.Count - 1);
+                        return false;
+                    }
+
+                    items.Add(rendered);
+                }
+
+                walking.RemoveAt(walking.Count - 1);
+                text = "[" + string.Join(", ", items) + "]";
+                return true;
+
+            default:
+                text = "<unreadable>";
+                return true;
+        }
+    }
 
     private static string? Attribute(YamlMappingNode mapping, string attribute) =>
         Scalar(Node(mapping, attribute));
