@@ -195,6 +195,53 @@ public class TweakDatabaseSourceTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ADatabaseCarryingAStoredValueIsRefusedRatherThanRead(bool alongsideItsRecord)
+    {
+        // A tripwire on a premise, not a check on the product. Where the binary
+        // parse is covered rests on one asymmetry at this pin: the writer's
+        // output is taken back by its own reader until a stored value is in the
+        // database. That is why the success path above can be synthesised and a
+        // parse over stored values cannot, and so why the latter is tier (ii).
+        //
+        // Both shapes the documents name are covered - the same flat on its
+        // own, and standing as a record's property.
+        //
+        // If a later pin fixes the asymmetry, this goes red. Red here means the
+        // premise died, not that the product broke: re-derive the tier
+        // rationale, update BUILD_PLAN_v2 and tests/fixtures/README, and revise
+        // this check alongside them. It is not deleted to get back to green.
+        var database = new TweakDB();
+        if (alongsideItsRecord)
+        {
+            database.Add(FirstRecord, new gamedataItem_Record());
+        }
+
+        database.Flats.Add($"{FirstRecord}.speed", new CFloat());
+
+        var path = Path.Combine(Path.GetTempPath(), $"{Branding.Name}-stored-value-{Guid.NewGuid():N}.bin");
+        File.WriteAllBytes(path, BytesOf(database));
+
+        try
+        {
+            var thrown = Assert.Throws<InvalidDataException>(() => TweakDatabaseSource.OpenReadOnly(path));
+
+            Assert.Contains("could not be read as a tweak database", thrown.Message, StringComparison.Ordinal);
+
+            // Pinned to the way this case fails, as the truncated one is. Were
+            // these bytes to start failing some other way, the check would say
+            // it had stopped testing its case rather than pass on a refusal it
+            // was not written for.
+            Assert.IsType<EndOfStreamException>(thrown.InnerException);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void AValueWhoseTypeTheModelCannotNameIsUnreadableRatherThanNamedAsSomething()
     {
