@@ -55,14 +55,26 @@ public class ShippedDatabaseValidationTests : IClassFixture<ShippedDatabaseFixtu
             .Take(2)
             .ToArray();
 
-        Assert.Equal(2, values.Length);
+        // Two values that differ, so that the comparison itself is reached. An
+        // assertion that only pairs a value with itself, or with something
+        // absent, is answered by the guards above the comparison and would hold
+        // just as well if the comparison always said yes.
+        var differing = values
+            .Where(identifier => source.TryGetStoredValueType(identifier, out _))
+            .ToArray();
 
-        // A value is the same value as itself, and absence is not agreement -
-        // an identifier the database does not hold agrees with nothing, because
-        // treating it as equal would propagate a value onto a record that has
-        // no such value at all.
-        Assert.True(source.ValuesMatch(values[0], values[0]));
-        Assert.False(source.ValuesMatch(values[0], 0UL));
+        var unequal = differing
+            .SelectMany(left => differing.Select(right => (left, right)))
+            .FirstOrDefault(pair => !source.ValuesMatch(pair.left, pair.right));
+
+        Assert.NotEqual(0UL, unequal.left);
+        Assert.False(source.ValuesMatch(unequal.left, unequal.right));
+        Assert.True(source.ValuesMatch(unequal.left, unequal.left));
+
+        // Absence is not agreement: an identifier the database does not hold
+        // agrees with nothing, because treating it as equal would propagate a
+        // value onto a record that has no such value at all.
+        Assert.False(source.ValuesMatch(unequal.left, 0UL));
         Assert.False(source.ValuesMatch(0UL, 0UL));
 
         Assert.True(source.HoldsRecord(source.Records.First().Identifier));
