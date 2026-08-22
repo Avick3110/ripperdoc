@@ -17,9 +17,14 @@ Every document in this directory states:
 - **The law** — what was actually measured, as a rule you can apply.
 - **How it was measured** — the instruments, the readings, and enough detail to
   repeat it.
-- **What would have refuted it** — the competing explanations, and the specific
-  observation that killed each one. A finding that never had a way to come out
-  differently is not a measurement.
+- **What would have refuted it** — for something measured from a run, the
+  competing explanations and the specific observation that killed each one; for
+  something read out of a source or a binary rather than run, the observation
+  that *would* settle it, and a plain statement that it has not been made yet.
+  A finding that never had a way to come out differently is not a finding.
+- **Its evidence class** — measured, read, or inferred. Not every document here
+  rests on a run, and one that does not says so where it says it, rather than
+  borrowing the authority of the ones that do.
 - **Where it stops** — the limits, honestly. An untested case is labelled
   untested, not quietly folded into the claim.
 

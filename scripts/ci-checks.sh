@@ -127,11 +127,16 @@ else
   fi
 fi
 
-# The tweak-layer tier reads a directory rather than a fingerprintable file, so
-# there is no build to tell apart here: the checks assert what holds of any
-# layer and report the numbers instead of asserting them, which is what lets
-# them run against an install whose mods change without turning that into a red
-# run.
+# The tweak-layer tier's own subject is a directory rather than a fingerprintable
+# file: its checks assert what holds of any layer and report the numbers instead
+# of asserting them, which is what lets them run against an install whose mods
+# change without turning that into a red run.
+#
+# It reads the shipped database as well, and unlike the tier above it does not
+# pin which build that database is. What it asks of the database is whether a
+# record is there - true or false of any build, rather than a count measured
+# against one - so pinning it would refuse inputs these checks are perfectly
+# good for.
 tweaks_path="$(printenv "$tweaks_variable" || true)"
 extra_flats_path="$(printenv "$extra_flats_variable" || true)"
 inheritance_path="$(printenv "$inheritance_variable" || true)"

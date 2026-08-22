@@ -38,7 +38,14 @@ this one is right.
 
 The 2026-08-19 document measured **pre-order walk, one case-insensitive
 collation over files and subdirectories together, apply order = read order,
-last writer wins.** All of that holds and none of it is revised.
+last writer wins.** Every one of those readings still holds as a reading, and
+none of them is contradicted here.
+
+One of them does not survive intact as an *explanation*. That document could not
+tell whether the collation it observed was the framework's doing or the volume's,
+said so, and left the question open; the section below settles it as the
+volume's. What was observed stands. What it means for a tool changes, and that
+change is the point of that section.
 
 What it could not see is the grouping. Its instrument used eight files named
 `rdp_a.yaml`, `rdp_ab.yaml`, `rdp_Ba.yaml`, `rdp_m0.yaml`, `rdp_zz.yaml` and

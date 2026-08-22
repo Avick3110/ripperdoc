@@ -34,8 +34,8 @@ public sealed record TweakCollision(
     /// sends that reader looking for a mod which is not there.
     /// </remarks>
     public int OriginCount => Overridden
-        .Select(write => write.Contribution.OriginDirectory)
-        .Append(Winner.OriginDirectory)
+        .Select(write => write.Contribution.Origin)
+        .Append(Winner.Origin)
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .Count();
 
@@ -66,8 +66,8 @@ public sealed record TweakCollision(
 
         var overridden = flat.Overridden
             .Where(contribution => !string.Equals(
-                contribution.OriginDirectory,
-                winner.OriginDirectory,
+                contribution.Origin,
+                winner.Origin,
                 StringComparison.OrdinalIgnoreCase))
             .Select(contribution => new OverriddenWrite(contribution, RuleFor(winner, contribution)))
             .ToArray();
@@ -160,7 +160,7 @@ public sealed record TweakCollision(
 
     private static string Describe(TweakContribution contribution)
     {
-        var where = $"{contribution.OriginDirectory} - {contribution.File.RelativePath}:{contribution.Line}, "
+        var where = $"{contribution.Origin} - {contribution.File.RelativePath}:{contribution.Line}, "
             + $"read {Position(contribution.File.ReadPosition)} of the layer";
 
         if (contribution.Inheritance is not { } inheritance)
@@ -173,7 +173,7 @@ public sealed record TweakCollision(
         // Both halves are named. The clone is how the value arrived and the
         // write is whose value it is, and a reader who is given only one of them
         // goes and edits the wrong file.
-        return $"{source.OriginDirectory} - set at {source.File.RelativePath}:{source.Line} as "
+        return $"{source.Origin} - set at {source.File.RelativePath}:{source.Line} as "
             + $"{source.ValueText}, on {inheritance.SourceFlatName}, and carried here by the clone "
             + $"declared at {contribution.File.RelativePath}:{contribution.Line} "
             + $"(read {Position(contribution.File.ReadPosition)} of the layer)";

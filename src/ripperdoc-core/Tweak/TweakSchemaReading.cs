@@ -151,10 +151,16 @@ public sealed class TweakSchemaReading
         ArgumentNullException.ThrowIfNull(extraFlats);
 
         // Types first, over the whole layer, because a record cloned from one
-        // the layer declares later still takes that type - the framework
-        // resolves the whole changeset before it commits any of it, so a
-        // one-pass read in file order would resolve fewer types than the game
-        // does and under-report what could be checked.
+        // the layer declares later still takes that type: the framework has the
+        // whole changeset in hand before it commits any of it, so a one-pass
+        // read in file order would resolve fewer types than the game does and
+        // under-report what could be checked.
+        //
+        // That is true of types and of nothing else here. The values a clone
+        // inherits are read out of the batch as the commit walks it, in the
+        // order the files declared the records, so those do depend on order -
+        // which is why the replay reproduces that order and this reading does
+        // not need to.
         var declaredTypes = new Dictionary<string, string>(StringComparer.Ordinal);
         var clonedFrom = new Dictionary<string, string>(StringComparer.Ordinal);
         var unknownTypes = new List<UnknownRecordType>();

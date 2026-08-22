@@ -476,7 +476,15 @@ public sealed record ResolvedFlat(
             ?? contributions.LastOrDefault(contribution => contribution.Kind == TweakWriteKind.Assignment);
     }
 
-    /// <summary>Everyone whose write did not decide the value.</summary>
+    /// <summary>
+    /// Every write that replaces the value and was not the one that decided it.
+    /// </summary>
+    /// <remarks>
+    /// A write that mutates the value did not decide it either, and is
+    /// deliberately not here. It composes with the winner instead of losing to
+    /// it - the game applies both - so listing it as overridden would send its
+    /// author looking for a contest they are not in.
+    /// </remarks>
     public IEnumerable<TweakContribution> Overridden => Contributions
         .Where(contribution => contribution.Kind == TweakWriteKind.Assignment
             && !ReferenceEquals(contribution, Winner));
@@ -503,11 +511,18 @@ public sealed record TweakContribution(
     TweakInheritance? Inheritance)
 {
     /// <summary>
-    /// The part of the layer whose value this is - the top directory of the
-    /// tweak layer, which is how a manual install keeps one mod's files apart
-    /// from another's.
+    /// The part of the layer whose value this is: the first segment of the
+    /// file's path within the layer.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// That is the top-level directory for a file inside one, and the file's
+    /// own name for a file sitting at the layer root - which is the same
+    /// distinction a manual install makes, since a loose file at the root
+    /// belongs to no directory and is its own origin. Named for what it is
+    /// rather than for the common case, because a name promising a directory
+    /// hands back a file name often enough to matter.
+    /// </para>
     /// <para>
     /// For an inherited value this is the origin that set the value, not the one
     /// that declared the clone which carried it. The contest is over whose value
@@ -516,12 +531,12 @@ public sealed record TweakContribution(
     /// "whose value is this".
     /// </para>
     /// <para>
-    /// The directory is the best available answer and not a guaranteed one:
-    /// nothing stops one mod shipping two directories or two mods sharing one.
-    /// Reported as the origin it is rather than asserted to be a mod identity.
+    /// It is the best available answer and not a guaranteed one: nothing stops
+    /// one mod shipping two directories or two mods sharing one. Reported as
+    /// the origin it is rather than asserted to be a mod identity.
     /// </para>
     /// </remarks>
-    public string OriginDirectory =>
+    public string Origin =>
         (Inheritance?.Source.File ?? File).RelativePath.Split(TweakFile.PathSeparator)[0];
 }
 

@@ -126,6 +126,43 @@ public class TweakInheritanceMapTests
     }
 
     [Fact]
+    public void ARecordNamedWithNothingClonedFromItIsNotASource()
+    {
+        // The metadata can name a record and declare no copies of it. Read as
+        // a source, it answers yes to whether anything was cloned from it and
+        // is counted among the records that have copies - so a caller asking
+        // where a write reaches beyond the record it names would be sent to a
+        // record with nothing under it, and told so in a sentence.
+        var map = WithFile(Metadata((10UL, []), (20UL, [30UL])), TweakInheritanceMap.OpenReadOnly);
+
+        Assert.False(map.IsSource(10UL));
+        Assert.Empty(map.Descendants(10UL));
+        Assert.True(map.IsSource(20UL));
+        Assert.Equal(1, map.BaseCount);
+        Assert.Equal(1, map.EdgeCount);
+        Assert.Contains("1 records cloned from 1 source", map.Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AMapBuiltDirectlyDropsASourceWithNoDescendantsToo()
+    {
+        // Two ways in, one answer out. A caller building the structure by hand
+        // gets the same map the file reader would give it.
+        var map = TweakInheritanceMap.Of(
+            new Dictionary<ulong, IReadOnlyList<ulong>>
+            {
+                [10UL] = [],
+                [20UL] = [30UL],
+            },
+            "a map built for this check");
+
+        Assert.False(map.IsSource(10UL));
+        Assert.True(map.IsSource(20UL));
+        Assert.Equal(1, map.BaseCount);
+        Assert.Equal(1, map.EdgeCount);
+    }
+
+    [Fact]
     public void MetadataThatIsNotThereFailsByName() =>
         Assert.Throws<FileNotFoundException>(() => TweakInheritanceMap.OpenReadOnly(
             Path.Combine(Path.GetTempPath(), "no-inheritance-" + Guid.NewGuid().ToString("N")[..12] + ".dat")));
