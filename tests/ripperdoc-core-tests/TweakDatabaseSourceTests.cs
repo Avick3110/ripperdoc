@@ -181,10 +181,12 @@ public class TweakDatabaseSourceTests
                 },
                 source.Records.ToDictionary(record => record.Identifier, record => record.TypeName));
 
-            // Zero, and discriminating: three records went in and no stored
-            // values did, so a count read off the wrong pool is a different
-            // number here rather than the same one. An explained share divides
-            // by this.
+            // Zero rules out this figure being read off the records pool -
+            // three records went in - but it does not rule out a constant: a
+            // hardcoded zero passes here too. Nothing at tier (i) can make it
+            // non-zero at this pin, because a stored value is precisely what
+            // stops the file being read back, so that arm belongs to tier (ii).
+            // An explained share divides by this figure.
             Assert.Equal(0, source.StoredValueCount);
         }
         finally
