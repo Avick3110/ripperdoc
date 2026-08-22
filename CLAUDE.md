@@ -253,6 +253,9 @@ The other side of §7: what makes a check a check.
   failure message asserts something to whoever reads it, and that assertion
   carries a check that it holds. A claim that cannot be checked is narrowed to
   one that can.
+- **A carried claim keeps its measured scope.** A measurement restated in
+  another document says no more than the measurement showed; widening it is a
+  new claim, and a new claim needs its own measurement.
 - **Sabotage RED-checks run from a committed state.** Commit the fold, then
   sabotage, then restore, and **verify the restore** by looking for something
   the fold introduced rather than assuming it worked. Never sabotage a dirty
