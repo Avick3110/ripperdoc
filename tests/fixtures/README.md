@@ -49,11 +49,18 @@ that it has that input.** Where the input can be fingerprinted, the check
 compares fingerprints and says "this is a different input" rather than letting
 every count fail as though the code were wrong.
 
-Tier (ii) exists rather than folding into tier (i) for a measured reason: in the
-pinned library version, a written TweakDB file cannot be read back by the same
-library's reader. The binary parse therefore cannot be synthesised, and must be
-exercised against a real shipped database or not at all. This blocks nothing -
-the write lane never emits binary - but it does fix where that one check lives.
+Tier (ii) exists rather than folding into tier (i) for a measured reason, and
+the measurement has a boundary in it. In the pinned library version, a written
+TweakDB file is read back by the same library's reader until a **stored value**
+is in it. An empty database round trips, and so does one carrying records, with
+their identifiers and type names intact; add a flat - loose, or set as a
+record's property - and the file ends before the structure the reader is
+following does. So a parse can be synthesised at tier (i) up to that line, and
+a records-carrying database written at test runtime is what drives the
+file-reading path through a complete parse there - but a parse over stored
+values cannot be synthesised, and must be exercised against a real shipped
+database or not at all. This blocks nothing - the write lane never
+emits binary - but it does fix where that one check lives.
 
 ## Traceability
 

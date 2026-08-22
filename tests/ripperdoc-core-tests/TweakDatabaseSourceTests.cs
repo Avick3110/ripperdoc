@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using Ripperdoc.Core.Schema;
 using Ripperdoc.Core.Tweak;
@@ -19,6 +20,10 @@ namespace Ripperdoc.Core.Tests;
 /// </remarks>
 public class TweakDatabaseSourceTests
 {
+    private const string FirstRecord = "Test.firstThing";
+    private const string SecondRecord = "Test.secondThing";
+    private const string ThirdRecord = "Test.someVehicle";
+
     [Fact]
     public void RecordsComeBackWithTheirTypeNames()
     {
@@ -112,13 +117,75 @@ public class TweakDatabaseSourceTests
     [Fact]
     public void AFileThatIsNotADatabaseIsRefusedByName()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"ripperdoc-not-a-database-{Guid.NewGuid():N}.bin");
+        var path = Path.Combine(Path.GetTempPath(), $"{Branding.Name}-not-a-database-{Guid.NewGuid():N}.bin");
         File.WriteAllText(path, "this is not a tweak database");
 
         try
         {
             var thrown = Assert.Throws<InvalidDataException>(() => TweakDatabaseSource.OpenReadOnly(path));
             Assert.Contains("could not be read as a tweak database", thrown.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void RecordsWrittenToAFileComeBackOutOfTheParsedFileWithTheirTypeNames()
+    {
+        // This method's success path is otherwise reached only against a
+        // shipped database, on a machine that has the game, so what it hands
+        // back on success was going unchecked without one. The pinned writer's
+        // output is taken back by its own reader until a stored value is in the
+        // database, which leaves records: enough to drive the method through a
+        // complete parse, and enough to check the parse against what went into
+        // the file rather than against nothing having been thrown.
+        //
+        // The record names are invented here, and the types come from the
+        // library's own type model. Nothing in this file is the game's.
+        var database = new TweakDB();
+        database.Add(FirstRecord, new gamedataItem_Record());
+        database.Add(SecondRecord, new gamedataItem_Record());
+        database.Add(ThirdRecord, new gamedataVehicle_Record());
+
+        var path = Path.Combine(Path.GetTempPath(), $"{Branding.Name}-written-database-{Guid.NewGuid():N}.bin");
+        File.WriteAllBytes(path, BytesOf(database));
+
+        try
+        {
+            // Unguarded on purpose. Should records-carrying output ever stop
+            // being readable, this line is where the check says so - it reports
+            // that it has stopped covering a parse rather than quietly becoming
+            // a check on the writer.
+            var source = TweakDatabaseSource.OpenReadOnly(path);
+
+            Assert.Equal(Path.GetFileName(path), source.Name);
+
+            // The identity reported has to be the identity of the bytes that
+            // were parsed. Taken from a stream the parse had already consumed,
+            // or from anything other than the file, it would describe one input
+            // while the records came from another - and the provenance block
+            // would look complete either way.
+            Assert.Equal(FingerprintOf(path), source.Fingerprint);
+
+            // What the parse produced, against what went in. Compared without
+            // an order, because the order a pool hands its records back in is
+            // not a law this project has measured.
+            Assert.Equal(
+                new Dictionary<ulong, string>
+                {
+                    [TweakIdentifier.Of(FirstRecord)] = "gamedataItem_Record",
+                    [TweakIdentifier.Of(SecondRecord)] = "gamedataItem_Record",
+                    [TweakIdentifier.Of(ThirdRecord)] = "gamedataVehicle_Record",
+                },
+                source.Records.ToDictionary(record => record.Identifier, record => record.TypeName));
+
+            // Zero, and discriminating: three records went in and no stored
+            // values did, so a count read off the wrong pool is a different
+            // number here rather than the same one. An explained share divides
+            // by this.
+            Assert.Equal(0, source.StoredValueCount);
         }
         finally
         {
@@ -170,8 +237,8 @@ public class TweakDatabaseSourceTests
         // names one exception for a file that is not a readable database, so
         // the truncated case has to arrive as that one and not as a third
         // thing the caller was never told about.
-        var path = Path.Combine(Path.GetTempPath(), $"ripperdoc-truncated-{Guid.NewGuid():N}.bin");
-        File.WriteAllBytes(path, HeaderOfAnEmptyDatabase().Take(16).ToArray());
+        var path = Path.Combine(Path.GetTempPath(), $"{Branding.Name}-truncated-{Guid.NewGuid():N}.bin");
+        File.WriteAllBytes(path, BytesOf(new TweakDB()).Take(16).ToArray());
 
         try
         {
@@ -193,20 +260,34 @@ public class TweakDatabaseSourceTests
     }
 
     /// <summary>
-    /// The library's own bytes for a database with nothing in it, so that a
-    /// truncation test starts from a real header rather than from format
-    /// constants copied into this file - and carries nothing of the game's.
+    /// The library's own bytes for a database, so that the checks over them
+    /// start from what the format's own writer produced rather than from
+    /// format constants copied into this file - and carry nothing of the
+    /// game's.
     /// </summary>
+    /// <param name="database">The database to write.</param>
     /// <returns>The written bytes.</returns>
-    private static byte[] HeaderOfAnEmptyDatabase()
+    private static byte[] BytesOf(TweakDB database)
     {
         using var written = new MemoryStream();
         using (var writer = new TweakDBWriter(written, Encoding.UTF8, true))
         {
-            writer.WriteFile(new TweakDB());
+            writer.WriteFile(database);
         }
 
         return written.ToArray();
+    }
+
+    /// <summary>
+    /// The SHA-256 of a file's own bytes, in the form this source reports.
+    /// </summary>
+    /// <param name="path">The file to fingerprint.</param>
+    /// <returns>Lower-case hexadecimal.</returns>
+    private static string FingerprintOf(string path)
+    {
+        using var algorithm = SHA256.Create();
+
+        return Convert.ToHexString(algorithm.ComputeHash(File.ReadAllBytes(path))).ToLowerInvariant();
     }
 
     private static TweakDatabaseSource Source(TweakDB database) =>
