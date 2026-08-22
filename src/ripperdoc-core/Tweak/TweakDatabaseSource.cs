@@ -142,7 +142,25 @@ public sealed class TweakDatabaseSource : IShippedRecordSource
 
         using var reader = new TweakDBReader(stream);
 
-        var outcome = reader.ReadFile(out TweakDB? database);
+        EFileReadErrorCodes outcome;
+        TweakDB? database;
+        try
+        {
+            outcome = reader.ReadFile(out database);
+        }
+        catch (EndOfStreamException exception)
+        {
+            // A file that starts like a database and stops partway through it
+            // ends the reader rather than being reported by it. This method
+            // names one exception for a file that is not a readable database,
+            // and a truncated file is one - left to escape, it hands a caller
+            // that was told to expect two outcomes a third.
+            throw new InvalidDataException(
+                $"'{Path.GetFileName(path)}' could not be read as a tweak database: it ends before the "
+                + "structure it declares does.",
+                exception);
+        }
+
         if (outcome != EFileReadErrorCodes.NoError || database is null)
         {
             throw new InvalidDataException(

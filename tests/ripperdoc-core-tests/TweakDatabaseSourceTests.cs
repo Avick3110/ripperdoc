@@ -1,3 +1,4 @@
+using System.Text;
 using Ripperdoc.Core.Schema;
 using Ripperdoc.Core.Tweak;
 using WolvenKit.RED4.TweakDB;
@@ -158,6 +159,54 @@ public class TweakDatabaseSourceTests
         Assert.Equal(ValidationState.StorageTypeUnreadable, verdict.State);
         Assert.Equal(0, verdict.ContradictingValueCount);
         Assert.Null(verdict.ObservedStorageType);
+    }
+
+    [Fact]
+    public void AFileThatEndsBeforeItsStructureDoesIsRefusedTheSameWay()
+    {
+        // The other shape of unreadable file. A wrong file is reported by the
+        // reader as a code; a file that starts right and stops early ends the
+        // reader from inside the parse instead. This method's documentation
+        // names one exception for a file that is not a readable database, so
+        // the truncated case has to arrive as that one and not as a third
+        // thing the caller was never told about.
+        var path = Path.Combine(Path.GetTempPath(), $"ripperdoc-truncated-{Guid.NewGuid():N}.bin");
+        File.WriteAllBytes(path, HeaderOfAnEmptyDatabase().Take(16).ToArray());
+
+        try
+        {
+            var thrown = Assert.Throws<InvalidDataException>(() => TweakDatabaseSource.OpenReadOnly(path));
+
+            Assert.Contains("could not be read as a tweak database", thrown.Message, StringComparison.Ordinal);
+            Assert.Contains("ends before the structure", thrown.Message, StringComparison.Ordinal);
+
+            // Pinned to the path this covers. If these bytes ever stop ending
+            // the reader early - a format version bump would do it - the case
+            // has stopped being the one it was written for, and it says so
+            // rather than passing on the strength of some other refusal.
+            Assert.IsType<EndOfStreamException>(thrown.InnerException);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// The library's own bytes for a database with nothing in it, so that a
+    /// truncation test starts from a real header rather than from format
+    /// constants copied into this file - and carries nothing of the game's.
+    /// </summary>
+    /// <returns>The written bytes.</returns>
+    private static byte[] HeaderOfAnEmptyDatabase()
+    {
+        using var written = new MemoryStream();
+        using (var writer = new TweakDBWriter(written, Encoding.UTF8, true))
+        {
+            writer.WriteFile(new TweakDB());
+        }
+
+        return written.ToArray();
     }
 
     private static TweakDatabaseSource Source(TweakDB database) =>
