@@ -177,17 +177,27 @@ public sealed class TweakDatabaseSource : IShippedRecordSource, ITweakValueSourc
     /// <inheritdoc />
     public bool HoldsRecord(ulong identifier) => _database.Records.Exists(identifier);
 
-    /// <inheritdoc />
+    /// <summary>Whether the database holds a value under this identifier.</summary>
+    /// <param name="identifier">The identifier to look up.</param>
+    /// <returns>True if the value is there.</returns>
     public bool HoldsValue(ulong identifier) => _database.Flats.Exists(identifier);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Whether two values the database holds are the same value.
+    /// </summary>
+    /// <param name="left">One identifier.</param>
+    /// <param name="right">The other.</param>
+    /// <returns>
+    /// True only where both are present and equal. A pair where either is
+    /// absent is not equal, because an absent value agrees with nothing.
+    /// </returns>
     /// <remarks>
     /// Compared by value rather than by whatever handle the reader hands back.
     /// The database pools its values, so equal values share storage in the file
     /// - but that is the file's arrangement, and a reader is free to give every
     /// lookup its own object. Comparing what the reader returns would then find
-    /// nothing equal to anything, and the answer would be that no copy still
-    /// follows its source anywhere.
+    /// nothing equal to anything, and the answer would be that no two values in
+    /// the database agree.
     /// </remarks>
     public bool ValuesMatch(ulong left, ulong right)
     {

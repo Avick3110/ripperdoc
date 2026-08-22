@@ -211,12 +211,15 @@ public sealed class TweakInheritanceMap
 /// The values a database already holds, as the replay needs to ask about them.
 /// </summary>
 /// <remarks>
-/// The replay needs two questions answered about the state before any tweak was
-/// applied: whether something is there, and whether two values are the same.
-/// The second is what decides whether a record that was cloned from another
-/// still agrees with it - which is how the framework tells "this was never
-/// overridden" from "this was", and therefore whether a write to the source
-/// should move the copy.
+/// The replay needs one question answered about the state before any tweak was
+/// applied: whether it holds a given record at all. That is what separates a
+/// record the shipped data really has copies of from a name a mod invented
+/// whose identifier the metadata happens to carry - and a limit stated over the
+/// second would name a risk that is not there.
+///
+/// It is deliberately this narrow. A reader of the shipped database can answer
+/// a great deal more, and does; what belongs here is what the replay asks,
+/// because an interface carrying more than that states a need nothing has.
 /// </remarks>
 public interface ITweakValueSource
 {
@@ -227,20 +230,4 @@ public interface ITweakValueSource
     /// <param name="identifier">The identifier to look up.</param>
     /// <returns>True if the record is there.</returns>
     bool HoldsRecord(ulong identifier);
-
-    /// <summary>Whether the database holds a value under this identifier.</summary>
-    /// <param name="identifier">The identifier to look up.</param>
-    /// <returns>True if the value is there.</returns>
-    bool HoldsValue(ulong identifier);
-
-    /// <summary>
-    /// Whether two values the database holds are the same value.
-    /// </summary>
-    /// <param name="left">One identifier.</param>
-    /// <param name="right">The other.</param>
-    /// <returns>
-    /// True only where both are present and equal. A pair where either is
-    /// absent is not equal, because an absent value agrees with nothing.
-    /// </returns>
-    bool ValuesMatch(ulong left, ulong right);
 }

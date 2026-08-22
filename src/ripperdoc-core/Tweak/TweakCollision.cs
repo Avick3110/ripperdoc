@@ -141,9 +141,10 @@ public sealed record TweakCollision(
     //
     // Asked most-specific first: every one of these is true of a contest the
     // later ones also describe, and naming the general rule where a specific
-    // one decided it sends the reader to change the wrong thing. Both indirect
-    // routes are asked together, because what makes the rule apply is that the
-    // value arrived without being named, not which way it arrived.
+    // one decided it sends the reader to change the wrong thing. The test is
+    // that the value arrived without being named rather than that it arrived a
+    // particular way, so a further indirect route would fall under this rule
+    // without changing it.
     private static TweakDecisionRule RuleFor(TweakContribution winner, TweakContribution overridden)
     {
         if (winner.Route == TweakContributionRoute.Written

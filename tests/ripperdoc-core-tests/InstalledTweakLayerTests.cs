@@ -125,8 +125,29 @@ public class InstalledTweakLayerTests
         var layer = TweakLayer.Enumerate(LayerPath);
         var state = Replay(layer);
 
-        _output.WriteLine($"inheritance route: {state.InheritanceDescription}.");
-        Assert.True(state.InheritanceWasReplayed);
+        _output.WriteLine($"shipped records examined against: {state.InheritanceDescription}.");
+        Assert.True(state.InheritanceWasExamined);
+
+        // Reported, not asserted: how many of this layer's writes land on a
+        // record the shipped data was copied from depends on which mods are
+        // installed today. What is asserted is the tie between the count and
+        // the sentence - a limit stated where nothing is unaccounted for is as
+        // wrong as one withheld where something is.
+        _output.WriteLine(
+            $"{state.WritesOnAShippedBaseRecord.Count} write(s) on a record the shipped data was copied "
+            + $"from; limit stated: {state.IndirectMovementLimit ?? "none"}.");
+        Assert.Equal(
+            state.WritesOnAShippedBaseRecord.Count > 0,
+            state.IndirectMovementLimit is not null);
+
+        foreach (var write in state.WritesOnAShippedBaseRecord)
+        {
+            _output.WriteLine(
+                $"  reaches further: {write.FlatName} on {write.RecordName}, "
+                + $"{write.DescendantCount} copy(ies)");
+            Assert.NotEqual(0UL, write.RecordIdentifier);
+        }
+
         _output.WriteLine(
             $"{state.Collisions.Count} contested value(s) in this layer.");
 
