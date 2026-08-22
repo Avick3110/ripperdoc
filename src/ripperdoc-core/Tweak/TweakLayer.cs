@@ -83,8 +83,16 @@ public sealed class TweakLayer
     /// <para>
     /// What this does is report. It does not change the walk and it does not
     /// qualify anything by itself - the order used is the enumeration's either
-    /// way, because that is the order the framework consumes. A caller that
-    /// states an ordering conclusion is the one that has to carry this with it.
+    /// way, because that is the order the framework consumes.
+    /// </para>
+    /// <para>
+    /// Carrying it is the job of whoever holds the layer. It is on the layer
+    /// and reachable from a resolved state through
+    /// <see cref="TweakResolvedState.Layer"/>, and it is not carried any
+    /// further down: a contest on its own does not hold it and cannot fetch
+    /// it. So a report qualifies its ordering conclusions where the layer is in
+    /// hand, which is the only place that can: a duty assigned to a caller with
+    /// no route to the flag is one nobody can discharge.
     /// </para>
     /// </remarks>
     public bool EnumerationIsCollated { get; }

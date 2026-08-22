@@ -56,7 +56,14 @@ public sealed class TweakInheritanceMap
     /// <summary>How many records have a recorded source in total.</summary>
     public int EdgeCount { get; }
 
-    /// <summary>How many records have descendants.</summary>
+    /// <summary>
+    /// How many records have descendants.
+    /// </summary>
+    /// <remarks>
+    /// Records, not entries. The metadata may name a record and declare nothing
+    /// cloned from it, and such an entry is dropped when the map is built -
+    /// counting it would say copies exist where none do.
+    /// </remarks>
     public int BaseCount => _descendants.Count;
 
     /// <summary>
@@ -154,12 +161,21 @@ public sealed class TweakInheritanceMap
                 + $"of {bytes.Length} bytes remain after the {descendants.Count} records it declares.");
         }
 
-        var edges = descendants.Values.Sum(children => children.Count);
+        // An entry declaring no descendants records that a record was named,
+        // and nothing else. Kept, it would answer yes to whether anything was
+        // cloned from that record and be counted among the records that have
+        // copies - so a caller asking where a write reaches further would be
+        // pointed at a record with nothing under it.
+        var sources = descendants
+            .Where(pair => pair.Value.Count > 0)
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
+
+        var edges = sources.Values.Sum(children => children.Count);
 
         return new TweakInheritanceMap(
-            descendants,
-            $"{Path.GetFileName(path)}, {edges} records cloned from {descendants.Count} "
-            + (descendants.Count == 1 ? "source" : "sources"),
+            sources,
+            $"{Path.GetFileName(path)}, {edges} records cloned from {sources.Count} "
+            + (sources.Count == 1 ? "source" : "sources"),
             edges,
             wasRead: true);
     }
@@ -178,10 +194,16 @@ public sealed class TweakInheritanceMap
         ArgumentNullException.ThrowIfNull(descendants);
         ArgumentNullException.ThrowIfNull(description);
 
+        // Held to the same rule as the file reader above: a source declaring
+        // no descendants is not a source.
+        var sources = descendants
+            .Where(pair => pair.Value.Count > 0)
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
+
         return new TweakInheritanceMap(
-            descendants,
+            sources,
             description,
-            descendants.Values.Sum(children => children.Count),
+            sources.Values.Sum(children => children.Count),
             wasRead: true);
     }
 

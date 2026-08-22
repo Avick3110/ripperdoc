@@ -15,9 +15,9 @@ public class TweakResolvedStateTests
         var collision = Assert.Single(layer.Replay().Collisions);
 
         Assert.Equal("Probe.item.price", collision.FlatName);
-        Assert.Equal("beta", collision.Winner.OriginDirectory);
+        Assert.Equal("beta", collision.Winner.Origin);
         Assert.Equal("250", collision.Winner.ValueText);
-        Assert.Equal("alpha", Assert.Single(collision.Overridden).Contribution.OriginDirectory);
+        Assert.Equal("alpha", Assert.Single(collision.Overridden).Contribution.Origin);
         Assert.Equal("100", Assert.Single(collision.Overridden).Contribution.ValueText);
         Assert.Equal(TweakDecisionRule.LastWriterInReadOrder, Assert.Single(collision.Rules));
     }
@@ -113,7 +113,7 @@ public class TweakResolvedStateTests
 
         // Whose value it is, and who carried it, are different origins and both
         // are kept.
-        Assert.Equal("alpha", contribution.OriginDirectory);
+        Assert.Equal("alpha", contribution.Origin);
         Assert.Equal("beta\\clone.yaml", contribution.File.RelativePath);
     }
 
@@ -145,7 +145,7 @@ public class TweakResolvedStateTests
         var state = layer.Replay();
         var collision = Assert.Single(state.Collisions, candidate => candidate.FlatName == "Probe.special.price");
 
-        Assert.Equal("gamma", collision.Winner.OriginDirectory);
+        Assert.Equal("gamma", collision.Winner.Origin);
         Assert.Equal(TweakDecisionRule.WrittenBeatsInherited, Assert.Single(collision.Rules));
 
         var explanation = collision.Explain();
@@ -168,7 +168,7 @@ public class TweakResolvedStateTests
         var state = layer.Replay();
         var collision = Assert.Single(state.Collisions);
 
-        Assert.Equal("aaa", collision.Winner.OriginDirectory);
+        Assert.Equal("aaa", collision.Winner.Origin);
         Assert.Equal(TweakFileGroup.First, Assert.Single(collision.Overridden).Contribution.File.Group);
         Assert.Equal(TweakDecisionRule.GroupBeforeReadOrder, Assert.Single(collision.Rules));
         Assert.Contains("first character", collision.Explain(), StringComparison.Ordinal);
@@ -254,11 +254,11 @@ public class TweakResolvedStateTests
 
         var collision = Assert.Single(layer.Replay().Collisions);
 
-        Assert.Equal("gamma", collision.Winner.OriginDirectory);
+        Assert.Equal("gamma", collision.Winner.Origin);
         Assert.Equal(3, collision.OriginCount);
 
         var byOrigin = collision.Overridden.ToDictionary(
-            write => write.Contribution.OriginDirectory,
+            write => write.Contribution.Origin,
             write => write.Rule,
             StringComparer.Ordinal);
 
@@ -360,8 +360,8 @@ public class TweakResolvedStateTests
         // own origin. That is right for the single-file mods that live there
         // and wrong for two files one mod dropped side by side - and the report
         // says which file, so a reader can see which case they have.
-        Assert.Equal("two.yaml", collision.Winner.OriginDirectory);
-        Assert.Equal("one.yaml", Assert.Single(collision.Overridden).Contribution.OriginDirectory);
+        Assert.Equal("two.yaml", collision.Winner.Origin);
+        Assert.Equal("one.yaml", Assert.Single(collision.Overridden).Contribution.Origin);
     }
 
     [Fact]

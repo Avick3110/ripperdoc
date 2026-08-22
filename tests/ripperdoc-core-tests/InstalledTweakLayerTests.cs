@@ -172,7 +172,7 @@ public class InstalledTweakLayerTests
 
             foreach (var overridden in collision.Overridden)
             {
-                Assert.NotEqual(collision.Winner.OriginDirectory, overridden.Contribution.OriginDirectory);
+                Assert.NotEqual(collision.Winner.Origin, overridden.Contribution.Origin);
             }
         }
     }
