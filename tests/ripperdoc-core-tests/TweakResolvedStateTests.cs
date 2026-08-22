@@ -379,6 +379,11 @@ public class TweakResolvedStateTests
         // gen3 clones gen2, and what it copies is the value gen2 actually holds.
         Assert.Equal("555", Assert.Single(state.Flats, flat => flat.Name == "Probe.gen2.price").Winner!.ValueText);
         Assert.Equal("555", Assert.Single(state.Flats, flat => flat.Name == "Probe.gen3.price").Winner!.ValueText);
+
+        // A clone of a clone, declared in order, loses nothing - so nothing is
+        // said about it. The note for the out-of-order case is worth reading
+        // only if it stays absent here.
+        Assert.Empty(state.Unhandled);
     }
 
     [Fact]
