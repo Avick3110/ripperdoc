@@ -82,6 +82,33 @@ public class TweakLayerTests
         Assert.Equal(TweakFileGroup.First, TweakLayer.GroupOf("zzz\\_marked_leaf.yaml"));
     }
 
+    [Theory]
+    [InlineData("zzz\\_promoted.yaml", TweakFileGroup.First)]
+    [InlineData("#directory\\ordinary.yaml", TweakFileGroup.Normal)]
+    [InlineData("zzz/_not_promoted.yaml", TweakFileGroup.Normal)]
+    [InlineData("#directory/ordinary.yaml", TweakFileGroup.First)]
+    public void TheGroupIsDecidedByTheLayersSeparatorAndNotByTheRunningPlatforms(
+        string relativePath,
+        TweakFileGroup expected)
+    {
+        // A layer path is spelled with one separator wherever it is read, so
+        // the grouping has to come out the same on every platform: a report
+        // naming one winner on one machine and another elsewhere is worth
+        // nothing. Asking the running platform which characters divide a path
+        // gets that wrong in both directions, and the two directions are only
+        // reachable on different platforms - so both are checked here.
+        //
+        // The first two are the real inputs, and they are the ones that come
+        // apart where '\' is an ordinary character: the whole path reads as
+        // the file's own name and the leading character of the top directory
+        // decides the group. The last two are the mirror, and they are the
+        // ones this platform can reach: '/' divides a path here and does not
+        // divide a layer path anywhere, so a name carrying it must be taken
+        // whole. Neither pair fails on both platforms; together they fail on
+        // either.
+        Assert.Equal(expected, TweakLayer.GroupOf(relativePath));
+    }
+
     [Fact]
     public void AMarkedDirectoryStillLeadsTheWalkSoTheTwoMechanismsCompose()
     {
