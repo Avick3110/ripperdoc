@@ -52,10 +52,16 @@ public class InstalledTweakLayerTests
     public static string InheritanceVariableName => Branding.Name.ToUpperInvariant() + "_INHERITANCE_PATH";
 
     /// <summary>
-    /// The environment variable naming the shipped database, whose values decide
-    /// whether a copy still follows what it was copied from.
+    /// The environment variable naming the shipped database, which this tier
+    /// reads to tell a record the game holds from a name a mod invented.
     /// </summary>
-    public static string DatabaseVariableName => Branding.Name.ToUpperInvariant() + "_TWEAKDB_PATH";
+    /// <remarks>
+    /// Taken from the fixture that owns the database rather than spelled again.
+    /// Two homes for one name go out of step in exactly one direction: the tier
+    /// announces itself skipped for want of an input the machine is holding
+    /// under the other spelling, and nothing says why.
+    /// </remarks>
+    public static string DatabaseVariableName => ShippedDatabaseFixture.VariableName;
 
     private static string LayerPath => Required(VariableName);
 
@@ -79,12 +85,37 @@ public class InstalledTweakLayerTests
 
         _output.WriteLine(Report(state));
 
-        // The accounting has to close, against what was actually read rather
+        var documents = TweakFileReader.ReadLayer(layer, LayerPath);
+        var unaccounted = FilesNeitherReadFromNorNamed(layer, documents, _output.WriteLine);
+
+        Assert.Empty(unaccounted);
+    }
+
+    /// <summary>
+    /// Every file in the layer that was neither read from nor named as
+    /// something that was not read.
+    /// </summary>
+    /// <param name="layer">The layer, enumerated.</param>
+    /// <param name="documents">Its files as read, in read order.</param>
+    /// <param name="report">Where to write what each file was accounted as.</param>
+    /// <returns>The files the accounting does not close over.</returns>
+    /// <remarks>
+    /// Its own member because two checks ask it and the answer has to be the
+    /// same one. The check that matters runs against a real install, which no
+    /// runner has - so the rule would otherwise be exercised only on a machine
+    /// with the game on it, and a layer shape nobody happens to own would be
+    /// the shape that breaks it.
+    /// </remarks>
+    internal static IReadOnlyList<string> FilesNeitherReadFromNorNamed(
+        TweakLayer layer,
+        IReadOnlyList<TweakDocument> documents,
+        Action<string> report)
+    {
+        // The accounting has to close against what was actually read rather
         // than against what could have been. A file whose extension says it is
         // replayable but which parsed to nothing is not evidence that it was
         // replayed - counting it as such is what makes an accounting check
         // unable to fail.
-        var documents = TweakFileReader.ReadLayer(layer, LayerPath);
         var readFrom = documents
             .Where(document => document.IsReadable && document.Statements.Count > 0)
             .Select(document => document.RelativePath);
@@ -93,17 +124,34 @@ public class InstalledTweakLayerTests
             .Select(document => document.RelativePath)
             .Concat(layer.Unread.Select(file => file.RelativePath));
 
+        // A file that parses and holds nothing at all is a third outcome, and a
+        // legitimate one: an empty file, or a file of nothing but comments, is
+        // something people really ship, and the framework reads it and takes
+        // nothing from it. It is accounted for because it was read to the end,
+        // not because anything came out - every construct that yields no
+        // statement for some other reason is named above, so this bucket holds
+        // only files with nothing in them.
+        var saidNothing = documents
+            .Where(document => document.IsReadable && document.Statements.Count == 0)
+            .Select(document => document.RelativePath)
+            .ToArray();
+
+        foreach (var path in saidNothing)
+        {
+            report($"  read and empty: {path}");
+        }
+
         var unaccounted = layer.Present
             .Select(file => file.RelativePath)
-            .Except(readFrom.Concat(named), StringComparer.Ordinal)
+            .Except(readFrom.Concat(named).Concat(saidNothing), StringComparer.Ordinal)
             .ToArray();
 
         foreach (var path in unaccounted)
         {
-            _output.WriteLine($"  unaccounted: {path}");
+            report($"  unaccounted: {path}");
         }
 
-        Assert.Empty(unaccounted);
+        return unaccounted;
     }
 
     [Fact]

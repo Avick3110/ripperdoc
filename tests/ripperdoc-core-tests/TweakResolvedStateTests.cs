@@ -382,6 +382,51 @@ public class TweakResolvedStateTests
     }
 
     [Fact]
+    public void ACloneDeclaredAheadOfItsOwnCloneOfABaseComesUpShortAndIsToldSo()
+    {
+        // gen3 clones gen2, and gen2 clones gen1 - but gen3 is declared first.
+        // The framework builds clone values as it walks the records in
+        // declaration order, so by the time gen3 is built gen2 has not inherited
+        // anything yet and gen3 gets none of it. That is what the game does and
+        // it is reproduced; what would be wrong is letting it happen quietly.
+        using var layer = SyntheticTweakLayer.Of(
+            ("a_alpha\\gen1.yaml", "Probe.gen1:\n  $type: gamedataProbeWidget_Record\n  price: 100\n"),
+            ("b_beta\\gen3.yaml", "Probe.gen3:\n  $base: Probe.gen2\n"),
+            ("c_gamma\\gen2.yaml", "Probe.gen2:\n  $base: Probe.gen1\n"));
+
+        var state = layer.Replay();
+
+        // gen2 inherits the price; gen3 does not, because it was built first.
+        Assert.Contains(state.Flats, flat => flat.Name == "Probe.gen2.price");
+        Assert.DoesNotContain(state.Flats, flat => flat.Name == "Probe.gen3.price");
+
+        var note = Assert.Single(state.Unhandled);
+        Assert.Equal("Probe.gen3", note.Path);
+        Assert.Contains("declares later", note.Reason, StringComparison.Ordinal);
+        Assert.Contains("Probe.gen2", note.Reason, StringComparison.Ordinal);
+        Assert.Contains("Probe.gen1", note.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ACloneWhoseBaseComesLaterButIsNotItselfACloneLosesNothingAndIsNotFlagged()
+    {
+        // The other arm. A base's own writes are staged before any record is
+        // built, so a clone declared ahead of a plain base still gets them -
+        // there is nothing to warn about, and warning anyway would teach a
+        // reader to ignore the warning that matters.
+        using var layer = SyntheticTweakLayer.Of(
+            ("a_alpha\\clone.yaml", "Probe.copy:\n  $base: Probe.stock\n"),
+            ("b_beta\\base.yaml", "Probe.stock:\n  $type: gamedataProbeWidget_Record\n  price: 100\n"));
+
+        var state = layer.Replay();
+
+        Assert.Equal(
+            "100",
+            Assert.Single(state.Flats, flat => flat.Name == "Probe.copy.price").Winner!.ValueText);
+        Assert.Empty(state.Unhandled);
+    }
+
+    [Fact]
     public void ACloneOfARecordWhoseValueIsOnlyMutatedGainsNoEmptyValue()
     {
         using var layer = SyntheticTweakLayer.Of(
