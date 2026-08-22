@@ -224,6 +224,64 @@ public class TweakFileReaderTests
     }
 
     [Fact]
+    public void AFileThatCannotBeOpenedIsNamedRatherThanEndingTheWholeReplay()
+    {
+        using var layer = SyntheticTweakLayer.Of(
+            ("alpha\\gone.yaml", "Probe.item.price: 100\n"),
+            ("beta\\here.yaml", "Probe.item.price: 250\n"));
+
+        var enumerated = layer.EnumerateAsDeclared();
+
+        // The layer is walked and then read, and a file can leave between the
+        // two - removed by whoever owns it, or by a manager rewriting the lane.
+        // Holding one open instead would be a fixture only one platform can
+        // build; both arrive at the same refusal to open.
+        File.Delete(Path.Combine(layer.Root, "alpha", "gone.yaml"));
+
+        var documents = TweakFileReader.ReadLayer(enumerated, layer.Root);
+
+        var missing = Assert.Single(documents, document => document.RelativePath == "alpha\\gone.yaml");
+        Assert.False(missing.IsReadable);
+        Assert.Contains("could not be read", Assert.Single(missing.Unhandled).Reason, StringComparison.Ordinal);
+
+        // The rest of the layer is still replayed. One file the system will not
+        // hand over costs its own writes and no other file's.
+        var read = Assert.Single(documents, document => document.RelativePath == "beta\\here.yaml");
+        Assert.True(read.IsReadable);
+        Assert.Equal("Probe.item.price", Assert.Single(read.Writes).FlatName);
+    }
+
+    [Fact]
+    public void AFileTheSystemWillNotOpenIsNamedByItsPlaceInTheLayerAndNotByItsPath()
+    {
+        // A directory stands in for a refusal that is not absence. What is
+        // asserted is that the refusal comes back as a named document rather
+        // than as a throw - not which of the system's errors produced it, which
+        // differs between platforms and is not this engine's claim to make.
+        var directory = Path.Combine(Path.GetTempPath(), "tweak-dir-" + Guid.NewGuid().ToString("N")[..12]);
+        Directory.CreateDirectory(directory);
+
+        try
+        {
+            var document = TweakFileReader.Read(directory, "probe\\thing.yaml");
+            var unhandled = Assert.Single(document.Unhandled);
+
+            Assert.False(document.IsReadable);
+            Assert.Equal("probe\\thing.yaml", unhandled.Path);
+            Assert.Contains("could not be read", unhandled.Reason, StringComparison.Ordinal);
+
+            // A report names a file by where it sits in the layer. The system's
+            // own message for this carries the machine path, so the reason is
+            // classified rather than passed through.
+            Assert.DoesNotContain(directory, unhandled.Reason, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(directory);
+        }
+    }
+
+    [Fact]
     public void AFileThatCannotBeParsedSaysSoRatherThanComingBackEmpty()
     {
         var document = ReadText("Probe.thing: [unclosed\n");
