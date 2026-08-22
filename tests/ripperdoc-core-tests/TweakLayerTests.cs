@@ -9,6 +9,86 @@ namespace Ripperdoc.Core.Tests;
 // evidence class of each part.
 public class TweakLayerTests
 {
+    [Fact]
+    public void ALinkBackIntoTheLayerIsRefusedByNameRatherThanWalkedForever()
+    {
+        using var layer = SyntheticTweakLayer.Of(
+            ("mods\\alpha.yaml", "Probe.item.price: 100\n"),
+            ("mods\\beta.yaml", "Probe.item.price: 250\n"));
+
+        var link = Path.Combine(layer.Root, "mods", "shared");
+        DirectoryLink.Create(link, layer.Root);
+
+        try
+        {
+            // Without the guard this does not fail - it does not return, and
+            // the process is gone on a stack overflow that cannot be caught,
+            // with nothing said about which entry did it.
+            var walked = layer.Enumerate();
+
+            var refused = Assert.Single(walked.Refused);
+            Assert.Equal("mods\\shared", refused.Path);
+            Assert.Contains("already inside", refused.Reason, StringComparison.Ordinal);
+
+            // The rest of the layer is still walked. Refusing an entry costs
+            // what is behind that entry and nothing else.
+            Assert.Equal(
+                new[] { "mods\\alpha.yaml", "mods\\beta.yaml" },
+                walked.Files.Select(file => file.RelativePath).OrderBy(name => name, StringComparer.Ordinal));
+        }
+        finally
+        {
+            DirectoryLink.Remove(link);
+        }
+    }
+
+    [Fact]
+    public void ALinkToADirectoryTheWalkIsNotInsideIsFollowedRatherThanRefused()
+    {
+        // The other arm. A link is not a cycle just for being a link, and one
+        // pointing somewhere the walk is not already inside is a directory the
+        // framework reads - refusing it would drop files that are in the game.
+        using var layer = SyntheticTweakLayer.Of(
+            ("mods\\alpha.yaml", "Probe.item.price: 100\n"),
+            ("elsewhere\\beta.yaml", "Probe.item.price: 250\n"));
+
+        var link = Path.Combine(layer.Root, "mods", "shared");
+        DirectoryLink.Create(link, Path.Combine(layer.Root, "elsewhere"));
+
+        try
+        {
+            var walked = layer.Enumerate();
+
+            Assert.Empty(walked.Refused);
+            Assert.Contains(
+                "mods\\shared\\beta.yaml",
+                walked.Files.Select(file => file.RelativePath),
+                StringComparer.Ordinal);
+        }
+        finally
+        {
+            DirectoryLink.Remove(link);
+        }
+    }
+
+    [Fact]
+    public void ARefusedEntryIsCarriedIntoWhatTheResolvedStateDoesNotAccountFor()
+    {
+        // A layer that quietly stops short reports the mods behind the refusal
+        // as having written nothing, which is a wrong answer with nothing in
+        // the report to contradict it.
+        var refused = new TweakUnhandled(1, "mods\\shared", "a link back into a directory this walk is already inside");
+        var walked = TweakLayer.Of(["mods\\alpha.yaml"], enumerationIsCollated: true, [refused]);
+
+        var state = TweakResolvedState.Replay(
+            walked,
+            [new TweakDocument("mods\\alpha.yaml", [], IsReadable: true)],
+            TweakInheritanceMap.None,
+            values: null);
+
+        Assert.Equal("mods\\shared", Assert.Single(state.Unhandled).Path);
+    }
+
     // The walk is checked against a real directory, because a walk checked
     // against a list of paths is a check of the list. What it must NOT do is
     // assert the order the directory came back in: that order belongs to the

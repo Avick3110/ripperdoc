@@ -187,7 +187,11 @@ public sealed class TweakResolvedState
 
         var flats = new Dictionary<string, List<TweakContribution>>(StringComparer.Ordinal);
 
-        var unhandled = new List<TweakUnhandled>();
+        // What the walk declined to enter belongs here for the same reason a
+        // construct the reader declined to replay does: those files are not in
+        // this state, and a reader who is not told reads their absence as the
+        // mods under them having written nothing.
+        var unhandled = new List<TweakUnhandled>(layer.Refused);
         var declarations = new List<(TweakFile File, TweakRecordDeclaration Declaration)>();
 
         for (var index = 0; index < documents.Count; index++)
