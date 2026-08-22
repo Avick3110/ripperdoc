@@ -32,6 +32,11 @@ public class ShippedDatabaseValidationTests : IClassFixture<ShippedDatabaseFixtu
     private const int FieldSlotsNoValueCarriesThem = 13;
     private const int FieldSlotsOnTypesWithNoRecords = 658;
 
+    // Every candidate is compared against the ones before it, so the scan is
+    // bounded. Generous against the case it exists for: a record whose name and
+    // displayName hold one string needs three candidates, not sixty-four.
+    private const int CandidatesScannedForAPair = 64;
+
     private readonly ShippedDatabaseFixture _fixture;
 
     public ShippedDatabaseValidationTests(ShippedDatabaseFixture fixture) => _fixture = fixture;
@@ -47,34 +52,47 @@ public class ShippedDatabaseValidationTests : IClassFixture<ShippedDatabaseFixtu
         // it.
         var source = _fixture.Database;
 
-        var values = source.Records
-            .Select(record => record.Identifier)
-            .SelectMany(identifier => new[] { "name", "displayName", "entityName" }
-                .Select(field => TweakIdentifier.TryForField(identifier, field, out var flat) ? flat : 0UL))
-            .Where(identifier => identifier != 0 && source.HoldsValue(identifier))
-            .Take(2)
-            .ToArray();
-
         // Two values that differ, so that the comparison itself is reached. An
         // assertion that only pairs a value with itself, or with something
         // absent, is answered by the guards above the comparison and would hold
         // just as well if the comparison always said yes.
-        var differing = values
-            .Where(identifier => source.TryGetStoredValueType(identifier, out _))
-            .ToArray();
+        //
+        // Scanned until a pair actually differs. Taking a fixed two off the
+        // front and asserting they differ asserts something about which values
+        // this database happens to carry - a record's name and its displayName
+        // can hold the same string - so a legitimate database could turn this
+        // red and be reported as an engine defect.
+        var candidates = source.Records
+            .Select(record => record.Identifier)
+            .SelectMany(identifier => new[] { "name", "displayName", "entityName" }
+                .Select(field => TweakIdentifier.TryForField(identifier, field, out var flat) ? flat : 0UL))
+            .Where(identifier => identifier != 0
+                && source.HoldsValue(identifier)
+                && source.TryGetStoredValueType(identifier, out _));
 
-        var unequal = differing
-            .SelectMany(left => differing.Select(right => (left, right)))
-            .FirstOrDefault(pair => !source.ValuesMatch(pair.left, pair.right));
+        var unequal = UnequalValuePair.FirstIn(candidates, source.ValuesMatch, CandidatesScannedForAPair);
 
-        Assert.NotEqual(0UL, unequal.left);
-        Assert.False(source.ValuesMatch(unequal.left, unequal.right));
-        Assert.True(source.ValuesMatch(unequal.left, unequal.left));
+        if (!unequal.Found)
+        {
+            // Named as what it is. This database carrying no two differing
+            // values among those examined is a fact about the database, and
+            // reporting it as a failed comparison would put the blame on the
+            // engine for something the engine was never asked.
+            Assert.Fail(
+                $"The first {unequal.Examined} value(s) this database holds under a name, a displayName or "
+                + "an entityName all agree with each other, so the comparison this check exists to reach "
+                + "was never asked a question it could answer. That is a statement about the database, not "
+                + "about the engine.");
+            return;
+        }
+
+        Assert.False(source.ValuesMatch(unequal.Left, unequal.Right));
+        Assert.True(source.ValuesMatch(unequal.Left, unequal.Left));
 
         // Absence is not agreement: an identifier the database does not hold
         // agrees with nothing, because treating it as equal would propagate a
         // value onto a record that has no such value at all.
-        Assert.False(source.ValuesMatch(unequal.left, 0UL));
+        Assert.False(source.ValuesMatch(unequal.Left, 0UL));
         Assert.False(source.ValuesMatch(0UL, 0UL));
 
         Assert.True(source.HoldsRecord(source.Records.First().Identifier));
