@@ -212,6 +212,66 @@ public class ReflectedRecordTypeSourceTests
         Assert.DoesNotContain("gamedataProbeInternal_Record", schema.RecordTypeNames);
     }
 
+    [Fact]
+    public void APublicTypeNestedInsideAnotherIsStillOnThePublicSurface()
+    {
+        // The runtime reports IsPublic false for a nested public type, so a
+        // source testing that alone drops a record type that is on the public
+        // surface - and the rule the test above fixes says nothing about
+        // nesting.
+        var schema = Derive(typeof(ProbeNesting.gamedataProbeNested_Record));
+
+        var type = schema.Find("gamedataProbeNested_Record");
+        Assert.NotNull(type);
+        Assert.Contains("nestedField", type.Fields.Keys);
+        Assert.Empty(schema.Failures);
+    }
+
+    [Fact]
+    public void ARecordTypeThisSourceWillNotReadIsStatedRatherThanJustAbsent()
+    {
+        // The other half. Absent and unannounced, a record type this source
+        // declined to read is indistinguishable from one the game does not
+        // have: Find returns the same null for both.
+        var schema = Derive(typeof(gamedataProbeAnnotated_Record).Assembly
+            .GetTypes()
+            .Where(type => type.Name == "gamedataProbeInternal_Record")
+            .ToArray());
+
+        Assert.Null(schema.Find("gamedataProbeInternal_Record"));
+
+        var failure = Assert.Single(schema.Failures);
+        Assert.Equal("gamedataProbeInternal_Record", failure.TypeName);
+        Assert.Null(failure.MemberName);
+        Assert.Contains("public surface", failure.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ATypeThatIsNotARecordClassAtAllIsStatedUnderItsOwnReason()
+    {
+        // A separate arm, so that one reason cannot come to stand for every
+        // way a record-named type fails to be read.
+        var schema = Derive(typeof(gamedataProbeNotARecordClass_Record));
+
+        Assert.Null(schema.Find("gamedataProbeNotARecordClass_Record"));
+
+        var failure = Assert.Single(schema.Failures);
+        Assert.Contains("not a record class", failure.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ATypeThatIsNotNamedLikeARecordTypeIsNotAnnouncedAtAll()
+    {
+        // The quiet arm. Announcing every type in an assembly that this source
+        // does not read would bury the announcements that matter.
+        // string is neither named like a record type nor a record class, so a
+        // source that announced everything it declined would announce it.
+        var schema = Derive(typeof(string), typeof(ProbeNotEvenNamedLikeOne));
+
+        Assert.Empty(schema.Failures);
+        Assert.Empty(schema.RecordTypeNames);
+    }
+
     private static RecordSchema Derive(params Type[] types) =>
         RecordSchemaDerivation.Derive(new ReflectedRecordTypeSource(types, "types written for this test"));
 }

@@ -72,10 +72,28 @@ public sealed class ReflectedRecordTypeSource : IRecordTypeSource
         var shapes = new Dictionary<string, RecordTypeShape>(StringComparer.Ordinal);
         var seen = new Dictionary<string, Type>(StringComparer.Ordinal);
 
-        var recordTypes = _types
-            .Where(IsUsableRedClass)
-            .Where(type => RecordTypeNaming.IsRecordTypeName(type.Name))
-            .OrderBy(type => type.Name, StringComparer.Ordinal);
+        // A record-named type this source will not read is stated rather than
+        // dropped. A consumer asking for one that is absent gets the same null
+        // whether the game has no such type or this source declined to read
+        // the one it has, and those are different answers to the same
+        // question.
+        var recordTypes = new List<Type>();
+        foreach (var type in _types.OrderBy(type => type.Name, StringComparer.Ordinal))
+        {
+            if (!RecordTypeNaming.IsRecordTypeName(type.Name))
+            {
+                continue;
+            }
+
+            var declined = WhyNotUsableRedClass(type);
+            if (declined is null)
+            {
+                recordTypes.Add(type);
+                continue;
+            }
+
+            failures.Add(new DerivationFailure(type.Name, null, declined));
+        }
 
         foreach (var recordType in recordTypes)
         {
@@ -144,10 +162,32 @@ public sealed class ReflectedRecordTypeSource : IRecordTypeSource
             + "type - the whole remainder of the chain is gone, not only the clashing type's own fields."));
     }
 
-    private static bool IsUsableRedClass(Type type) =>
-        type.IsPublic
-        && !type.IsGenericTypeDefinition
-        && typeof(RedBaseClass).IsAssignableFrom(type);
+    // Null where the type can be read. A sentence where it cannot, because the
+    // caller's next question is which of these it was.
+    private static string? WhyNotUsableRedClass(Type type)
+    {
+        if (!typeof(RedBaseClass).IsAssignableFrom(type))
+        {
+            return "This is named like a record type but is not a record class in the type model, so it "
+                + "declares no fields this schema could carry and it is not in this schema.";
+        }
+
+        if (type.IsGenericTypeDefinition)
+        {
+            return "This is a generic type definition, which has no one field set to derive from, so it is "
+                + "not in this schema.";
+        }
+
+        // Nested counts. A public type nested inside another reports IsPublic
+        // as false, so testing that alone drops a type that is on the public
+        // surface - and drops it for a reason nobody stated.
+        if (!type.IsPublic && !type.IsNestedPublic)
+        {
+            return "This type is not on the public surface, so it is not in this schema.";
+        }
+
+        return null;
+    }
 
     private static RecordTypeShape ShapeOf(Type type, List<DerivationFailure> failures)
     {

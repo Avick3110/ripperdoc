@@ -89,3 +89,33 @@ public class gamedataProbeNestedUnmappable_Record : RedBaseClass
 public sealed class ProbeUnmappableElement : IRedType
 {
 }
+
+/// <summary>A record-named type that is not a record class in the type model.</summary>
+public class gamedataProbeNotARecordClass_Record
+{
+    /// <summary>A property nothing should read.</summary>
+    public float Speed { get; set; }
+}
+
+/// <summary>A type that is not named like a record type and never was.</summary>
+public class ProbeNotEvenNamedLikeOne : RedBaseClass
+{
+    /// <summary>A field on a type this source has no reason to mention.</summary>
+    [RED("whatever")]
+    public CFloat Whatever { get; set; } = new();
+}
+
+/// <summary>A type whose only purpose is to have a record type nested inside it.</summary>
+public static class ProbeNesting
+{
+    /// <summary>
+    /// A record type that is public and nested, which the runtime reports as
+    /// IsPublic false and IsNestedPublic true.
+    /// </summary>
+    public class gamedataProbeNested_Record : RedBaseClass
+    {
+        /// <summary>An ordinary field on a nested type.</summary>
+        [RED("nestedField")]
+        public CFloat NestedField { get; set; } = new();
+    }
+}
