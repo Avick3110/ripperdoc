@@ -19,10 +19,19 @@ namespace Ripperdoc.Core.Tests;
 /// </remarks>
 internal sealed class SyntheticTweakLayer : IDisposable
 {
-    private SyntheticTweakLayer(string root) => Root = root;
+    private SyntheticTweakLayer(string root, IReadOnlyList<string> declared)
+    {
+        Root = root;
+        Declared = declared;
+    }
 
     /// <summary>The layer's directory.</summary>
     internal string Root { get; }
+
+    /// <summary>
+    /// The paths this layer was built from, in the order they were given.
+    /// </summary>
+    internal IReadOnlyList<string> Declared { get; }
 
     /// <summary>
     /// Build a layer from paths and contents.
@@ -36,7 +45,7 @@ internal sealed class SyntheticTweakLayer : IDisposable
         var root = Path.Combine(Path.GetTempPath(), "tweak-layer-" + Guid.NewGuid().ToString("N")[..12]);
         Directory.CreateDirectory(root);
 
-        var layer = new SyntheticTweakLayer(root);
+        var layer = new SyntheticTweakLayer(root, files.Select(file => file.Path).ToArray());
 
         foreach (var (path, content) in files)
         {
@@ -54,9 +63,32 @@ internal sealed class SyntheticTweakLayer : IDisposable
     internal static SyntheticTweakLayer OfEmpty(params string[] paths) =>
         Of(paths.Select(path => (path, string.Empty)).ToArray());
 
-    /// <summary>Enumerate this layer.</summary>
+    /// <summary>
+    /// Enumerate this layer by walking its directory.
+    /// </summary>
     /// <returns>The layer in read order.</returns>
+    /// <remarks>
+    /// For checks about the walk itself. The order a directory hands back is
+    /// the volume's business and differs between filesystems, so a check that
+    /// asserts a particular order after calling this is asserting a property of
+    /// the machine it runs on. Everything downstream of the walk uses
+    /// <see cref="EnumerateAsDeclared"/> instead.
+    /// </remarks>
     internal TweakLayer Enumerate() => TweakLayer.Enumerate(Root);
+
+    /// <summary>
+    /// Build this layer from the order its files were declared in.
+    /// </summary>
+    /// <returns>The layer in read order.</returns>
+    /// <remarks>
+    /// The files are real and are really read; what is supplied is the walk
+    /// order, so a check downstream of the walk states the order it means
+    /// instead of inheriting one from whichever filesystem it runs on. Grouping
+    /// still applies on top, because that is the framework's rule and not the
+    /// volume's.
+    /// </remarks>
+    internal TweakLayer EnumerateAsDeclared() =>
+        TweakLayer.Of(Declared, TweakLayer.IsCollated(Declared));
 
     /// <summary>Enumerate and replay this layer.</summary>
     /// <returns>The resolved state.</returns>
@@ -64,7 +96,7 @@ internal sealed class SyntheticTweakLayer : IDisposable
         TweakInheritanceMap? inheritance = null,
         ITweakValueSource? values = null)
     {
-        var layer = Enumerate();
+        var layer = EnumerateAsDeclared();
 
         return TweakResolvedState.Replay(
             layer,

@@ -9,6 +9,26 @@ namespace Ripperdoc.Core.Tests;
 // evidence class of each part.
 public class TweakLayerTests
 {
+    // The walk is checked against a real directory, because a walk checked
+    // against a list of paths is a check of the list. What it must NOT do is
+    // assert the order the directory came back in: that order belongs to the
+    // volume, and the framework consumes it rather than sorting it, so a check
+    // that writes files and then expects them back in name order is asserting a
+    // property of whichever filesystem it happens to run on. Everything the
+    // walk owes is stated here relative to the enumeration it was given.
+    private static string[] TopLevelRunsOf(TweakLayer layer) => layer.Present
+        .Select(file => file.RelativePath.Split(TweakFile.PathSeparator)[0])
+        .Aggregate(new List<string>(), (runs, name) =>
+        {
+            if (runs.Count == 0 || runs[^1] != name)
+            {
+                runs.Add(name);
+            }
+
+            return runs;
+        })
+        .ToArray();
+
     [Fact]
     public void ADirectorysContentsAreReadAtTheDirectorysOwnPositionRatherThanAfterItsSiblings()
     {
@@ -18,12 +38,17 @@ public class TweakLayerTests
             "mmm0.yaml",
             "zzz.yaml");
 
-        var read = layer.Enumerate().Files.Select(file => file.RelativePath).ToArray();
+        var walked = layer.Enumerate();
+        var entries = Directory.EnumerateFileSystemEntries(layer.Root).Select(Path.GetFileName).ToArray();
 
-        // mmm0.yaml sorts before mmm\inner.yaml under any full-path comparison,
-        // because '0' is below '\'. It is read after, because the directory's
-        // contents are taken where the directory itself sits.
-        Assert.Equal(new[] { "aaa.yaml", "mmm\\inner.yaml", "mmm0.yaml", "zzz.yaml" }, read);
+        // Each top-level entry occupies one unbroken run in the walk, and those
+        // runs come in the order the directory gave the entries. A directory
+        // whose contents were emitted after its siblings, or split around them,
+        // breaks this whatever order the volume hands back - and the subdirectory
+        // here is the one that would move, because mmm0.yaml sorts before
+        // mmm\\inner.yaml under any full-path comparison and is read after it.
+        Assert.Equal(entries, TopLevelRunsOf(walked));
+        Assert.Equal(4, walked.Files.Count);
     }
 
     [Fact]
@@ -34,11 +59,47 @@ public class TweakLayerTests
             "mmm\\inner.yaml",
             "zzz.yaml");
 
-        var read = layer.Enumerate().Files.Select(file => file.RelativePath).ToArray();
+        var walked = layer.Enumerate();
+        var entries = Directory.EnumerateFileSystemEntries(layer.Root).Select(Path.GetFileName).ToArray();
 
-        // A files-first pass would put both root files before the subdirectory's,
-        // and a directories-first pass would put the subdirectory's before both.
-        Assert.Equal(new[] { "aaa.yaml", "mmm\\inner.yaml", "zzz.yaml" }, read);
+        // A files-first pass would put both root files before the subdirectory's
+        // whatever the enumeration said, and a directories-first pass would put
+        // the subdirectory's before both. Either one reorders the runs away from
+        // the order the directory gave them.
+        Assert.Equal(entries, TopLevelRunsOf(walked));
+    }
+
+    [Fact]
+    public void TheGroupingAndThePositionsFollowTheWalkGivenRatherThanAnyOrderOfTheirOwn()
+    {
+        // The same walk in two orders, neither of them sorted. What comes out
+        // has to be the grouping applied to the order it was given - so the
+        // second case is the one that matters: an engine that sorted anywhere
+        // would return the same answer twice, and on a volume whose enumeration
+        // is not collated it would then disagree with the game.
+        string[] collated = ["aaa.yaml", "mmm.yaml", "zzz.yaml"];
+        string[] notCollated = ["zzz.yaml", "aaa.yaml", "mmm.yaml"];
+
+        Assert.Equal(collated, TweakLayer.Of(collated, enumerationIsCollated: true)
+            .Files.Select(file => file.RelativePath));
+        Assert.Equal(notCollated, TweakLayer.Of(notCollated, enumerationIsCollated: false)
+            .Files.Select(file => file.RelativePath));
+    }
+
+    [Fact]
+    public void TheGroupingOverrulesAWalkThatIsNotCollatedJustAsItOverrulesOneThatIs()
+    {
+        // Grouping is the framework's rule and the walk order is the volume's,
+        // so the first must apply on top of the second whatever the second is.
+        string[] notCollated = ["zzz\\^held_back.yaml", "mmm.yaml", "aaa\\_promoted.yaml"];
+
+        var layer = TweakLayer.Of(notCollated, enumerationIsCollated: false);
+
+        Assert.Equal(
+            new[] { "aaa\\_promoted.yaml", "mmm.yaml", "zzz\\^held_back.yaml" },
+            layer.Files.Select(file => file.RelativePath));
+        Assert.Equal(new[] { 1, 2, 3 }, layer.Files.Select(file => file.ReadPosition));
+        Assert.False(layer.EnumerationIsCollated);
     }
 
     [Theory]
@@ -112,17 +173,24 @@ public class TweakLayerTests
     [Fact]
     public void AMarkedDirectoryStillLeadsTheWalkSoTheTwoMechanismsCompose()
     {
-        using var layer = SyntheticTweakLayer.OfEmpty(
+        // Two files here are in the same group, so what separates them is the
+        // walk - and the walk's order belongs to the volume. It is stated
+        // rather than produced by writing files and hoping, because the point
+        // being made is that the grouping composes with whatever order it is
+        // handed, not that a particular filesystem hands back a particular one.
+        string[] walked =
+        [
             "#marked_directory\\#marked_leaf.yaml",
             "#marked_directory\\ordinary.yaml",
-            "aaa\\ordinary.yaml");
+            "aaa\\ordinary.yaml",
+        ];
 
-        var read = layer.Enumerate().Files.Select(file => file.RelativePath).ToArray();
+        var read = TweakLayer.Of(walked, enumerationIsCollated: true)
+            .Files.Select(file => file.RelativePath).ToArray();
 
         // The leaf is promoted by its own name; its sibling is not, and keeps
         // the lead its directory's name gives it in the walk.
-        Assert.Equal(new[] { "#marked_directory\\#marked_leaf.yaml", "#marked_directory\\ordinary.yaml", "aaa\\ordinary.yaml" },
-            read);
+        Assert.Equal(walked, read);
     }
 
     [Fact]
@@ -180,11 +248,42 @@ public class TweakLayerTests
     }
 
     [Fact]
-    public void AnEnumerationThatIsAlreadyCollatedSaysSo()
+    public void TheCollationFlagReportsTheEnumerationRatherThanAConstant()
     {
-        using var layer = SyntheticTweakLayer.OfEmpty("aaa.yaml", "bbb\\inner.yaml", "ccc.yaml");
+        // Asserting "collated" of a real directory asserts something about the
+        // volume, not about this engine: some filesystems hand entries back in
+        // a collation and some do not, and the whole point of this flag is that
+        // the engine checks instead of assuming. So what is asserted is that it
+        // reports what the enumeration actually was.
+        using var layer = SyntheticTweakLayer.OfEmpty("aaa.yaml", "bbb.yaml", "ccc.yaml");
+
+        var entries = Directory.EnumerateFileSystemEntries(layer.Root).ToArray();
+
+        Assert.Equal(TweakLayer.IsCollated(entries), layer.Enumerate().EnumerationIsCollated);
+    }
+
+    [Fact]
+    public void ALayerOfOneFileIsCollatedOnAnyVolume()
+    {
+        // The one arm that is a fact about the engine rather than about the
+        // filesystem: a single entry cannot be out of order with anything, so
+        // this holds wherever it runs and fails if the flag is hardcoded false
+        // or dropped.
+        using var layer = SyntheticTweakLayer.OfEmpty("only.yaml");
 
         Assert.True(layer.Enumerate().EnumerationIsCollated);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ALayerCarriesTheCollationItWasBuiltWith(bool collated)
+    {
+        // Both answers reach the layer, which is what a caller reading a report
+        // depends on. Through a directory the false one is unreachable on a
+        // volume that collates, so it is stated here instead of left as a branch
+        // nobody has seen carried.
+        Assert.Equal(collated, TweakLayer.Of(["only.yaml"], collated).EnumerationIsCollated);
     }
 
     [Theory]
