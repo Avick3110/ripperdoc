@@ -271,7 +271,7 @@ against a real shipped database or not at all.
 | 1 | Buffer ceiling at scale | The *claim* about prevalence | 6 | **Closed — it is a curve, not a ceiling problem.** Successor question: per-mod apportionment of shared pooled values |
 | 2 | Mod-declared record types at scale | Modded-coverage claims | 6 | **Closed — none found**, two samples, version-robust. Successor moved to wave 2: mods name **properties** the schema lacks, routinely |
 | 3 | Archives absent from a partial list | Archive-layer completeness | 3 | **Closed.** Unlisted load after every listed — [published](findings/2026-08-19-archive-load-order.md). Residue: unlisted-vs-unlisted order, unmeasured, labelled |
-| 4 | Tweak subdirectory ordering | Replay correctness | 2 | **Closed** — the only item that ever gated a capability. [Published](findings/2026-08-19-tweak-file-order.md). Residue: the collation limit, labelled |
+| 4 | Tweak subdirectory ordering | Replay correctness | 2 | **Closed** — the only item that ever gated a capability. [Published](findings/2026-08-19-tweak-file-order.md), and **superseded 2026-08-22** by [the three-group law](findings/2026-08-22-tweak-file-order-groups.md), which the original instrument could not see. Residue: the grouping is source-derived pending one boot |
 | 5 | CR2W parse validation | CR2W lane confidence | 8 | **OPEN.** Designed, not run. Gates confidence, not capability |
 | 6 | Third-party conflict-listing tool evaluation | Archive-layer design | 3 | **Closed — SKIP.** It cannot report a conflict at any corpus size. Wave 3 inherits nothing from it |
 | 7 | Deployment shapes | The deployment-agnostic claim | 3 | **Partly closed.** Two shapes measured; the third is a channel boundary only — converted into 7a |
@@ -330,7 +330,7 @@ and its status: `OPEN`, `RUN <date> → result`, or `WAIVED <date>, Aaron,
 | # | Deferred check | Origin | Status |
 |---|---|---|---|
 | 1 | Ordering among archives that are all unlisted | Archive-order measurement; unobservable in that design | **OPEN** — labelled assumption in the finding |
-| 2 | Whether the tweak framework sorts, or consumes an already-collated enumeration | Tweak-order measurement, single NTFS volume | **OPEN** — would be settled by running the same tree from a non-collating volume |
+| 2 | Whether the tweak framework sorts, or consumes an already-collated enumeration | Tweak-order measurement, single NTFS volume | **RUN 2026-08-22 → it consumes; there is no sort.** Settled from the framework's source at the shipped tag, [published](findings/2026-08-22-tweak-file-order-groups.md). The limit the finding labelled is therefore real rather than open: on a volume whose enumeration is not collated the winner differs. The engine takes the enumeration as it comes and reports per run whether it was collated |
 | 3 | Per-mod apportionment of shared pooled values | Buffer-ceiling measurement | **OPEN** — wave 6 |
 | 4 | Whether mods name properties the schema lacks, and how often | Mod-declared-types measurement | **OPEN** — wave 2 |
 | 5 | How the game addresses a name carrying a character outside ASCII | Wave 1a. The pinned conversion replaces such a character with a placeholder, so two different names come out as one identifier; the engine refuses the name rather than reproduce the collision | **OPEN** — would be settled by a mod-authored name outside ASCII, resolved in game and read back. Until then the refusal is a labelled limit, not a measured rule |
