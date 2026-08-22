@@ -28,11 +28,18 @@ chains, budget arithmetic - with nothing of CDPR's anywhere near it.
 |---|---|---|
 | **(i) synthetic** | nothing but this repository | CI, and locally |
 | **(ii) local, shipped database** | the user's own installed game data | the developer's machine only |
-| **(ii) local, installed tweak layer** | a real install's tweak directory | the developer's machine only |
+| **(ii) local, installed tweak layer** | a real install's tweak lane — the tweak directory, the framework's own metadata, and the shipped database | the developer's machine only |
 | **(iii) local, RTTI dump** | a dump generated from the user's own install | the developer's machine only |
 
-The two tier (ii) inputs are separate because a machine can have one and not the
-other, and because they behave differently under a check. The database is a file
+The tier (ii) inputs are named separately because a machine can have one and not
+another, and because they behave differently under a check. The tweak-layer tier
+needs all of its own: the framework's metadata declares properties and
+inheritance the type model does not have, and the database's values decide
+whether a copy still follows what it was copied from. **A check there does not
+fall back to a smaller answer when one input is missing** — it reports the route
+as not walked, because the smaller answer is not less complete, it is wrong.
+
+The database is a file
 that can be fingerprinted, so checks over it reproduce counts measured against
 one build and announce any other build as an input they do not apply to. An
 installed tweak layer is a directory whose contents change whenever its owner

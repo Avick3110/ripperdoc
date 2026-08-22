@@ -22,7 +22,7 @@ namespace Ripperdoc.Core.Tweak;
 /// everything the artifact is ever pasted into.
 /// </para>
 /// </remarks>
-public sealed class TweakDatabaseSource : IShippedRecordSource
+public sealed class TweakDatabaseSource : IShippedRecordSource, ITweakValueSource
 {
     /// <summary>
     /// The type name reported for a record whose own type the database does not
@@ -172,6 +172,42 @@ public sealed class TweakDatabaseSource : IShippedRecordSource
             Path.GetFileName(path),
             fingerprint,
             database.GetFlats().Count);
+    }
+
+    /// <inheritdoc />
+    public bool HoldsRecord(ulong identifier) => _database.Records.Exists(identifier);
+
+    /// <inheritdoc />
+    public bool HoldsValue(ulong identifier) => _database.Flats.Exists(identifier);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Compared by value rather than by whatever handle the reader hands back.
+    /// The database pools its values, so equal values share storage in the file
+    /// - but that is the file's arrangement, and a reader is free to give every
+    /// lookup its own object. Comparing what the reader returns would then find
+    /// nothing equal to anything, and the answer would be that no copy still
+    /// follows its source anywhere.
+    /// </remarks>
+    public bool ValuesMatch(ulong left, ulong right)
+    {
+        if (!_database.Flats.Exists(left) || !_database.Flats.Exists(right))
+        {
+            return false;
+        }
+
+        var leftValue = _database.Flats.GetValue(left);
+        var rightValue = _database.Flats.GetValue(right);
+
+        if (leftValue is null || rightValue is null)
+        {
+            // One side unreadable is not agreement. Reported as a difference so
+            // that a value which cannot be compared stops a propagation rather
+            // than being carried through one that was never checked.
+            return false;
+        }
+
+        return leftValue.GetType() == rightValue.GetType() && leftValue.Equals(rightValue);
     }
 
     /// <inheritdoc />

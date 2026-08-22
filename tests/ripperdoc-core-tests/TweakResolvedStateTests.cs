@@ -217,11 +217,15 @@ public class TweakResolvedStateTests
         var enumerated = layer.Enumerate();
 
         var tooFew = Assert.Throws<ArgumentException>(
-            () => TweakResolvedState.Replay(enumerated, []));
+            () => TweakResolvedState.Replay(enumerated, [], TweakInheritanceMap.None, null));
         Assert.Contains("1 files and 0 documents", tooFew.Message, StringComparison.Ordinal);
 
         var wrongFile = Assert.Throws<ArgumentException>(
-            () => TweakResolvedState.Replay(enumerated, [new TweakDocument("other\\b.yaml", [], true)]));
+            () => TweakResolvedState.Replay(
+                enumerated,
+                [new TweakDocument("other\\b.yaml", [], true)],
+                TweakInheritanceMap.None,
+                null));
         Assert.Contains("other\\b.yaml", wrongFile.Message, StringComparison.Ordinal);
     }
 
