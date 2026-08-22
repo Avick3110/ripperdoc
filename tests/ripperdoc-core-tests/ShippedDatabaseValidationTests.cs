@@ -37,6 +37,39 @@ public class ShippedDatabaseValidationTests : IClassFixture<ShippedDatabaseFixtu
     public ShippedDatabaseValidationTests(ShippedDatabaseFixture fixture) => _fixture = fixture;
 
     [Fact]
+    public void TheDatabaseAnswersWhetherTwoValuesAreTheSameValue()
+    {
+        // This predicate decides whether a record the shipped data copied still
+        // follows what it was copied from, and therefore whether a write to the
+        // source moves it. Everywhere else it is exercised through a hand-built
+        // stand-in whose comparison shares no code with this one, so without
+        // this check the real implementation runs only where nothing asserts on
+        // it.
+        var source = _fixture.Database;
+
+        var values = source.Records
+            .Select(record => record.Identifier)
+            .SelectMany(identifier => new[] { "name", "displayName", "entityName" }
+                .Select(field => TweakIdentifier.TryForField(identifier, field, out var flat) ? flat : 0UL))
+            .Where(identifier => identifier != 0 && source.HoldsValue(identifier))
+            .Take(2)
+            .ToArray();
+
+        Assert.Equal(2, values.Length);
+
+        // A value is the same value as itself, and absence is not agreement -
+        // an identifier the database does not hold agrees with nothing, because
+        // treating it as equal would propagate a value onto a record that has
+        // no such value at all.
+        Assert.True(source.ValuesMatch(values[0], values[0]));
+        Assert.False(source.ValuesMatch(values[0], 0UL));
+        Assert.False(source.ValuesMatch(0UL, 0UL));
+
+        Assert.True(source.HoldsRecord(source.Records.First().Identifier));
+        Assert.False(source.HoldsRecord(0UL));
+    }
+
+    [Fact]
     public void TheDatabaseHoldsWhatThisPortWasMeasuredAgainst()
     {
         // The database's identity is not asserted here: the fixture refuses to
@@ -230,14 +263,4 @@ public sealed class ShippedDatabaseFixture
     public ValidationManifest Manifest { get; }
 
     public SchemaIr Artifact { get; }
-}
-
-/// <summary>Which tier a check belongs to, as a trait the gate can filter on.</summary>
-public static class TierTrait
-{
-    public const string Name = "Tier";
-
-    public const string ShippedDatabase = "ShippedDatabase";
-
-    public const string InstalledTweakLayer = "InstalledTweakLayer";
 }

@@ -120,12 +120,33 @@ tool that sorts would confidently disagree with the game.
 **check** whether it is already collated rather than assuming it. A layer whose
 enumeration is not collated is one where every ordering claim has to say so.
 
+## Which files are read at all, and how the extension is matched
+
+The same file that carries the grouping decides which reader a file goes to, by
+its extension: `.yaml` and `.yml` to the YAML reader, `.tweak` to the reader for
+the other tweak language. Anything else is not read.
+
+**The comparison is case-sensitive**, so a file whose extension is spelled with
+any capital — `Thing.YAML` — is not read by the framework at all. That follows
+from the same source as the grouping: the extension is compared against wide
+string literals with the standard library's path comparison, which compares the
+text rather than folding case.
+
+**This is a source reading, at the same evidence class as the grouping above,
+and it has not been observed in a running game.** It is called out separately
+because getting it wrong is asymmetric: a tool that reads such a file puts
+values into its resolved state that the game does not have, which is a silent
+wrong answer. A tool that declines to read one reports the file as passed over,
+by name, where a reader can see it and disagree.
+
 ## Where this stops
 
 - **The grouping is source-derived, not yet observed in a boot.** Stated above,
   and repeated here because it is the load-bearing limit of this document.
 - **The four first-group markers and the one last-group marker are read from
   the source literals.** No boot has confirmed each character individually.
+- **The case-sensitive extension match is source-derived and unobserved**, as
+  stated above.
 - **Nothing here measures what happens when two files in the same group and the
   same directory contest a value** beyond what the superseded document already
   established: the later-read one wins.

@@ -79,18 +79,31 @@ public class InstalledTweakLayerTests
 
         _output.WriteLine(Report(state));
 
-        // The accounting has to close. A file that is neither replayed nor named
-        // is a file whose writes could be deciding a value this state reports on,
-        // with nothing saying so.
-        var replayed = layer.Files
-            .Where(file => file.Format == TweakFileFormat.Yaml)
-            .Select(file => file.RelativePath);
-        var named = state.Unhandled.Select(unhandled => unhandled.Path)
+        // The accounting has to close, against what was actually read rather
+        // than against what could have been. A file whose extension says it is
+        // replayable but which parsed to nothing is not evidence that it was
+        // replayed - counting it as such is what makes an accounting check
+        // unable to fail.
+        var documents = TweakFileReader.ReadLayer(layer, LayerPath);
+        var readFrom = documents
+            .Where(document => document.IsReadable && document.Statements.Count > 0)
+            .Select(document => document.RelativePath);
+        var named = documents
+            .Where(document => !document.IsReadable || document.Unhandled.Any())
+            .Select(document => document.RelativePath)
             .Concat(layer.Unread.Select(file => file.RelativePath));
 
-        Assert.Empty(layer.Present
+        var unaccounted = layer.Present
             .Select(file => file.RelativePath)
-            .Except(replayed.Concat(named), StringComparer.Ordinal));
+            .Except(readFrom.Concat(named), StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (var path in unaccounted)
+        {
+            _output.WriteLine($"  unaccounted: {path}");
+        }
+
+        Assert.Empty(unaccounted);
     }
 
     [Fact]
@@ -131,11 +144,14 @@ public class InstalledTweakLayerTests
             var explanation = collision.Explain();
             Assert.Contains(collision.FlatName, explanation, StringComparison.Ordinal);
             Assert.Contains(collision.Winner.File.RelativePath, explanation, StringComparison.Ordinal);
-            Assert.Contains(TweakCollision.Describe(collision.Rule), explanation, StringComparison.Ordinal);
+            foreach (var rule in collision.Rules)
+            {
+                Assert.Contains(TweakCollision.Describe(rule), explanation, StringComparison.Ordinal);
+            }
 
             foreach (var overridden in collision.Overridden)
             {
-                Assert.NotEqual(collision.Winner.OriginDirectory, overridden.OriginDirectory);
+                Assert.NotEqual(collision.Winner.OriginDirectory, overridden.Contribution.OriginDirectory);
             }
         }
     }
@@ -174,11 +190,13 @@ public class InstalledTweakLayerTests
         Assert.True(reading.UnknownPropertiesWereCounted);
 
         _output.WriteLine(
-            $"{reading.RecordsWithAResolvedType} record(s) declared with a resolvable type; "
-            + $"{reading.RecordsWithNoResolvedType.Count} record(s) written to whose type needs the shipped database.");
+            $"{reading.RecordsWithAResolvedType} record(s) written to whose type resolved; "
+            + $"{reading.RecordsWithNoResolvedType.Count} record(s) whose type this reading could not work out.");
         _output.WriteLine(
-            $"{reading.PropertiesChecked} property write(s) checked against the schema; "
-            + $"{reading.PropertiesTheSchemaLacks.Count} name(s) the schema does not have.");
+            $"{reading.PropertyWritesOnAResolvedType} property write(s) on a resolved type; "
+            + $"{reading.PropertiesChecked} checked; "
+            + $"{reading.PropertiesTheSchemaLacks.Count} name(s) neither source has; "
+            + $"{reading.PropertiesTheTypeModelAloneLacks} that the type model alone lacks.");
         _output.WriteLine($"{reading.TypesTheSchemaLacks.Count} declared type(s) the schema does not have.");
 
         foreach (var unknown in reading.TypesTheSchemaLacks)
@@ -197,15 +215,15 @@ public class InstalledTweakLayerTests
         // against a type or attributed to a record whose type this run could not
         // resolve. A write that is neither would be one the reading passed over
         // while reporting on the rest.
-        var writesOnRecords = documents
+        var writesOnARecord = documents
             .SelectMany(document => document.Writes)
-            .Count(write => write.OwningRecordName is not null);
-        var attributed = documents
+            .Count(write => write.FlatName.Contains(TweakFileReader.PropertySeparator, StringComparison.Ordinal));
+        var unresolved = documents
             .SelectMany(document => document.Writes)
-            .Count(write => write.OwningRecordName is { } name
+            .Count(write => Owner(write.FlatName) is { } name
                 && reading.RecordsWithNoResolvedType.Contains(name, StringComparer.Ordinal));
 
-        Assert.Equal(writesOnRecords, reading.PropertiesChecked + attributed);
+        Assert.Equal(writesOnARecord, reading.PropertyWritesOnAResolvedType + unresolved);
     }
 
     // The whole tier reads one install's tweak lane, so the inputs are gathered
@@ -217,6 +235,13 @@ public class InstalledTweakLayerTests
         TweakFileReader.ReadLayer(layer, LayerPath),
         TweakInheritanceMap.OpenReadOnly(Required(InheritanceVariableName)),
         TweakDatabaseSource.OpenReadOnly(Required(DatabaseVariableName)));
+
+    private static string? Owner(string flatName)
+    {
+        var separator = flatName.LastIndexOf(TweakFileReader.PropertySeparator);
+
+        return separator <= 0 ? null : flatName[..separator];
+    }
 
     private static string Report(TweakResolvedState state)
     {

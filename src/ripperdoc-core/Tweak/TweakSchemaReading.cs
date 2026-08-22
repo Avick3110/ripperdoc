@@ -30,9 +30,13 @@ public sealed class TweakSchemaReading
         int recordsWithAResolvedType,
         IReadOnlyList<string> recordsWithNoResolvedType,
         IReadOnlyList<UnknownRecordType> typesTheSchemaLacks,
+        int propertyWritesOnAResolvedType,
         int propertiesChecked,
+        int propertiesTheTypeModelAloneLacks,
         IReadOnlyList<UnknownProperty> propertiesTheSchemaLacks)
     {
+        PropertyWritesOnAResolvedType = propertyWritesOnAResolvedType;
+        PropertiesTheTypeModelAloneLacks = propertiesTheTypeModelAloneLacks;
         UnknownPropertiesWereCounted = unknownPropertiesWereCounted;
         PropertySourceDescription = propertySourceDescription;
         RecordsWithAResolvedType = recordsWithAResolvedType;
@@ -57,7 +61,17 @@ public sealed class TweakSchemaReading
     /// <summary>What the property set was resolved against.</summary>
     public string PropertySourceDescription { get; }
 
-    /// <summary>How many records the layer declares whose type the schema knows.</summary>
+    /// <summary>
+    /// How many records the layer writes to whose type the schema knows.
+    /// </summary>
+    /// <remarks>
+    /// Counted after resolution, not from the declarations. A record can be
+    /// declared with a type name that resolves to nothing, and counting the
+    /// declaration would put the same record in this number and in
+    /// <see cref="RecordsWithNoResolvedType"/> at once - which is how a report
+    /// comes to state two counts as though they partitioned the layer when they
+    /// overlap.
+    /// </remarks>
     public int RecordsWithAResolvedType { get; }
 
     /// <summary>
@@ -76,8 +90,34 @@ public sealed class TweakSchemaReading
     /// </remarks>
     public IReadOnlyList<UnknownRecordType> TypesTheSchemaLacks { get; }
 
-    /// <summary>How many property writes were checked against the schema.</summary>
+    /// <summary>
+    /// How many property writes were attributed to a record whose type resolved.
+    /// </summary>
+    public int PropertyWritesOnAResolvedType { get; }
+
+    /// <summary>
+    /// How many property writes were actually checked against the property set.
+    /// </summary>
+    /// <remarks>
+    /// Zero where <see cref="UnknownPropertiesWereCounted"/> is false. The check
+    /// does not run at all without the framework's metadata, so a count of
+    /// attributions reported as a count of checks would say work happened that
+    /// did not.
+    /// </remarks>
     public int PropertiesChecked { get; }
+
+    /// <summary>
+    /// How many property writes name something the type model alone does not
+    /// have.
+    /// </summary>
+    /// <remarks>
+    /// Counted whether or not the framework's metadata was supplied, because it
+    /// is the measurement of how much that metadata is carrying. The difference
+    /// between this and <see cref="PropertiesTheSchemaLacks"/> is what the
+    /// framework adds, and without a number for it there is no way to say
+    /// whether consulting it mattered.
+    /// </remarks>
+    public int PropertiesTheTypeModelAloneLacks { get; }
 
     /// <summary>
     /// Property writes naming something neither the type model nor the
@@ -144,14 +184,22 @@ public sealed class TweakSchemaReading
             }
         }
 
-        var propertiesChecked = 0;
+        var attributed = 0;
         var unknownProperties = new List<UnknownProperty>();
+        var typeModelAlone = 0;
         var unresolved = new SortedSet<string>(StringComparer.Ordinal);
+        var resolvedRecords = new SortedSet<string>(StringComparer.Ordinal);
 
         foreach (var (document, write) in documents
                      .SelectMany(document => document.Writes.Select(write => (document, write))))
         {
-            if (write.OwningRecordName is not { } recordName)
+            // A value written by its full name at the top level belongs to the
+            // record its name names, exactly as it does when a file writes it
+            // inside a record block. Skipping those would leave them in neither
+            // the checked count nor the unresolved one, and any claim about how
+            // much of the layer was examined would quietly exclude them.
+            var recordName = write.OwningRecordName ?? OwnerOf(write.FlatName);
+            if (recordName is null)
             {
                 continue;
             }
@@ -163,12 +211,18 @@ public sealed class TweakSchemaReading
                 continue;
             }
 
-            propertiesChecked++;
+            resolvedRecords.Add(recordName);
+            attributed++;
 
             var property = write.FlatName[(recordName.Length + 1)..];
-            if (extraFlats.IsPresent
-                && !type.Fields.ContainsKey(property)
-                && !extraFlats.Declares(typeName, property))
+            var inTypeModel = type.Fields.ContainsKey(property);
+
+            if (!inTypeModel)
+            {
+                typeModelAlone++;
+            }
+
+            if (extraFlats.IsPresent && !inTypeModel && !extraFlats.Declares(typeName, property))
             {
                 unknownProperties.Add(new UnknownProperty(
                     document.RelativePath,
@@ -182,11 +236,22 @@ public sealed class TweakSchemaReading
         return new TweakSchemaReading(
             extraFlats.IsPresent,
             $"{schema.SourceDescription}, plus {extraFlats.Description}",
-            declaredTypes.Count + clonedFrom.Count,
+            resolvedRecords.Count,
             unresolved.ToArray(),
             unknownTypes,
-            propertiesChecked,
+            attributed,
+            extraFlats.IsPresent ? attributed : 0,
+            typeModelAlone,
             unknownProperties);
+    }
+
+    // The record a full value name belongs to is everything before its last
+    // separator, which is how the framework decides the same question.
+    private static string? OwnerOf(string flatName)
+    {
+        var separator = flatName.LastIndexOf(TweakFileReader.PropertySeparator);
+
+        return separator <= 0 ? null : flatName[..separator];
     }
 
     // A clone takes its source's type, and a source can itself be a clone. The

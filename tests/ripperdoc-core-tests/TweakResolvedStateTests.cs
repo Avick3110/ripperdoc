@@ -17,9 +17,9 @@ public class TweakResolvedStateTests
         Assert.Equal("Probe.item.price", collision.FlatName);
         Assert.Equal("beta", collision.Winner.OriginDirectory);
         Assert.Equal("250", collision.Winner.ValueText);
-        Assert.Equal("alpha", Assert.Single(collision.Overridden).OriginDirectory);
-        Assert.Equal("100", Assert.Single(collision.Overridden).ValueText);
-        Assert.Equal(TweakDecisionRule.LastWriterInReadOrder, collision.Rule);
+        Assert.Equal("alpha", Assert.Single(collision.Overridden).Contribution.OriginDirectory);
+        Assert.Equal("100", Assert.Single(collision.Overridden).Contribution.ValueText);
+        Assert.Equal(TweakDecisionRule.LastWriterInReadOrder, Assert.Single(collision.Rules));
     }
 
     [Fact]
@@ -33,7 +33,7 @@ public class TweakResolvedStateTests
         var explanation = collision.Explain();
 
         Assert.Equal(2, collision.Winner.File.ReadPosition);
-        Assert.Equal(2, Assert.Single(collision.Overridden).Line);
+        Assert.Equal(2, Assert.Single(collision.Overridden).Contribution.Line);
         Assert.Contains("alpha\\prices.yaml:2", explanation, StringComparison.Ordinal);
         Assert.Contains("beta\\prices.yaml:1", explanation, StringComparison.Ordinal);
         Assert.Contains("read 2 of the layer", explanation, StringComparison.Ordinal);
@@ -146,7 +146,7 @@ public class TweakResolvedStateTests
         var collision = Assert.Single(state.Collisions, candidate => candidate.FlatName == "Probe.special.price");
 
         Assert.Equal("gamma", collision.Winner.OriginDirectory);
-        Assert.Equal(TweakDecisionRule.WrittenBeatsInherited, collision.Rule);
+        Assert.Equal(TweakDecisionRule.WrittenBeatsInherited, Assert.Single(collision.Rules));
 
         var explanation = collision.Explain();
         Assert.Contains("Probe.stock.price", explanation, StringComparison.Ordinal);
@@ -169,8 +169,8 @@ public class TweakResolvedStateTests
         var collision = Assert.Single(state.Collisions);
 
         Assert.Equal("aaa", collision.Winner.OriginDirectory);
-        Assert.Equal(TweakFileGroup.First, Assert.Single(collision.Overridden).File.Group);
-        Assert.Equal(TweakDecisionRule.GroupBeforeReadOrder, collision.Rule);
+        Assert.Equal(TweakFileGroup.First, Assert.Single(collision.Overridden).Contribution.File.Group);
+        Assert.Equal(TweakDecisionRule.GroupBeforeReadOrder, Assert.Single(collision.Rules));
         Assert.Contains("first character", collision.Explain(), StringComparison.Ordinal);
     }
 
@@ -239,5 +239,161 @@ public class TweakResolvedStateTests
         Assert.Empty(state.Flats);
         Assert.Empty(state.Collisions);
         Assert.Empty(state.Unhandled);
+    }
+
+    [Fact]
+    public void TwoLosersThatLostForDifferentReasonsAreEachToldTheirOwnReason()
+    {
+        using var layer = SyntheticTweakLayer.Of(
+            // alpha is promoted into the first group and read before both others.
+            // beta and gamma are in the same group, so beta loses on read order
+            // alone - and a rename would win it, which is not true for alpha.
+            ("alpha\\_early.yaml", "Probe.item.price: 100\n"),
+            ("beta\\b.yaml", "Probe.item.price: 200\n"),
+            ("gamma\\c.yaml", "Probe.item.price: 300\n"));
+
+        var collision = Assert.Single(layer.Replay().Collisions);
+
+        Assert.Equal("gamma", collision.Winner.OriginDirectory);
+        Assert.Equal(3, collision.OriginCount);
+
+        var byOrigin = collision.Overridden.ToDictionary(
+            write => write.Contribution.OriginDirectory,
+            write => write.Rule,
+            StringComparer.Ordinal);
+
+        Assert.Equal(TweakDecisionRule.GroupBeforeReadOrder, byOrigin["alpha"]);
+        Assert.Equal(TweakDecisionRule.LastWriterInReadOrder, byOrigin["beta"]);
+
+        var explanation = collision.Explain();
+        Assert.Contains(TweakCollision.Describe(TweakDecisionRule.GroupBeforeReadOrder), explanation, StringComparison.Ordinal);
+        Assert.Contains(TweakCollision.Describe(TweakDecisionRule.LastWriterInReadOrder), explanation, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheOriginCountCountsOriginsAndNotWrites()
+    {
+        using var layer = SyntheticTweakLayer.Of(
+            ("alpha\\one.yaml", "Probe.item.price: 100\n"),
+            ("alpha\\two.yaml", "Probe.item.price: 150\n"),
+            ("beta\\z.yaml", "Probe.item.price: 250\n"));
+
+        var collision = Assert.Single(layer.Replay().Collisions);
+
+        // Three writes, two mods. A reader told "three origins" goes looking
+        // for a mod that is not there.
+        Assert.Equal(2, collision.Overridden.Count);
+        Assert.Equal(2, collision.OriginCount);
+        Assert.Contains("is set by 2 origins", collision.Explain(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ARecordDeclaredTwiceKeepsTheFirstDeclarationsSource()
+    {
+        using var layer = SyntheticTweakLayer.Of(
+            ("alpha\\one.yaml", "Probe.first:\n  $type: gamedataProbeWidget_Record\n  price: 111\n"),
+            ("beta\\two.yaml", "Probe.second:\n  $type: gamedataProbeWidget_Record\n  price: 222\n"),
+            ("gamma\\a.yaml", "Probe.copy:\n  $base: Probe.first\n"),
+            ("gamma\\b.yaml", "Probe.copy:\n  $base: Probe.second\n"));
+
+        var state = layer.Replay();
+
+        // The framework keeps the first declaration it sees for a record, so a
+        // later one naming a different source changes nothing.
+        var copied = Assert.Single(state.Flats, flat => flat.Name == "Probe.copy.price");
+        Assert.Equal("111", copied.Winner!.ValueText);
+    }
+
+    [Fact]
+    public void OnlyARecordsOwnPropertiesComeAcrossWithAClone()
+    {
+        using var layer = SyntheticTweakLayer.Of(
+            ("alpha\\base.yaml", "Probe.stock.detail.nested: 5\nProbe.stock.price: 10\n"),
+            ("beta\\clone.yaml", "Probe.special:\n  $base: Probe.stock\n"));
+
+        var state = layer.Replay();
+
+        // A clone takes the record's own properties. Probe.stock.detail.nested
+        // belongs to Probe.stock.detail, not to Probe.stock, and copying it
+        // would invent a value on a record nothing declared.
+        Assert.Contains(state.Flats, flat => flat.Name == "Probe.special.price");
+        Assert.DoesNotContain(state.Flats, flat => flat.Name.StartsWith("Probe.special.detail", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(0, FlatAddressing.Addressable)]
+    [InlineData(1, FlatAddressing.NameTooLong)]
+    public void TheNameLengthBoundaryIsWhereTheIdentifierStopsBeingDefined(int over, FlatAddressing expected)
+    {
+        // The guard's whole content is this edge: a name of exactly the longest
+        // length has an identifier, and one byte more has none.
+        const string prefix = "Probe.";
+        var name = prefix + new string('n', TweakIdentifier.MaxNameLength - prefix.Length + over);
+        Assert.Equal(TweakIdentifier.MaxNameLength + over, name.Length);
+
+        using var layer = SyntheticTweakLayer.Of(("alpha\\a.yaml", $"{name}: 1\n"));
+
+        var state = layer.Replay();
+
+        if (expected == FlatAddressing.Addressable)
+        {
+            Assert.Equal(name, Assert.Single(state.Flats).Name);
+            Assert.Empty(state.Unaddressable);
+        }
+        else
+        {
+            Assert.Empty(state.Flats);
+            Assert.Equal(expected, Assert.Single(state.Unaddressable).Addressing);
+        }
+    }
+
+    [Fact]
+    public void TwoFilesAtTheLayerRootAreSeparateOriginsBecauseNothingSaysOtherwise()
+    {
+        using var layer = SyntheticTweakLayer.Of(
+            ("one.yaml", "Probe.item.price: 100\n"),
+            ("two.yaml", "Probe.item.price: 250\n"));
+
+        var collision = Assert.Single(layer.Replay().Collisions);
+
+        // A file at the root has no directory to be grouped by, so each is its
+        // own origin. That is right for the single-file mods that live there
+        // and wrong for two files one mod dropped side by side - and the report
+        // says which file, so a reader can see which case they have.
+        Assert.Equal("two.yaml", collision.Winner.OriginDirectory);
+        Assert.Equal("one.yaml", Assert.Single(collision.Overridden).Contribution.OriginDirectory);
+    }
+
+    [Fact]
+    public void ACloneOfACloneTakesTheValueThatWonRatherThanOneThatLost()
+    {
+        using var layer = SyntheticTweakLayer.Of(
+            ("a_alpha\\gen1.yaml", "Probe.gen1:\n  $type: gamedataProbeWidget_Record\n  price: 100\n"),
+            ("b_beta\\gen2.yaml", "Probe.gen2:\n  $base: Probe.gen1\n"),
+            ("c_gamma\\write.yaml", "Probe.gen2.price: 555\n"),
+            ("d_delta\\gen3.yaml", "Probe.gen3:\n  $base: Probe.gen2\n"));
+
+        var state = layer.Replay();
+
+        // gen2 inherits 100 and is then written to by name, so 555 wins there.
+        // gen3 clones gen2, and what it copies is the value gen2 actually holds.
+        Assert.Equal("555", Assert.Single(state.Flats, flat => flat.Name == "Probe.gen2.price").Winner!.ValueText);
+        Assert.Equal("555", Assert.Single(state.Flats, flat => flat.Name == "Probe.gen3.price").Winner!.ValueText);
+    }
+
+    [Fact]
+    public void ACloneOfARecordWhoseValueIsOnlyMutatedGainsNoEmptyValue()
+    {
+        using var layer = SyntheticTweakLayer.Of(
+            ("alpha\\base.yaml", "Probe.stock.entries:\n  - !append Probe.one\n"),
+            ("beta\\clone.yaml", "Probe.special:\n  $base: Probe.stock\n  label: special\n"));
+
+        var state = layer.Replay();
+
+        // Nothing replaced the base's list, so nothing came across. A value with
+        // no contributor is not a value the layer writes, and counting it would
+        // inflate every total taken from this list.
+        Assert.DoesNotContain(state.Flats, flat => flat.Name == "Probe.special.entries");
+        Assert.All(state.Flats, flat => Assert.NotEmpty(flat.Contributions));
     }
 }

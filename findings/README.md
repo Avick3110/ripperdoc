@@ -45,6 +45,19 @@ These are ARCHIVE documents: they record what was measured on a date, and they
 are not edited afterwards. A correction supersedes in a new document, which says
 what it supersedes and why.
 
+**What has been superseded, and by what.** A superseded document cannot carry a
+pointer forward — it was written before its successor existed and editing it is
+exactly what the class forbids — so the forward pointers live here, where they
+can be added in the same commit as the correction. Anyone arriving at one of the
+documents on the left is reading a law this project has since corrected.
+
+| Superseded | Superseded by | What changed |
+|---|---|---|
+| [2026-08-19 tweak file order](2026-08-19-tweak-file-order.md) | [2026-08-22 tweak file order: three groups](2026-08-22-tweak-file-order-groups.md) | The read order has three groups decided by the first character of each file's own name; the original instrument populated only the middle one |
+
+**A document with no row here has not been superseded.** An empty column is not
+the same as an unchecked one.
+
 **If you have measured something here differently, that is the most valuable
 report this project can receive.** Open a `[Docs]` issue with what you measured
 and how.

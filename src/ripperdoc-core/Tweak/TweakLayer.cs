@@ -80,6 +80,12 @@ public sealed class TweakLayer
     /// differs from it in some other respect would show up here as a
     /// disagreement, which is the outcome that keeps the claim honest.
     /// </para>
+    /// <para>
+    /// What this does is report. It does not change the walk and it does not
+    /// qualify anything by itself - the order used is the enumeration's either
+    /// way, because that is the order the framework consumes. A caller that
+    /// states an ordering conclusion is the one that has to carry this with it.
+    /// </para>
     /// </remarks>
     public bool EnumerationIsCollated { get; }
 
@@ -147,6 +153,35 @@ public sealed class TweakLayer
     }
 
     /// <summary>
+    /// Whether a directory enumeration is already in a case-insensitive
+    /// collation.
+    /// </summary>
+    /// <param name="entries">The entries, in the order the filesystem gave them.</param>
+    /// <returns>False if a collation would have put them in a different order.</returns>
+    /// <remarks>
+    /// Separated from the walk so that both answers can be checked. On a volume
+    /// whose enumeration is already collated - which is every volume this is
+    /// developed and tested on - the false answer is unreachable through a
+    /// directory, and a branch that cannot be reached is a branch nobody knows
+    /// the behaviour of.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="entries"/> is null.</exception>
+    public static bool IsCollated(IReadOnlyList<string> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+
+        for (var index = 1; index < entries.Count; index++)
+        {
+            if (StringComparer.OrdinalIgnoreCase.Compare(entries[index - 1], entries[index]) > 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Which group a file's own name puts it in.
     /// </summary>
     /// <param name="relativePath">The file's path within the layer.</param>
@@ -207,9 +242,7 @@ public sealed class TweakLayer
     {
         var entries = Directory.EnumerateFileSystemEntries(directoryPath).ToArray();
 
-        var sorted = entries.ToArray();
-        Array.Sort(sorted, StringComparer.OrdinalIgnoreCase);
-        if (!entries.SequenceEqual(sorted, StringComparer.Ordinal))
+        if (!IsCollated(entries))
         {
             collated = false;
         }

@@ -71,6 +71,31 @@ public class TweakFileReaderTests
     }
 
     [Fact]
+    public void AValueGivenAnExplicitTypeAndValueIsAWriteAndNotARecord()
+    {
+        // The form a file uses to create a loose value rather than a record.
+        // Read as a record declaration instead, the write disappears entirely -
+        // out of the resolved state, out of any contest over it, and out of the
+        // schema reading - with nothing saying so.
+        var document = ReadText("Probe.thing.amount:\n  $type: Int32\n  $value: 42\n");
+
+        var write = Assert.Single(document.Writes);
+
+        Assert.Equal("Probe.thing.amount", write.FlatName);
+        Assert.Equal("42", write.ValueText);
+        Assert.Equal(TweakWriteKind.Assignment, write.Kind);
+        Assert.Empty(document.Declarations);
+    }
+
+    [Fact]
+    public void AnExplicitlyTypedValueThatIsASequenceStillMutatesWhenTagged()
+    {
+        var document = ReadText("Probe.thing.list:\n  $type: array:String\n  $value:\n    - !append Probe.one\n");
+
+        Assert.Equal(TweakWriteKind.Mutation, Assert.Single(document.Writes).Kind);
+    }
+
+    [Fact]
     public void AnAttributeIsNeverReadAsAPropertyOrAsARecord()
     {
         var document = ReadText("""

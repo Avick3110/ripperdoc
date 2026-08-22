@@ -148,8 +148,10 @@ elif [ -z "$inheritance_path" ]; then
   skip "installed-tweak-layer checks" "needs the framework's inheritance metadata as well - tier (ii), local only; set $inheritance_variable to it to run this tier"
 elif [ ! -f "$inheritance_path" ]; then
   skip "installed-tweak-layer checks" "$inheritance_variable names a path with no file at it - a value moving from a shipped record to its copies cannot be replayed without it"
-elif [ -z "$tweakdb_path" ] || [ ! -f "$tweakdb_path" ]; then
+elif [ -z "$tweakdb_path" ]; then
   skip "installed-tweak-layer checks" "needs the shipped database as well, to decide whether a copy still follows what it was copied from - set $tweakdb_variable to one to run this tier"
+elif [ ! -f "$tweakdb_path" ]; then
+  skip "installed-tweak-layer checks" "$tweakdb_variable names a path with no file at it, and this tier needs the database's values to decide whether a copy still follows what it was copied from"
 else
   run "installed-tweak-layer checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=InstalledTweakLayer" -- RunConfiguration.TreatNoTestsAsError=true
 fi

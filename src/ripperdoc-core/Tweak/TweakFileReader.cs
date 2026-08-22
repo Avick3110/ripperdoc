@@ -172,9 +172,13 @@ public sealed class TweakFileReader
         var typeName = Attribute(mapping, TypeAttribute);
         var baseName = Attribute(mapping, BaseAttribute);
 
-        if (typeName is not null && Attribute(mapping, ValueAttribute) is not null)
+        // Asked for by presence, not by content. A value given this way can be
+        // a sequence or a mapping as easily as a scalar, and a test that only
+        // recognises a scalar drops the whole write - the write vanishes from
+        // the resolved state, from any contest over it and from the schema
+        // reading, with nothing saying so.
+        if (typeName is not null && Node(mapping, ValueAttribute) is { } valueNode)
         {
-            var valueNode = mapping.Children.First(pair => Scalar(pair.Key) == ValueAttribute).Value;
             statements.Add(WriteFor(name, valueNode, owningRecordName: null));
             return;
         }
@@ -249,12 +253,15 @@ public sealed class TweakFileReader
         _ => "<unreadable>",
     };
 
-    private static string? Attribute(YamlMappingNode mapping, string attribute) => mapping.Children
+    private static string? Attribute(YamlMappingNode mapping, string attribute) =>
+        Scalar(Node(mapping, attribute));
+
+    private static YamlNode? Node(YamlMappingNode mapping, string attribute) => mapping.Children
         .Where(pair => Scalar(pair.Key) == attribute)
-        .Select(pair => Scalar(pair.Value))
+        .Select(pair => pair.Value)
         .FirstOrDefault();
 
-    private static string? Scalar(YamlNode node) => (node as YamlScalarNode)?.Value;
+    private static string? Scalar(YamlNode? node) => (node as YamlScalarNode)?.Value;
 }
 
 /// <summary>
