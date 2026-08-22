@@ -191,7 +191,7 @@ public sealed class TweakLayer
     {
         ArgumentNullException.ThrowIfNull(relativePath);
 
-        var name = Path.GetFileName(relativePath);
+        var name = NameOf(relativePath);
         if (name.Length == 0)
         {
             return TweakFileGroup.Normal;
@@ -224,12 +224,27 @@ public sealed class TweakLayer
     {
         ArgumentNullException.ThrowIfNull(relativePath);
 
-        return Path.GetExtension(relativePath) switch
+        return Path.GetExtension(NameOf(relativePath)) switch
         {
             ".yaml" or ".yml" => TweakFileFormat.Yaml,
             ".tweak" => TweakFileFormat.Red,
             _ => TweakFileFormat.NotRead,
         };
+    }
+
+    // The file's own name, taken with the separator a layer path is written
+    // with rather than with whatever the running platform divides a path on.
+    // The two disagree in both directions - a platform where '\' is an
+    // ordinary character reads a whole layer path as one name, and one where
+    // '/' divides reads a name carrying it as two - and either way the
+    // character a file's group is decided by would come from somewhere other
+    // than the file's name. The answer has to be the same on every platform,
+    // because it decides which mod a report names.
+    private static string NameOf(string relativePath)
+    {
+        var separator = relativePath.LastIndexOf(TweakFile.PathSeparator);
+
+        return separator < 0 ? relativePath : relativePath[(separator + 1)..];
     }
 
     // Pre-order, with a directory's contents taken at the directory's own
