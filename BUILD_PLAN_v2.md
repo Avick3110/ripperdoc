@@ -233,7 +233,7 @@ dump-free and free of any game-derived bytes.
 | Tier | Covers | Runs |
 |---|---|---|
 | **(i) synthetic** | Most of the engine — replay ordering, collision detection, provenance, contributor chains, budget arithmetic | CI |
-| **(ii) local, shipped database** | Binary-parse smoke test; the validation sweep | Developer machine |
+| **(ii) local, shipped database** | Binary parse over stored values; the validation sweep | Developer machine |
 | **(iii) local, dump** | Drift gate; typed reference graph | Developer machine |
 
 Tier (iii) runs locally; CI asserts that it ran and that its output is current.
