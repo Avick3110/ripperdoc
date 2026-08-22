@@ -11,6 +11,12 @@
   <ItemGroup>
     <PackageVersion Include="WolvenKit.RED4" Version="8.20.0" />
     <PackageVersion Include="WolvenKit.Core" Version="8.20.0" />
+    <!-- The tweak layer is YAML with custom tags (the !append family) and anchors.
+         A stock parser is used rather than a hand-rolled subset reader: the layer
+         declares types as sequence items as well as mapping keys, so a line-anchored
+         parse loses a large share of them, and the mutation operators are YAML tags
+         rather than syntax this project would be free to reinterpret. -->
+    <PackageVersion Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
 
   <ItemGroup Label="Test">

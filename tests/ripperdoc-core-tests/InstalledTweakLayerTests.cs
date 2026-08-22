@@ -1,0 +1,167 @@
+using System.Globalization;
+using Ripperdoc.Core;
+using Ripperdoc.Core.Tweak;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace Ripperdoc.Core.Tests;
+
+/// <summary>
+/// The slice, end to end, over a real installed tweak layer.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Tier (ii): this reads a real install's tweak directory, which no runner has
+/// and which is other people's mod content that this project does not carry.
+/// The gate runs it when the environment names a layer and announces it as
+/// skipped, by name, when nothing does. Run outside the gate with no layer
+/// named, it fails rather than passing quietly.
+/// </para>
+/// <para>
+/// What is asserted here is what holds of any layer, not what holds of one
+/// install. A real layer changes whenever its owner installs a mod, so counts
+/// taken from one would turn an ordinary install into a red run - the numbers
+/// are reported instead, and the invariants are what fails.
+/// </para>
+/// </remarks>
+[Trait(TierTrait.Name, TierTrait.InstalledTweakLayer)]
+public class InstalledTweakLayerTests
+{
+    private readonly ITestOutputHelper _output;
+
+    public InstalledTweakLayerTests(ITestOutputHelper output) => _output = output;
+
+    /// <summary>
+    /// The environment variable naming the layer, derived from the brand rather
+    /// than spelled out, so a rebrand does not leave a stale name here.
+    /// </summary>
+    public static string VariableName => Branding.Name.ToUpperInvariant() + "_TWEAKS_PATH";
+
+    private static string LayerPath
+    {
+        get
+        {
+            var path = Environment.GetEnvironmentVariable(VariableName);
+
+            return string.IsNullOrWhiteSpace(path)
+                ? throw new InvalidOperationException(
+                    $"These checks read an installed tweak layer, which no runner has. Set {VariableName} to "
+                    + "one to run them. The gate script announces them as skipped, by name, when it cannot "
+                    + "run them - an absent layer is never reported as a pass.")
+                : path;
+        }
+    }
+
+    [Fact]
+    public void EveryFileInTheLayerIsEitherReplayedOrNamedAsSomethingThatWasNot()
+    {
+        var layer = TweakLayer.Enumerate(LayerPath);
+        var state = TweakResolvedState.Replay(layer, TweakFileReader.ReadLayer(layer, LayerPath));
+
+        _output.WriteLine(Report(state));
+
+        // The accounting has to close. A file that is neither replayed nor named
+        // is a file whose writes could be deciding a value this state reports on,
+        // with nothing saying so.
+        var replayed = layer.Files
+            .Where(file => file.Format == TweakFileFormat.Yaml)
+            .Select(file => file.RelativePath);
+        var named = state.Unhandled.Select(unhandled => unhandled.Path)
+            .Concat(layer.Unread.Select(file => file.RelativePath));
+
+        Assert.Empty(layer.Present
+            .Select(file => file.RelativePath)
+            .Except(replayed.Concat(named), StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void TheReadOrderRunsFirstGroupThenTheRestThenLastGroupWithoutGaps()
+    {
+        var layer = TweakLayer.Enumerate(LayerPath);
+
+        Assert.Equal(
+            Enumerable.Range(1, layer.Files.Count),
+            layer.Files.Select(file => file.ReadPosition));
+
+        var groups = layer.Files.Select(file => (int)file.Group).ToArray();
+        Assert.Equal(groups.OrderBy(group => group), groups);
+    }
+
+    [Fact]
+    public void EveryContestTheToolFindsIsExplainedRatherThanMerelyCounted()
+    {
+        var layer = TweakLayer.Enumerate(LayerPath);
+        var state = TweakResolvedState.Replay(layer, TweakFileReader.ReadLayer(layer, LayerPath));
+
+        _output.WriteLine(
+            $"{state.Collisions.Count} contested value(s) in this layer.");
+
+        foreach (var collision in state.Collisions)
+        {
+            _output.WriteLine(collision.Explain());
+
+            Assert.NotEmpty(collision.Overridden);
+            Assert.NotEqual(0UL, collision.Identifier);
+            Assert.Equal(TweakIdentifier.Of(collision.FlatName), collision.Identifier);
+
+            // The three the exit criterion asks for: the value, whose it is, and
+            // why. A contest missing any one of them is a count wearing a
+            // sentence.
+            var explanation = collision.Explain();
+            Assert.Contains(collision.FlatName, explanation, StringComparison.Ordinal);
+            Assert.Contains(collision.Winner.File.RelativePath, explanation, StringComparison.Ordinal);
+            Assert.Contains(TweakCollision.Describe(collision.Rule), explanation, StringComparison.Ordinal);
+
+            foreach (var overridden in collision.Overridden)
+            {
+                Assert.NotEqual(collision.Winner.OriginDirectory, overridden.OriginDirectory);
+            }
+        }
+    }
+
+    [Fact]
+    public void EveryValueTheLayerWritesIsAddressableOrIsNamedAsNotBeing()
+    {
+        var layer = TweakLayer.Enumerate(LayerPath);
+        var state = TweakResolvedState.Replay(layer, TweakFileReader.ReadLayer(layer, LayerPath));
+
+        _output.WriteLine(
+            $"{state.Flats.Count} value(s) addressable, {state.Unaddressable.Count} not.");
+
+        foreach (var name in state.Unaddressable)
+        {
+            _output.WriteLine($"  {name.Addressing}: {name.Name}");
+        }
+
+        Assert.All(state.Flats, flat => Assert.NotEqual(0UL, flat.Identifier));
+        Assert.All(state.Unaddressable, name => Assert.NotEmpty(name.Contributions));
+    }
+
+    private static string Report(TweakResolvedState state)
+    {
+        var layer = state.Layer;
+        var lines = new List<string>
+        {
+            $"{layer.Present.Count} file(s) present, {layer.Files.Count} read by the framework.",
+            $"  by format: "
+            + string.Join(", ", layer.Present
+                .GroupBy(file => file.Format)
+                .OrderBy(group => group.Key)
+                .Select(group => $"{group.Key} {group.Count().ToString(CultureInfo.InvariantCulture)}")),
+            $"  by group: "
+            + string.Join(", ", layer.Files
+                .GroupBy(file => file.Group)
+                .OrderBy(group => group.Key)
+                .Select(group => $"{group.Key} {group.Count().ToString(CultureInfo.InvariantCulture)}")),
+            $"  enumeration already collated: {layer.EnumerationIsCollated}",
+            $"{state.Flats.Count} value(s) written, {state.Collisions.Count} contested.",
+            $"{state.Unhandled.Count} construct(s) not replayed.",
+        };
+
+        lines.AddRange(state.Unhandled
+            .Select(unhandled => $"  not replayed: {unhandled.Summary}")
+            .Take(20));
+
+        return string.Join(Environment.NewLine, lines);
+    }
+}

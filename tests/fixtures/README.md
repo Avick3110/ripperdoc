@@ -28,7 +28,22 @@ chains, budget arithmetic - with nothing of CDPR's anywhere near it.
 |---|---|---|
 | **(i) synthetic** | nothing but this repository | CI, and locally |
 | **(ii) local, shipped database** | the user's own installed game data | the developer's machine only |
+| **(ii) local, installed tweak layer** | a real install's tweak directory | the developer's machine only |
 | **(iii) local, RTTI dump** | a dump generated from the user's own install | the developer's machine only |
+
+The two tier (ii) inputs are separate because a machine can have one and not the
+other, and because they behave differently under a check. The database is a file
+that can be fingerprinted, so checks over it reproduce counts measured against
+one build and announce any other build as an input they do not apply to. An
+installed tweak layer is a directory whose contents change whenever its owner
+installs a mod — so checks over it **assert what holds of any layer and report
+the numbers rather than asserting them.** A count taken from one install would
+turn somebody adding a mod into a failing engine.
+
+**Third-party mod content does not enter this repository either.** The rule
+about game bytes is not narrower than it looks: a tweak file shipped by a mod is
+someone else's work, and the synthetic fixtures for the replay are authored
+here with invented names for exactly that reason.
 
 A check that cannot run on the runner **self-skips and says so**. It never
 passes quietly, because a skipped check reported as green is the same lie as a
