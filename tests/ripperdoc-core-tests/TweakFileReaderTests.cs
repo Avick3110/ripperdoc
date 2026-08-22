@@ -268,6 +268,40 @@ public class TweakFileReaderTests
     }
 
     [Fact]
+    public void AValueThatContainsItselfIsRefusedByNameRatherThanEndingTheProcess()
+    {
+        // An alias to the anchor it sits inside makes the value graph circular.
+        // Rendering it by walking that graph never comes back, and the way it
+        // fails is the worst kind available: the host is gone before any
+        // handler runs, so there is no document, no note naming the file, and
+        // nothing in a report to say a layer was only partly read. Refused by
+        // name instead, which is what the rest of this reader does with a
+        // construct it will not claim to have replayed.
+        var document = ReadText("Probe.rec.a: &x\n  - 1\n  - *x\n");
+
+        Assert.Empty(document.Writes);
+
+        var unhandled = Assert.Single(document.Unhandled);
+        Assert.Equal("Probe.rec.a", unhandled.Path);
+        Assert.Contains("contains itself", unhandled.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnAnchorAliasedBesideItselfIsStillRendered()
+    {
+        // The other side of the guard above. One anchor used twice in the same
+        // value is an ordinary way to write a file and the game applies it, so
+        // a guard that refused every node it had already seen would report a
+        // value the layer really writes as one this engine could not read -
+        // and it would do it to a file with nothing wrong in it. What is
+        // circular is a value reaching itself, not a value repeating itself.
+        var document = ReadText("Probe.rec.b: [&y [1, 2], *y]\n");
+
+        Assert.Empty(document.Unhandled);
+        Assert.Equal("[[1, 2], [1, 2]]", Assert.Single(document.Writes).ValueText);
+    }
+
+    [Fact]
     public void AFileInTheOtherTweakLanguageComesBackNamedRatherThanParsedAsYaml()
     {
         using var layer = SyntheticTweakLayer.Of(("thing.tweak", "Probe.widget : ProbeWidget\n{\n  int amount = 7;\n}\n"));
