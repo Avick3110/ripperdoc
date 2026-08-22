@@ -92,8 +92,10 @@ public sealed class TweakResolvedState
     /// is non-empty, or where the question could not be asked at all.
     /// </remarks>
     public string? IndirectMovementLimit => !InheritanceWasExamined
-        ? "whether any value this layer writes sits on a record the shipped data was copied from was not "
-          + $"established - {InheritanceDescription}; a write to such a record moves the copies of it too"
+        // The description already opens with why it was not established, so
+        // this sentence supplies the question and lets it supply the reason.
+        ? "whether any value this layer writes sits on a record the shipped data was copied from was "
+          + $"{InheritanceDescription}; a write to such a record moves the copies of it too"
         : WritesOnAShippedBaseRecord.Count == 0
             ? null
             : $"{WritesOnAShippedBaseRecord.Count} value(s) this layer writes sit on records the shipped "
