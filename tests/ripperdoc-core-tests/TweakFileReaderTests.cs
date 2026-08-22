@@ -231,6 +231,90 @@ public class TweakFileReaderTests
     }
 
     [Fact]
+    public void AFileWithTheSameKeyTwiceIsRefusedWholeRatherThanHalfApplied()
+    {
+        // The framework's parser treats a repeated key as an error rather than
+        // keeping one of the two, and the framework loads and reads a file
+        // inside a single guarded block - so such a file loses every write it
+        // makes there as well. Refusing it here is agreement with the game, not
+        // strictness of our own, and it is loud either way.
+        var document = ReadText("Probe.thing.amount: 1\nProbe.other.amount: 2\nProbe.thing.amount: 3\n");
+
+        Assert.False(document.IsReadable);
+        Assert.Empty(document.Writes);
+        Assert.Single(document.Unhandled);
+    }
+
+    [Fact]
+    public void AnAnchorHolderAtTheTopLevelIsReadAsARecordBecauseThatIsWhatTheFrameworkDoes()
+    {
+        // A block written only to hang an anchor on is not marked as one, and
+        // nothing in the format distinguishes it from a record. The framework
+        // reads it as a record and so does this - which means two files naming
+        // their holder the same thing manufacture a contest over a value the
+        // game does not really have. That is worth knowing and is not worth
+        // diverging over: guessing which blocks are "really" holders would
+        // drop values that are records.
+        var document = ReadText("defaults: &d\n  price: 100\n");
+
+        var write = Assert.Single(document.Writes);
+        Assert.Equal("defaults.price", write.FlatName);
+    }
+
+    [Fact]
+    public void AMergeKeyIsReadAsAPropertyOfThatNameBecauseTheFrameworkDoesNotMergeEither()
+    {
+        // The framework's parser does not implement the merge key, so the
+        // record ends up with a property spelled "<<" and none of the merged
+        // ones. Resolving it here would put values into the resolved state that
+        // the game does not have, which is the one failure this engine must
+        // not have.
+        var document = ReadText("defaults: &d\n  price: 100\nProbe.thing:\n  $base: Probe.other\n  <<: *d\n");
+
+        Assert.Contains(document.Writes, write => write.FlatName == "Probe.thing.<<");
+        Assert.DoesNotContain(document.Writes, write => write.FlatName == "Probe.thing.price");
+    }
+
+    [Fact]
+    public void AMutationTagOnTheValueItselfIsAMutationAndNotAnAssignment()
+    {
+        // The operators that take another value by name carry their tag on the
+        // value rather than on an item of it. Read as an assignment, a write
+        // like this is reported as replacing the value - so two mods composing
+        // one list are reported as contesting it, and the reader is sent after
+        // a conflict that is not there.
+        var document = ReadText("Probe.thing.list: !append-from Probe.other\n");
+
+        var write = Assert.Single(document.Writes);
+        Assert.Equal(TweakWriteKind.Mutation, write.Kind);
+    }
+
+    [Fact]
+    public void AnInstructionAtTheTopLevelIsNamedRatherThanPassedOverInSilence()
+    {
+        // Some of these decide whether the framework reads the file at all. A
+        // replay that skips them without a word applies every write in a file
+        // the game may have declined to open.
+        var document = ReadText("$game: 2.31\nProbe.thing.amount: 1\n");
+
+        Assert.Equal("Probe.thing.amount", Assert.Single(document.Writes).FlatName);
+
+        var unhandled = Assert.Single(document.Unhandled);
+        Assert.Equal("$game", unhandled.Path);
+        Assert.Contains("does not act on", unhandled.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AFileOfNothingButInstructionsIsNamedRatherThanReadAsSayingNothing()
+    {
+        var document = ReadText("$game: 2.31\n$props: AutoFlats\n");
+
+        Assert.Empty(document.Writes);
+        Assert.Empty(document.Declarations);
+        Assert.Equal(new[] { "$game", "$props" }, document.Unhandled.Select(entry => entry.Path));
+    }
+
+    [Fact]
     public void AnEmptyFileIsReadableAndSaysNothing()
     {
         var document = ReadText(string.Empty);
