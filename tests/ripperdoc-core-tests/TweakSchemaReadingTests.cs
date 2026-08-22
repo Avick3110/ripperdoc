@@ -25,7 +25,12 @@ public class TweakSchemaReadingTests
     private static IReadOnlyList<TweakDocument> Documents(params (string Path, string Content)[] files)
     {
         using var layer = SyntheticTweakLayer.Of(files);
-        var enumerated = layer.Enumerate();
+
+        // Built from the declared order rather than walked. A record declared
+        // twice keeps the first declaration, so which file is read first can
+        // decide what a reading resolves - and taking that from the volume
+        // would make the answer depend on where the check ran.
+        var enumerated = layer.EnumerateAsDeclared();
 
         return TweakFileReader.ReadLayer(enumerated, layer.Root);
     }

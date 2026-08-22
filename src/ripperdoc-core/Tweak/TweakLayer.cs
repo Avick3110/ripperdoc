@@ -122,6 +122,49 @@ public sealed class TweakLayer
         var collated = true;
         Walk(directoryPath, string.Empty, walked, ref collated);
 
+        return Of(walked, collated);
+    }
+
+    /// <summary>
+    /// Build a layer from a walk that has already been performed.
+    /// </summary>
+    /// <param name="walked">
+    /// Every file under the layer, in the order the walk reached them, each by
+    /// its path within the layer.
+    /// </param>
+    /// <param name="enumerationIsCollated">
+    /// Whether the enumeration that walk came from was already in a
+    /// case-insensitive collation.
+    /// </param>
+    /// <returns>The layer, in read order.</returns>
+    /// <remarks>
+    /// <para>
+    /// The grouping and the read positions are a function of the walk and of
+    /// nothing else, so they are computed here rather than inside the directory
+    /// walk. What follows is that they can be exercised against a stated order:
+    /// a real directory hands back whatever order the filesystem holds, which
+    /// differs between filesystems, so a check that both writes the files and
+    /// asserts the order they come back in is asserting a property of the
+    /// volume it happens to run on.
+    /// </para>
+    /// <para>
+    /// It is also the seam a reader that does not walk a directory needs - a
+    /// layer presented through a manager's virtual filesystem arrives as an
+    /// ordered list, not as a path to enumerate.
+    /// </para>
+    /// <para>
+    /// Whether the enumeration was collated is stated by the caller rather than
+    /// worked out from <paramref name="walked"/>. The answer is a property of
+    /// each directory's own enumeration and this list is the flattened result of
+    /// several, so deriving it here would be a second rule for one fact, free to
+    /// disagree with the one the walk applied.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="walked"/> is null.</exception>
+    public static TweakLayer Of(IReadOnlyList<string> walked, bool enumerationIsCollated)
+    {
+        ArgumentNullException.ThrowIfNull(walked);
+
         // Grouped before positions are handed out, because the position a file
         // is reported at has to be the position its writes are judged from. A
         // position taken from the walk would disagree with the order the files
@@ -157,7 +200,7 @@ public sealed class TweakLayer
                 : new TweakFile(relativePath, GroupOf(relativePath), TweakFileFormat.NotRead, 0));
         }
 
-        return new TweakLayer(read, present, collated);
+        return new TweakLayer(read, present, enumerationIsCollated);
     }
 
     /// <summary>
