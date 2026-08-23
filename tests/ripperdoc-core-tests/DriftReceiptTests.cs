@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Ripperdoc.Core.Drift;
 using Xunit;
 
@@ -118,11 +119,74 @@ public class DriftReceiptTests
         // information is not this project's to publish. What diverged stays on
         // the machine that generated it; that it diverged, and whether the set
         // has changed since, is what travels.
-        var text = File.ReadAllText(ReceiptPath);
+        //
+        // Checked by what the file is allowed to hold rather than by looking
+        // for names it is not. A list of forbidden spellings is a list of
+        // today's divergences: it passes the moment the game names something it
+        // has not named before, which is exactly when this check matters. Here
+        // every key is one of a known set and every value is a number, a digest,
+        // or one of two strings this project wrote - so a name the game
+        // declares has nowhere in the file to be.
+        using var receipt = JsonDocument.Parse(File.ReadAllText(ReceiptPath));
+        var root = receipt.RootElement;
 
-        Assert.DoesNotContain("gamedata", text, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("TEXFMT", text, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("TCM_", text, StringComparison.Ordinal);
+        Assert.Equal(
+            new[]
+            {
+                "classesCompared", "dependency", "divergenceCounts", "divergenceFingerprint",
+                "enumMembersCompared", "enumsCompared", "generatedFrom",
+                "generatedTypeInformationFingerprint", "propertiesCompared", "readFailures",
+                "typeModelAssemblyIdentity",
+            },
+            root.EnumerateObject().Select(field => field.Name).OrderBy(name => name, StringComparer.Ordinal));
+
+        // The three that are text, each held against what this project put
+        // there rather than against a shape that a type name would also fit.
+        Assert.Equal(TypeModelReading.FromPinnedTypeModel().DependencyVersion, Text(root, "dependency"));
+        Assert.Equal(RttiDumpFixture.GeneratedDescription, Text(root, "generatedFrom"));
+        AssertIsDigest(Text(root, "typeModelAssemblyIdentity"), 32);
+        AssertIsDigest(Text(root, "generatedTypeInformationFingerprint"), 64);
+        AssertIsDigest(Text(root, "divergenceFingerprint"), 64);
+
+        foreach (var name in new[]
+                 {
+                     "classesCompared", "propertiesCompared", "enumsCompared", "enumMembersCompared",
+                     "readFailures",
+                 })
+        {
+            Assert.Equal(JsonValueKind.Number, root.GetProperty(name).ValueKind);
+        }
+
+        // The one nested object. Its keys are the kinds of divergence this
+        // engine can find - names this project chose - and its values are
+        // counts. A type the game declares cannot appear as either.
+        Assert.Equal(
+            Enum.GetNames<DivergenceKind>().OrderBy(name => name, StringComparer.Ordinal),
+            root.GetProperty("divergenceCounts")
+                .EnumerateObject()
+                .Select(kind => kind.Name)
+                .OrderBy(name => name, StringComparer.Ordinal));
+
+        Assert.All(
+            root.GetProperty("divergenceCounts").EnumerateObject(),
+            kind => Assert.Equal(JsonValueKind.Number, kind.Value.ValueKind));
+    }
+
+    private static string Text(JsonElement root, string name)
+    {
+        var field = root.GetProperty(name);
+        Assert.Equal(JsonValueKind.String, field.ValueKind);
+        return field.GetString()!;
+    }
+
+    private static void AssertIsDigest(string value, int length)
+    {
+        Assert.Equal(length, value.Length);
+        Assert.All(
+            value,
+            character => Assert.True(
+                char.IsAsciiDigit(character) || (character >= 'a' && character <= 'f'),
+                $"'{character}' is not a lower-case hexadecimal digit"));
     }
 
     [Fact]

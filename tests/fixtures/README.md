@@ -53,7 +53,16 @@ from an install and leaves a receipt behind, which is committed
 (`tests/drift-receipt.json`) so that a machine with no such information can
 still check the audit is current. It carries counts, versions and fingerprints
 and **no type, property or member the game declares** - what diverged stays on
-the machine that generated it, and a check asserts the file names none of them.
+the machine that generated it.
+
+The check on that asserts what the file may hold, not what it may not: every
+key in it is one of a known set, and every value is a number, a hexadecimal
+digest, or one of two descriptions this project wrote. So there is nowhere in
+the file for such a name to be. Written the other way round - a list of
+spellings the file must not contain - it would be a list of today's
+divergences, and would pass the first time the game named something it had not
+named before, which is exactly when the check is needed.
+
 That is the whole of what may cross: a hash of a thing, never the thing. If a
 future check seems to need the names, that is a boundary question to raise and
 not one to settle by committing them.
