@@ -47,6 +47,17 @@ installs a mod — so checks over it **assert what holds of any layer and report
 the numbers rather than asserting them.** A count taken from one install would
 turn somebody adding a mod into a failing engine.
 
+**A result derived from game data is not game data, and the line is drawn at
+names.** The dependency-drift audit runs against type information generated
+from an install and leaves a receipt behind, which is committed
+(`tests/drift-receipt.json`) so that a machine with no such information can
+still check the audit is current. It carries counts, versions and fingerprints
+and **no type, property or member the game declares** - what diverged stays on
+the machine that generated it, and a check asserts the file names none of them.
+That is the whole of what may cross: a hash of a thing, never the thing. If a
+future check seems to need the names, that is a boundary question to raise and
+not one to settle by committing them.
+
 **Third-party mod content does not enter this repository either.** The rule
 about game bytes is not narrower than it looks: a tweak file shipped by a mod is
 someone else's work, and the synthetic fixtures for the replay are authored
