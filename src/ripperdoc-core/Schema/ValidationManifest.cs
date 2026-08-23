@@ -97,11 +97,19 @@ public sealed class ValidationManifest
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Counted per attempt, which is per name a field might be stored under -
-    /// so a field the source offers two spellings of contributes two, and this
-    /// is not a count of fields or of record-and-field pairs. The unit is the
-    /// probe because the probe is what could not be made: one spelling of a name
-    /// can be too long to address while another is not.
+    /// Counted per attempt: once per record, per name the field might be stored
+    /// under. A field the source offers two spellings of contributes two on
+    /// every record of its type, so three such records report six - and this is
+    /// a count of probes, not of fields, of names, or of record-and-field pairs.
+    /// </para>
+    /// <para>
+    /// The unit is the probe because the probe is what could not be made, and
+    /// whether it can be depends on the record as much as on the name: a record
+    /// whose own name is long leaves no room for a field name beside it inside
+    /// an identifier, while the same field is perfectly addressable on a
+    /// shorter-named record of the same type. There is no smaller unit that
+    /// could carry that - a count of names would have to say a name is
+    /// unaddressable when it is only unaddressable somewhere.
     /// </para>
     /// <para>
     /// Expected to be zero. Such a probe is not a failure of the sweep - no
@@ -174,7 +182,8 @@ public sealed class ValidationManifest
     /// <param name="recordsExamined">How many records were examined.</param>
     /// <param name="recordTypesNotInSchema">Record types the schema did not have.</param>
     /// <param name="unaddressableFieldProbesByReason">
-    /// How many pairs could not be addressed, per reason.
+    /// How many attempts to address a field on a record found no identifier,
+    /// per reason.
     /// </param>
     /// <returns>The manifest.</returns>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
@@ -283,13 +292,16 @@ public sealed class ValidationManifest
 
                     if (!TweakIdentifier.TryForField(record.Identifier, candidate, out var identifier, out var reason))
                     {
-                        // No identifier exists for this pair, so there is
-                        // nothing to look under. Recorded as its own outcome:
-                        // marking it the same way as a field the records were
-                        // checked for and did not carry would claim a check that
-                        // never happened. The reason is kept beside the count
-                        // because the three reasons send a reader to three
-                        // different places.
+                        // No identifier exists for this name on this record,
+                        // so there is nothing to look under. Recorded as its own
+                        // outcome: marking it the same way as a field the
+                        // records were checked for and did not carry would claim
+                        // a check that never happened. Counted once here, which
+                        // is once per record and per name - the loop this sits
+                        // in runs for both - because that is the unit of the
+                        // thing that could not be done. The reason is kept
+                        // beside the count because the three reasons send a
+                        // reader to three different places.
                         unaddressable++;
                         unaddressableByReason[reason]++;
                         tally.Unaddressable++;
