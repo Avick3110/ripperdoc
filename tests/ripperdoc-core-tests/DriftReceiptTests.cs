@@ -42,12 +42,7 @@ public class DriftReceiptTests
             string.Equals(receipt.TypeModelAssemblyIdentity, identity, StringComparison.Ordinal),
             $"The accepted drift audit was taken against dependency build {receipt.TypeModelAssemblyIdentity}, "
             + $"and this one is {identity}. The audit's result therefore does not describe the dependency "
-            + "being built here. Run the gate on a machine with generated type information "
-            + $"({RttiDumpFixture.VariableName} set): the RTTI-dump checks take a fresh receipt and write it "
-            + $"to '{DriftReceipt.ProducedFileName}' beside the test binaries. Copy that file over "
-            + $"'tests/{DriftReceipt.FileName}'. Do not edit the committed receipt to match this build by "
-            + "hand - the numbers in it are an audit's result, and hand-editing them accepts a result nobody "
-            + "took.");
+            + "being built here. " + GateRecovery.HowToTakeAFreshReceipt);
     }
 
     [Fact]
@@ -136,15 +131,17 @@ public class DriftReceiptTests
                 "classesCompared", "dependency", "divergenceCounts", "divergenceFingerprint",
                 "enumMembersCompared", "enumsCompared", "generatedFrom",
                 "generatedTypeInformationFingerprint", "propertiesCompared", "readFailures",
-                "typeModelAssemblyIdentity",
+                "reflectionReadingPin", "typeModelAssemblyIdentity", "typeModelReadingFingerprint",
             },
             root.EnumerateObject().Select(field => field.Name).OrderBy(name => name, StringComparer.Ordinal));
 
-        // The three that are text, each held against what this project put
+        // The four that are text, each held against what this project put
         // there rather than against a shape that a type name would also fit.
         Assert.Equal(TypeModelReading.FromPinnedTypeModel().DependencyVersion, Text(root, "dependency"));
         Assert.Equal(RttiDumpFixture.GeneratedDescription, Text(root, "generatedFrom"));
+        Assert.Equal(DriftReceipt.InterimPinStatus, Text(root, "reflectionReadingPin"));
         AssertIsDigest(Text(root, "typeModelAssemblyIdentity"), 32);
+        AssertIsDigest(Text(root, "typeModelReadingFingerprint"), 64);
         AssertIsDigest(Text(root, "generatedTypeInformationFingerprint"), 64);
         AssertIsDigest(Text(root, "divergenceFingerprint"), 64);
 

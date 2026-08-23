@@ -306,6 +306,11 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
     [Fact]
     public void TheAuditFindsExactlyTheDivergencesThatWereAccepted()
     {
+        if (ComparisonCannotRun())
+        {
+            return;
+        }
+
         var audit = _fixture.Audit;
         var receipt = _fixture.Receipt;
 
@@ -328,10 +333,16 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
         //
         // What this run produced is written out beside the test binaries rather
         // than over the committed file, so accepting a new result is a copy
-        // somebody makes deliberately.
+        // somebody makes deliberately. The fixture writes it whatever the
+        // reading was, so the file is there to copy even on a run that could
+        // not compare.
         var produced = _fixture.ProducedReceipt.ToJson();
         var producedPath = Path.Combine(AppContext.BaseDirectory, DriftReceipt.ProducedFileName);
-        File.WriteAllText(producedPath, produced);
+
+        if (ComparisonCannotRun())
+        {
+            return;
+        }
 
         Assert.True(
             string.Equals(File.ReadAllText(DriftReceiptTests.ReceiptPath).ReplaceLineEndings("\n"), produced,
@@ -373,12 +384,59 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
         // appeared rather than only that something did. These are the kinds
         // that change what this engine reads; the ones the accepted set does
         // carry are texture and rendering entries that no lane here touches.
+        if (ComparisonCannotRun())
+        {
+            return;
+        }
+
         var counts = _fixture.Audit.CountsByKind();
 
         Assert.Equal(0, counts[DivergenceKind.ParentDiffers]);
         Assert.Equal(0, counts[DivergenceKind.PropertyAbsentFromModel]);
         Assert.Equal(0, counts[DivergenceKind.PropertyTypeDiffers]);
         Assert.Equal(0, counts[DivergenceKind.EnumAbsentFromModel]);
+    }
+
+    /// <summary>
+    /// Whether this process can say anything about drift at all.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Reflecting the pinned model does not give the same answer in every
+    /// process. A run that read it differently from the run the accepted result
+    /// came out of is holding the game's description against a different
+    /// opposite number, and what it finds is a property of this process rather
+    /// than of the two descriptions.
+    /// </para>
+    /// <para>
+    /// Returning rather than failing, because a healthy tree reading
+    /// differently is not a defect and a gate that reddened on it would be
+    /// switched off inside a week. Returning rather than passing quietly
+    /// either: the run writes down which of the two it did, and the gate reads
+    /// that and reports a skip by name. What is asserted here is that the
+    /// writing happened and says the right thing - so a broken report cannot
+    /// leave a comparison that never ran looking like one that passed.
+    /// </para>
+    /// <para>
+    /// Interim, pending the question filed about the instability itself.
+    /// </para>
+    /// </remarks>
+    private bool ComparisonCannotRun()
+    {
+        if (_fixture.ReadingMatchesPin)
+        {
+            return false;
+        }
+
+        var status = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, DriftReceipt.AuditStatusFileName));
+
+        Assert.NotEqual(DriftReceipt.AuditRanStatus, status);
+        Assert.Contains(_fixture.CompiledReadingFingerprint, status, StringComparison.Ordinal);
+        Assert.Contains(_fixture.Receipt.TypeModelReadingFingerprint, status, StringComparison.Ordinal);
+        Assert.Contains(DriftReceipt.InterimPinStatus, status, StringComparison.Ordinal);
+
+        return true;
     }
 }
 
@@ -458,7 +516,51 @@ public sealed class RttiDumpFixture
         Audit = TypeModelAudit.Run(GeneratedReading, compiled.Reading);
         ProducedReceipt = DriftReceipt.Of(Audit, compiled, GeneratedReading);
         Receipt = DriftReceipt.Read(DriftReceiptTests.ReceiptPath);
+
+        // Which of the readings this one build of the dependency can produce
+        // this process got. Settled once per process and stable afterwards, so
+        // there is nothing to be gained by reading it again here - what varies
+        // is which process you are in.
+        CompiledReadingFingerprint = compiled.Reading.Fingerprint();
+        ReadingMatchesPin = string.Equals(
+            CompiledReadingFingerprint,
+            Receipt.TypeModelReadingFingerprint,
+            StringComparison.Ordinal);
+
+        // The produced receipt is written whatever the reading was. Writing it
+        // is not accepting it, and a run that refused to write one after a
+        // dependency bump would leave no way to accept a new result at all -
+        // the pin in the committed receipt belongs to the old build, so every
+        // run would mismatch and every run would decline to produce the file
+        // that fixes it.
+        File.WriteAllText(
+            Path.Combine(AppContext.BaseDirectory, DriftReceipt.ProducedFileName),
+            ProducedReceipt.ToJson());
+
+        File.WriteAllText(
+            Path.Combine(AppContext.BaseDirectory, DriftReceipt.AuditStatusFileName),
+            ReadingMatchesPin ? DriftReceipt.AuditRanStatus : PinMismatchReason());
     }
+
+    /// <summary>
+    /// Why the comparison did not run, in the words the gate repeats.
+    /// </summary>
+    /// <remarks>
+    /// Which property this process read differently is not named, and cannot be
+    /// from anything committed: telling would need the pinned reading's
+    /// contents, and those are a description of the game's own types, which this
+    /// repository does not carry. What can be pointed at is the run's own
+    /// output, which is on the machine that has the dump and nowhere else.
+    /// </remarks>
+    private string PinMismatchReason() =>
+        "this process read the pinned dependency's type model as "
+        + $"{CompiledReadingFingerprint}, and the accepted audit was taken against "
+        + $"{Receipt.TypeModelReadingFingerprint}. Reflecting the model does not give the same answer in "
+        + "every process - a few properties take a foreign stored type, differently each time - so what this "
+        + "run would find is not drift and is not reported as any. The comparison is not run. The receipt "
+        + $"records this pin as '{DriftReceipt.InterimPinStatus}'; run the gate again to get a process that "
+        + "reads as the pin does, and read the divergences on this machine - they are not in the repository, "
+        + "deliberately.";
 
     /// <summary>
     /// The environment variable naming the dump, derived from the brand rather
@@ -515,4 +617,14 @@ public sealed class RttiDumpFixture
     public DriftReceipt ProducedReceipt { get; }
 
     public DriftReceipt Receipt { get; }
+
+    /// <summary>How this process read the pinned dependency's type model.</summary>
+    public string CompiledReadingFingerprint { get; }
+
+    /// <summary>
+    /// Whether that is the reading the accepted audit was taken against, and
+    /// therefore whether comparing this run's divergences to the accepted set
+    /// says anything about drift.
+    /// </summary>
+    public bool ReadingMatchesPin { get; }
 }

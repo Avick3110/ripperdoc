@@ -37,6 +37,15 @@ namespace Ripperdoc.Core.Drift;
 /// other outright.
 /// </para>
 /// <para>
+/// The reading is nonetheless written down, and used only where the comparison
+/// happens. A machine with no generated information cannot check it and does
+/// not try; a machine that can compare uses it to tell "the two descriptions
+/// disagree" from "this process read the model differently from the one the
+/// accepted result came out of", and announces the second as a comparison not
+/// run. See <see cref="TypeModelReadingFingerprint"/> and
+/// <see cref="ReflectionReadingPin"/>; this is interim.
+/// </para>
+/// <para>
 /// What it deliberately cannot say is whether the audit is current with respect
 /// to a newer game. Nothing without a dump can know that, so the receipt names
 /// the game it was taken against and leaves the question to a machine that can
@@ -68,6 +77,55 @@ public sealed record DriftReceipt
     /// </remarks>
     [JsonPropertyName("typeModelAssemblyIdentity")]
     public required string TypeModelAssemblyIdentity { get; init; }
+
+    /// <summary>
+    /// A fingerprint of the reading of the pinned model that the accepted
+    /// result was actually taken from.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Reflecting the compiled model does not give the same answer twice. The
+    /// answer is settled once per process and holds for that process's life, so
+    /// reading it again changes nothing - and across processes a small number
+    /// of properties take a foreign, unrelated stored type. Roughly a quarter
+    /// of processes measured on one machine carried exactly one such property,
+    /// and it was a different property each time.
+    /// </para>
+    /// <para>
+    /// So this is not a second identity for the dependency;
+    /// <see cref="TypeModelAssemblyIdentity"/> is that, and it is stable. This
+    /// says which of the readings that one build can produce the accepted
+    /// divergences were compared against. A process that reads differently is
+    /// holding the game's description against a different opposite number, and
+    /// what it finds says nothing about drift - so the comparison is announced
+    /// as not run rather than run and failed.
+    /// </para>
+    /// <para>
+    /// Interim. See <see cref="ReflectionReadingPin"/>.
+    /// </para>
+    /// </remarks>
+    [JsonPropertyName("typeModelReadingFingerprint")]
+    public required string TypeModelReadingFingerprint { get; init; }
+
+    /// <summary>
+    /// What standing the reading pin has, in the file rather than only in the
+    /// code that writes it.
+    /// </summary>
+    /// <remarks>
+    /// Pinning a reading works around an instability rather than fixing it, and
+    /// whoever reads this file in a year should not have to infer that from the
+    /// code. The instability is filed, and until it is answered a run that draws
+    /// a different reading skips the comparison instead of reporting drift
+    /// nobody caused.
+    /// </remarks>
+    [JsonPropertyName("reflectionReadingPin")]
+    public required string ReflectionReadingPin { get; init; }
+
+    /// <summary>
+    /// The standing every receipt this build writes records for the reading
+    /// pin, and the question that would retire it.
+    /// </summary>
+    public const string InterimPinStatus = "interim pending issue #22";
 
     /// <summary>
     /// What the generated type information was, in the words its own provenance
@@ -163,6 +221,8 @@ public sealed record DriftReceipt
         {
             Dependency = compiled.DependencyVersion,
             TypeModelAssemblyIdentity = compiled.AssemblyIdentity,
+            TypeModelReadingFingerprint = compiled.Reading.Fingerprint(),
+            ReflectionReadingPin = InterimPinStatus,
             GeneratedFrom = audit.GeneratedDescription,
             GeneratedTypeInformationFingerprint = generated.Fingerprint(),
             ClassesCompared = audit.ClassesCompared,
@@ -195,6 +255,25 @@ public sealed record DriftReceipt
     /// which is the one failure mode a gate like this cannot have.
     /// </remarks>
     public const string ProducedFileName = "drift-receipt.produced.json";
+
+    /// <summary>
+    /// The name of the file a tier (iii) run leaves behind saying whether the
+    /// comparison actually happened.
+    /// </summary>
+    /// <remarks>
+    /// Whether the comparison can run is decided inside the process that would
+    /// run it, because what decides it is how that process reflected the model -
+    /// a property no gate script can read from outside, and one that a separate
+    /// probe process would answer for itself rather than for the run. So the run
+    /// says which it did, here, and the gate reads it and reports a skip by
+    /// name. Written on every run, matched or not: a gate that only looked for
+    /// this file when something was wrong could not tell a run that compared
+    /// from a run whose report never arrived.
+    /// </remarks>
+    public const string AuditStatusFileName = "drift-audit-status.txt";
+
+    /// <summary>What that file says when the comparison did happen.</summary>
+    public const string AuditRanStatus = "ran";
 
     /// <summary>Read a receipt from the file it is kept in.</summary>
     /// <param name="path">The receipt's path.</param>
