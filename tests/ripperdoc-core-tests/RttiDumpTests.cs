@@ -50,6 +50,11 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
     {
         Assert.Equal(ClassesInTheDump, _fixture.Model.Classes.Count);
         Assert.Empty(_fixture.Model.UnrecognisedKeys);
+
+        // A count alone would be satisfied by a dump that described 15,830
+        // types under 15,829 usable names. This says the reader lost none of
+        // them - no name shared, no description without one.
+        Assert.Empty(_fixture.Model.ReadFailures);
     }
 
     [Fact]
