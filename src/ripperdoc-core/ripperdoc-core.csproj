@@ -6,6 +6,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The checks reach two internals that no public surface exposes and that
+         a claim is made about: the enumeration-value conversion, which asserts
+         it cannot fail on a member the game registers. Reading a member happens
+         only through the pinned assembly, so there is no public seam to make
+         that claim at, and an unchecked claim about a guard is what this
+         project's proof discipline refuses. -->
+    <InternalsVisibleTo Include="ripperdoc-core-tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="WolvenKit.RED4" />
     <PackageReference Include="WolvenKit.Core" />
     <PackageReference Include="YamlDotNet" />

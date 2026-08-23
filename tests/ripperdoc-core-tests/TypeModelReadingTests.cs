@@ -41,6 +41,47 @@ public class TypeModelReadingTests
             Reading("gameThing.value: another reason").Fingerprint());
     }
 
+    [Fact]
+    public void AMemberBeyondTheSignedRangeIsReadRatherThanRefused()
+    {
+        // A 64-bit unsigned enumeration is the only kind that can hold a value
+        // no signed 64-bit number can, and converting one throws. Reading a
+        // member is not a place this reader may fail: a member it could not
+        // read is a member the audit cannot find drift in, and the whole point
+        // of the audit is to find it.
+        Assert.Equal(-1L, TypeModelReading.AsComparableValue(ulong.MaxValue));
+        Assert.Equal(long.MinValue, TypeModelReading.AsComparableValue(0x8000_0000_0000_0000UL));
+    }
+
+    [Fact]
+    public void MembersInsideTheSignedRangeAreReadAsThemselves()
+    {
+        // The other arm. Every underlying type but the 64-bit unsigned one fits
+        // in a long with room over, and none of them may be reinterpreted into
+        // something else on the way.
+        Assert.Equal(255L, TypeModelReading.AsComparableValue((byte)255));
+        Assert.Equal(-1L, TypeModelReading.AsComparableValue((sbyte)-1));
+        Assert.Equal(65_535L, TypeModelReading.AsComparableValue((ushort)65_535));
+        Assert.Equal(-1L, TypeModelReading.AsComparableValue(-1));
+        Assert.Equal(4_294_967_295L, TypeModelReading.AsComparableValue(4_294_967_295U));
+        Assert.Equal(long.MaxValue, TypeModelReading.AsComparableValue(long.MaxValue));
+        Assert.Equal(1L, TypeModelReading.AsComparableValue(1UL));
+    }
+
+    [Fact]
+    public void EveryUnderlyingTypeAnEnumerationCanHaveIsRead()
+    {
+        // Named rather than assumed: if a runtime ever allowed another, this is
+        // where the reader's coverage of them stops being complete.
+        foreach (var underlying in new object[]
+                 {
+                     (byte)1, (sbyte)1, (short)1, (ushort)1, 1, 1U, 1L, 1UL,
+                 })
+        {
+            Assert.Equal(1L, TypeModelReading.AsComparableValue(underlying));
+        }
+    }
+
     private static TypeModelReading Reading(params string[] failures) =>
         new("a description constructed for this test",
             new Dictionary<string, ModelClass>(StringComparer.Ordinal)

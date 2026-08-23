@@ -333,23 +333,44 @@ public sealed record TypeModelReading(
     /// </summary>
     internal const int ValueWidthNotStated = 0;
 
+    /// <summary>
+    /// An enumeration member's underlying value, as the comparison vocabulary
+    /// carries it.
+    /// </summary>
+    /// <param name="underlyingValue">
+    /// The member's value, already converted to its enumeration's underlying
+    /// type.
+    /// </param>
+    /// <returns>The same bits, as a signed 64-bit number.</returns>
+    /// <remarks>
+    /// Of the types an enumeration can be built on, only a 64-bit unsigned one
+    /// can hold a value the signed range cannot - every other fits in a long
+    /// with room over. That case is reinterpreted rather than converted:
+    /// converting it throws, and the two descriptions of the game are compared
+    /// on the bits a value occupies rather than on the sign a language chose to
+    /// print them with, so the bits are what has to survive to the comparison.
+    /// Reading a member is not a place this reader is allowed to fail - a member
+    /// it could not read is a member the audit cannot find drift in.
+    /// </remarks>
+    internal static long AsComparableValue(object underlyingValue) => underlyingValue switch
+    {
+        ulong beyondTheSignedRange => unchecked((long)beyondTheSignedRange),
+        long alreadySigned => alreadySigned,
+        _ => Convert.ToInt64(underlyingValue, System.Globalization.CultureInfo.InvariantCulture),
+    };
+
     private static void ReadEnum(Type type, Dictionary<string, ModelEnum> into, List<string> failures)
     {
         var members = new List<ModelEnumMember>();
 
         foreach (var member in Enum.GetNames(type))
         {
-            // Read through the underlying type rather than by casting, because
-            // an enumeration whose values do not fit a signed conversion would
-            // otherwise throw here rather than be compared.
-            var value = Convert.ToInt64(
-                Convert.ChangeType(
+            members.Add(new ModelEnumMember(
+                member,
+                AsComparableValue(Convert.ChangeType(
                     Enum.Parse(type, member),
                     Enum.GetUnderlyingType(type),
-                    System.Globalization.CultureInfo.InvariantCulture),
-                System.Globalization.CultureInfo.InvariantCulture);
-
-            members.Add(new ModelEnumMember(member, value));
+                    System.Globalization.CultureInfo.InvariantCulture))));
         }
 
         // How many bits a value of this enumeration occupies. The two sides
