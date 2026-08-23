@@ -231,15 +231,42 @@ public class SchemaGenerationTests : IDisposable
     }
 
     [Fact]
-    public void AGeneratedSchemaDescribingAnotherBuildIsReportedAsOutOfDate()
+    public void AGameThatHasMovedSinceGenerationIsReportedAsHavingMoved()
     {
         var reading = InspectWithArtifact(gameBuild: "0.0.0.0", install: PathOfThisAssembly);
 
         Assert.Equal(GenerationState.ArtifactDescribesAnotherBuild, reading.State);
         Assert.False(reading.ArtifactIsKnownCurrent);
-        Assert.Contains("out of date", reading.Explanation, StringComparison.Ordinal);
+        Assert.Contains("has moved since", reading.Explanation, StringComparison.Ordinal);
         Assert.Contains("0.0.0.0", reading.Explanation, StringComparison.Ordinal);
         Assert.Contains(BuildOfThisAssembly, reading.Explanation, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheRecordedBuildIsTheOneInstalledAtGenerationAndIsNotClaimedToBeMore()
+    {
+        // What this field can honestly say. It is read from the install at the
+        // moment of generating, and nothing in the type information states a
+        // build - so an artifact generated from type information captured
+        // before a patch records the build installed now and describes the one
+        // before it. Saying the artifact "describes" the recorded build would
+        // be wrong in exactly that case, and would report an artifact current
+        // with a game it does not describe.
+        using var dump = SyntheticDump.Of(classes: [ThingRecord]);
+
+        SchemaGeneration.Generate(
+            new GenerationInputs(ArtifactPath, dump.JsonDirectory, PathOfThisAssembly),
+            shipped: null,
+            When);
+
+        Assert.Equal(BuildOfThisAssembly, SchemaIrDocument.Read(ArtifactPath).GameBuild);
+
+        var reading = SchemaGeneration.Inspect(
+            new GenerationInputs(ArtifactPath, dump.JsonDirectory, PathOfThisAssembly));
+
+        Assert.Equal(GenerationState.ArtifactCurrent, reading.State);
+        Assert.Contains("generated against", reading.Explanation, StringComparison.Ordinal);
+        Assert.DoesNotContain("describes", reading.Explanation, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -301,6 +328,52 @@ public class SchemaGenerationTests : IDisposable
         var thrown = Assert.Throws<InvalidDataException>(() => SchemaIrDocument.Read(ArtifactPath));
 
         Assert.Contains("format 99", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ALaterFormatThatDropsAKeyThisBuildNeedsIsReportedAsALaterFormat()
+    {
+        // The case the version check exists for, and the one it used to get
+        // wrong. A format that stops writing a key this build requires does not
+        // deserialise - so a reader that checks the version afterwards never
+        // reaches it, and reports damage instead of a newer file. Whoever reads
+        // that goes looking for corruption in a file that is perfectly well
+        // formed.
+        File.WriteAllText(
+            ArtifactPath,
+            """{"formatVersion":99,"mode":"GeneratedTypeInformation","somethingElseEntirely":[]}""");
+
+        var thrown = Assert.Throws<InvalidDataException>(() => SchemaIrDocument.Read(ArtifactPath));
+
+        Assert.Contains("format 99", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("not a readable schema artifact", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AFileOfThisFormatMissingAKeyIsStillReportedAsUnreadable()
+    {
+        // The other arm. The version check must not swallow a file that really
+        // is damaged - one written in the format this build reads, and short of
+        // something it needs, is a broken artifact and says so.
+        File.WriteAllText(
+            ArtifactPath,
+            """{"formatVersion":1,"mode":"GeneratedTypeInformation"}""");
+
+        var thrown = Assert.Throws<InvalidDataException>(() => SchemaIrDocument.Read(ArtifactPath));
+
+        Assert.Contains("not a readable schema artifact", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AFileStatingNoFormatAtAllIsRefusedAsSayingNothingAboutItself()
+    {
+        File.WriteAllText(
+            ArtifactPath,
+            """{"mode":"GeneratedTypeInformation","types":[],"derivationFailures":[]}""");
+
+        var thrown = Assert.Throws<InvalidDataException>(() => SchemaIrDocument.Read(ArtifactPath));
+
+        Assert.Contains("does not say which artifact format", thrown.Message, StringComparison.Ordinal);
     }
 
     [Fact]
