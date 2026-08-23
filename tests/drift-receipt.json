@@ -5,10 +5,10 @@
   "reflectionReadingPin": "interim pending issue #22",
   "generatedFrom": "RTTI dump of game 2.31 with Phantom Liberty",
   "generatedTypeInformationFingerprint": "bf17c8dd3f36d0b489b6b103bb6789f66f8b2c5bbf058090d2413982c02fb25f",
-  "classesCompared": 15830,
+  "classesCompared": 15828,
   "propertiesCompared": 43383,
   "enumsCompared": 1549,
-  "enumMembersCompared": 13489,
+  "enumMembersCompared": 13488,
   "divergenceCounts": {
     "ClassAbsentFromModel": 2,
     "EnumAbsentFromModel": 0,
