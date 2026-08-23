@@ -119,10 +119,23 @@ public sealed record SchemaIrDocument
     /// Which build of the game is installed as this is generated, or null where
     /// none was named or none could be read.
     /// </param>
+    /// <remarks>
+    /// <paramref name="gameBuild"/> is asked for and not taken from
+    /// <paramref name="artifact"/>, because the artifact does not carry it and
+    /// deliberately does not: it describes the install this was written on and
+    /// not the schema, so it belongs to the document rather than to the thing
+    /// the document holds. The consequence is that a document read back, turned
+    /// into an artifact and written out again does not recover it - and that is
+    /// why this parameter has no default. Given one, the caller doing that trip
+    /// would drop the build by saying nothing, and the artifact would go on
+    /// claiming an install nobody recorded. Passing null is still allowed and is
+    /// how "no build was named"; what is not allowed is arriving at null by
+    /// omission.
+    /// </remarks>
     public static SchemaIrDocument Of(
         SchemaIr artifact,
         RecordTypeSourceReading reading,
-        string? gameBuild = null)
+        string? gameBuild)
     {
         ArgumentNullException.ThrowIfNull(artifact);
         ArgumentNullException.ThrowIfNull(reading);

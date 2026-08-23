@@ -423,6 +423,44 @@ public class SchemaGenerationTests : IDisposable
         Assert.Contains("on this machine", thrown.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TheInstalledBuildSurvivesADocumentTurnedBackIntoADocument()
+    {
+        // The build belongs to the document and not to the artifact inside it,
+        // so a read-modify-write trip has to carry it across by hand. That it
+        // must be carried is the point of the parameter having no default: a
+        // caller who says nothing would write an artifact claiming no install
+        // was recorded, which is a different claim from the one it read.
+        using var dump = SyntheticDump.Of(classes: [ThingRecord]);
+        var model = DumpTypeModel.Load(dump.JsonDirectory, "type information authored for this test");
+        var reading = new DumpRecordTypeSource(model).Read();
+        var artifact = SchemaIr.Create(
+            RecordSchemaDerivation.Derive(reading, model.Description),
+            null,
+            SchemaMode.GeneratedTypeInformation,
+            DateTimeOffset.UnixEpoch);
+
+        var first = SchemaIrDocument.Of(artifact, reading, BuildOfThisAssembly);
+        var again = SchemaIrDocument.Of(first.ToArtifact(), first.ToReading(), first.GameBuild);
+
+        Assert.Equal(BuildOfThisAssembly, again.GameBuild);
+    }
+
+    [Fact]
+    public void ADocumentWrittenWithNoInstalledBuildSaysSoRatherThanGuessing()
+    {
+        using var dump = SyntheticDump.Of(classes: [ThingRecord]);
+        var model = DumpTypeModel.Load(dump.JsonDirectory, "type information authored for this test");
+        var reading = new DumpRecordTypeSource(model).Read();
+        var artifact = SchemaIr.Create(
+            RecordSchemaDerivation.Derive(reading, model.Description),
+            null,
+            SchemaMode.GeneratedTypeInformation,
+            DateTimeOffset.UnixEpoch);
+
+        Assert.Null(SchemaIrDocument.Of(artifact, reading, null).GameBuild);
+    }
+
     private GenerationReading InspectWithArtifact(string? gameBuild, string? install)
     {
         using var dump = SyntheticDump.Of(classes: [ThingRecord]);
