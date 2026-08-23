@@ -26,7 +26,7 @@ public sealed class ReferenceGraph
 {
     private readonly ILookup<string, ReferenceEdge> _bySource;
     private readonly RecordSchema _schema;
-    private readonly Dictionary<string, string?> _parentOf;
+    private readonly Dictionary<string, HashSet<string>> _selfAndAncestors;
 
     private ReferenceGraph(RecordSchema schema, IReadOnlyList<ReferenceEdge> edges)
     {
@@ -37,10 +37,37 @@ public sealed class ReferenceGraph
         // is not one - and stopping is indistinguishable from arriving at the
         // top, so a kind that really does derive from the permitted one would be
         // reported as unrelated to it.
-        _parentOf = schema.AllTypes().ToDictionary(
+        var parentOf = schema.AllTypes().ToDictionary(
             type => type.Name,
             type => type.BaseTypeName,
             StringComparer.Ordinal);
+
+        // Each chain walked once here rather than once per question. The
+        // question is asked for every stored reference in the database - over
+        // 1.9 million of them on the shipped one - and the answer depends on
+        // nothing but the two names, so walking per call was rebuilding the same
+        // handful of chains millions of times and allocating a set for each. The
+        // same reasoning the file's opening already applies to record kinds: the
+        // cost of a lookup at this scale is the thing this engine has published
+        // a measurement about.
+        //
+        // Bounded by the schema: one entry per type, each holding its own chain,
+        // so this is the depth of the inheritance graph and not the square of
+        // its width.
+        _selfAndAncestors = new Dictionary<string, HashSet<string>>(parentOf.Count, StringComparer.Ordinal);
+        foreach (var start in parentOf.Keys)
+        {
+            // A name already met on this walk ends it, so a chain that loops
+            // terminates instead of running forever - the same guard the
+            // per-call walk carried, in the same place in the walk.
+            var chain = new HashSet<string>(StringComparer.Ordinal);
+            for (var current = (string?)start; current is not null && chain.Add(current);)
+            {
+                current = parentOf.GetValueOrDefault(current);
+            }
+
+            _selfAndAncestors[start] = chain;
+        }
 
         _bySource = edges.ToLookup(edge => edge.RecordTypeName, StringComparer.Ordinal);
         Edges = edges;
@@ -142,30 +169,29 @@ public sealed class ReferenceGraph
     /// <returns>True where the actual kind is the permitted one or derives from it.</returns>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     /// <remarks>
+    /// <para>
     /// A field permitting one kind of record permits the kinds that derive from
     /// it, because a record of a derived kind carries everything whoever reads
     /// the reference expects to find. Comparing the two names outright would
     /// report every such reference in the game as pointing at the wrong kind of
     /// record.
+    /// </para>
+    /// <para>
+    /// Answered from a chain resolved when the graph was built, so asking costs
+    /// a lookup and allocates nothing. A kind the schema does not carry has no
+    /// resolved chain and can only be the permitted kind by being it - which is
+    /// what walking from an unknown name found too, having first allocated a set
+    /// to discover that it went nowhere.
+    /// </para>
     /// </remarks>
     public bool Permits(string referentTypeName, string actualTypeName)
     {
         ArgumentNullException.ThrowIfNull(referentTypeName);
         ArgumentNullException.ThrowIfNull(actualTypeName);
 
-        var walked = new HashSet<string>(StringComparer.Ordinal);
-
-        for (var current = actualTypeName; current is not null && walked.Add(current);)
-        {
-            if (string.Equals(current, referentTypeName, StringComparison.Ordinal))
-            {
-                return true;
-            }
-
-            current = _parentOf.GetValueOrDefault(current);
-        }
-
-        return false;
+        return _selfAndAncestors.TryGetValue(actualTypeName, out var ancestry)
+            ? ancestry.Contains(referentTypeName)
+            : string.Equals(actualTypeName, referentTypeName, StringComparison.Ordinal);
     }
 
     /// <summary>
