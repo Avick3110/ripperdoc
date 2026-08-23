@@ -188,8 +188,13 @@ if [ -z "$rtti_dump_path" ]; then
   skip "RTTI-dump checks" "needs type information generated from the user's own install - tier (iii), local only; set $rtti_dump_variable to a dump's json directory to run it. The drift audit's accepted result is checked against this build's type model either way, by the tier (i) checks"
 elif [ ! -d "$rtti_dump_path" ]; then
   skip "RTTI-dump checks" "$rtti_dump_variable names a path with no directory at it - tier (iii) has nothing to read"
-elif [ ! -d "$rtti_dump_path/classes" ]; then
-  skip "RTTI-dump checks" "$rtti_dump_variable names a directory with no classes/ in it, so it is not a dump's json output - tier (iii) has nothing to read"
+elif [ ! -d "$rtti_dump_path/classes" ] || [ ! -d "$rtti_dump_path/enums" ] || [ ! -d "$rtti_dump_path/bitfields" ]; then
+  # All three, because the reader requires all three. Checking classes/ alone
+  # let a half-written capture past this point, where the reader then refused it
+  # and the tier went red - a dump that is not a dump is the same kind of thing
+  # as a database that is not the measured one, and gets the same announced skip
+  # rather than a failure blaming the engine for somebody else's directory.
+  skip "RTTI-dump checks" "$rtti_dump_variable names a directory without all of classes/, enums/ and bitfields/ in it, so it is not a complete dump's json output - tier (iii) has nothing to read"
 elif [ -z "$tweakdb_path" ]; then
   skip "RTTI-dump checks" "needs the shipped database as well, to arbitrate the generated schema against real values - set $tweakdb_variable to one to run this tier. A schema checked against nothing is not a schema anything confirmed"
 elif [ ! -f "$tweakdb_path" ]; then

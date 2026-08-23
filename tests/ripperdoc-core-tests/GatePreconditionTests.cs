@@ -1,4 +1,5 @@
 using Ripperdoc.Core.Drift;
+using Ripperdoc.Core.Dump;
 using System.Text.RegularExpressions;
 using Xunit;
 
@@ -65,6 +66,23 @@ public class GatePreconditionTests
         // nobody has reason to doubt.
         Assert.Contains(DriftReceipt.AuditStatusFileName, GateScript(), StringComparison.Ordinal);
         Assert.Contains($"= \"{DriftReceipt.AuditRanStatus}\"", GateScript(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheGateLooksForEveryDirectoryTheDumpReaderRequires()
+    {
+        // The gate decides whether the dump tier runs, and it decides by
+        // looking at the directory it was pointed at. Looking for fewer
+        // directories than the reader requires lets a half-written capture
+        // through, and the reader then refuses it and the tier goes red - where
+        // a database that is not the measured one gets an announced skip. The
+        // names come from the reader so the two cannot drift apart.
+        var block = DumpTierBlock(GateScript());
+
+        Assert.NotEmpty(DumpTypeModel.RequiredDirectoryNames);
+        Assert.All(
+            DumpTypeModel.RequiredDirectoryNames,
+            required => Assert.Contains($"/{required}\"", block, StringComparison.Ordinal));
     }
 
     [Fact]
