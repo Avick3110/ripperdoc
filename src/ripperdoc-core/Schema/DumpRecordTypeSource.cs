@@ -229,7 +229,12 @@ public sealed class DumpRecordTypeSource : IRecordTypeSource
     {
         if (function.Parameters.Count == 0)
         {
-            return function.ReturnTypeName;
+            // An accessor that takes nothing and returns nothing gives no
+            // value, and is a method the runtime registers rather than a field.
+            // Read as a field it would be one of storage type "None" - a name
+            // that passes for a storage type, so nothing downstream refuses it,
+            // and no stored value is ever keyed by it.
+            return function.ReturnTypeName is null or NoValueTypeName ? null : function.ReturnTypeName;
         }
 
         // An accessor that returns nothing and writes into a parameter the

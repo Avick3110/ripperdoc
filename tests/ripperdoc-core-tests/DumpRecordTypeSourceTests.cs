@@ -81,6 +81,24 @@ public class DumpRecordTypeSourceTests
         Assert.Contains(stored, fields.Keys);
     }
 
+    [Theory]
+    // The dump writes a method that returns nothing either way round, so both
+    // spellings of "no value" have to mean it.
+    [InlineData("None")]
+    [InlineData(null)]
+    public void AnAccessorGivingNoValueIsNotAFieldOfTypeNone(string? returns)
+    {
+        var fields = FieldsOf(Record(
+            "gamedataProbeThing_Record",
+            Accessor("Speed", "Float"),
+            new DumpFunction("Reset", returns, [])));
+
+        // "None" is a name that passes for a storage type, so a field of that
+        // type is refused by nothing downstream and matches no stored value
+        // anywhere - the schema simply carries a slot that cannot exist.
+        Assert.Equal(new[] { "speed" }, fields.Keys);
+    }
+
     [Fact]
     public void AnAccessorTakingAValueToLookForIsNotAFieldWhateverItIsCalled()
     {
