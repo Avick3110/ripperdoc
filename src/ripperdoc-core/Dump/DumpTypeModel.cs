@@ -228,7 +228,18 @@ public sealed class DumpTypeModel
     internal static readonly IReadOnlyList<string> RequiredDirectoryNames =
         [ClassesDirectoryName, EnumsDirectoryName, BitfieldsDirectoryName];
 
-    private const string ClassesDirectoryName = "classes";
+    /// <summary>
+    /// The one of those directories that has to describe something for a dump
+    /// to be worth reading at all.
+    /// </summary>
+    /// <remarks>
+    /// Named here for the reason the list above is named here: whoever decides
+    /// whether a dump can be read looks in this directory to decide it, and
+    /// looking in a directory the reader does not read would answer for a
+    /// different question than the one being asked.
+    /// </remarks>
+    internal const string ClassesDirectoryName = "classes";
+
     private const string EnumsDirectoryName = "enums";
     private const string BitfieldsDirectoryName = "bitfields";
 

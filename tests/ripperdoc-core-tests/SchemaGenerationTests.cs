@@ -63,6 +63,48 @@ public class SchemaGenerationTests : IDisposable
     }
 
     [Fact]
+    public void TheInspectionLooksForTheVeryDirectoriesTheDumpReaderRequires()
+    {
+        // The same list, not a list that happens to agree with it. Two copies
+        // agree until one of them is added to, and the one that would be added
+        // to is the reader's - which would leave this inspection answering that
+        // a capture missing the new directory is usable, and the read failing
+        // afterwards on the directory nobody here looked for.
+        Assert.NotEmpty(DumpTypeModel.RequiredDirectoryNames);
+        Assert.Same(DumpTypeModel.RequiredDirectoryNames, SchemaGeneration.RequiredDirectories);
+    }
+
+    public static TheoryData<string> EveryDirectoryTheDumpReaderRequires()
+    {
+        var directories = new TheoryData<string>();
+        foreach (var required in DumpTypeModel.RequiredDirectoryNames)
+        {
+            directories.Add(required);
+        }
+
+        return directories;
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryDirectoryTheDumpReaderRequires))]
+    public void ACaptureMissingADirectoryIsRefusedByTheInspectionAndNotByTheRead(string missing)
+    {
+        // What binding the two lists together is for, one case per directory
+        // the reader requires - so a fourth added to the reader arrives here as
+        // a case rather than as a gap. The inspection is what a first run is
+        // told, and being told the type information is there and then meeting
+        // an exception naming a directory is the half-written capture getting
+        // past the only thing that looks for it.
+        using var dump = SyntheticDump.Of(classes: [ThingRecord]);
+        dump.Remove(missing);
+
+        var reading = SchemaGeneration.Inspect(new GenerationInputs(ArtifactPath, dump.JsonDirectory));
+
+        Assert.Equal(GenerationState.NothingToUseAndNothingToGenerateFrom, reading.State);
+        Assert.Contains($"has no '{missing}' in it", reading.Explanation, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ADumpWithNoClassesInItIsRefusedRatherThanGeneratedFrom()
     {
         using var dump = SyntheticDump.Of();
