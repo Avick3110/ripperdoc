@@ -294,6 +294,63 @@ public class TypeModelAuditTests
     }
 
     [Fact]
+    public void WhatWasComparedAndWhatWasAbsentAddUpToWhatTheGameRegisters()
+    {
+        // The counts say "compared" and have to mean it. Counting what was
+        // looked for instead would report a model that had lost a class, a
+        // property, an enumeration and a member as having been fully examined -
+        // and the receipt those numbers travel in is read as evidence of how
+        // much the audit covered.
+        var generated = new TypeModelReading(
+            "the game's own description, constructed for this test",
+            new[]
+                {
+                    Class("gameKept", null, ("kept", "Float"), ("lost", "Float")),
+                    Class("gameLost", null, ("underALostClass", "Float")),
+                }
+                .ToDictionary(type => type.Name, type => type, StringComparer.Ordinal),
+            new[]
+                {
+                    Enumeration("gameKeptMood", WidthNotStated, ("Calm", 1), ("Absent", 2)),
+                    Enumeration("gameLostMood", WidthNotStated, ("Calm", 1)),
+                }
+                .ToDictionary(declared => declared.Name, declared => declared, StringComparer.Ordinal),
+            Array.Empty<string>());
+
+        var compiled = new TypeModelReading(
+            "the pinned model, constructed for this test",
+            new[] { Class("gameKept", CompiledRoot, ("kept", "Float")) }
+                .ToDictionary(type => type.Name, type => type, StringComparer.Ordinal),
+            new[] { Enumeration("gameKeptMood", 32, ("Calm", 1)) }
+                .ToDictionary(declared => declared.Name, declared => declared, StringComparer.Ordinal),
+            Array.Empty<string>());
+
+        var audit = TypeModelAudit.Run(generated, compiled);
+        var counts = audit.CountsByKind();
+
+        Assert.Equal(1, audit.ClassesCompared);
+        Assert.Equal(1, audit.PropertiesCompared);
+        Assert.Equal(1, audit.EnumsCompared);
+        Assert.Equal(1, audit.EnumMembersCompared);
+
+        // And each adds up with its own absence, against what the game
+        // registers. A property under a class the model lacks is in neither
+        // column, which is why the property sum is over the kept class alone.
+        Assert.Equal(
+            generated.Classes.Count,
+            audit.ClassesCompared + counts[DivergenceKind.ClassAbsentFromModel]);
+        Assert.Equal(
+            generated.Classes["gameKept"].Properties.Count,
+            audit.PropertiesCompared + counts[DivergenceKind.PropertyAbsentFromModel]);
+        Assert.Equal(
+            generated.Enums.Count,
+            audit.EnumsCompared + counts[DivergenceKind.EnumAbsentFromModel]);
+        Assert.Equal(
+            generated.Enums["gameKeptMood"].Members.Count,
+            audit.EnumMembersCompared + counts[DivergenceKind.EnumMemberAbsentFromModel]);
+    }
+
+    [Fact]
     public void APropertyIsNotComparedOnAClassTheModelDoesNotHaveAtAll()
     {
         // One divergence for the class, not one per property under it. A class

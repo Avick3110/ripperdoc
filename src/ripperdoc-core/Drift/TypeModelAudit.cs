@@ -53,16 +53,40 @@ public sealed class TypeModelAudit
     /// <summary>What the compiled side was read from.</summary>
     public string CompiledDescription { get; }
 
-    /// <summary>How many classes the game registers were looked for in the model.</summary>
+    /// <summary>
+    /// How many classes the game registers were found in the model and held
+    /// against it.
+    /// </summary>
+    /// <remarks>
+    /// Compared, not looked for. Something the model does not have is not
+    /// something these two descriptions were held against each other over - it
+    /// is a divergence, and it is counted as one. Each of these four therefore
+    /// adds up with its matching absence: every class the game registers is
+    /// either compared or reported absent, and the same for properties,
+    /// enumerations and members. A count of what was looked for would report
+    /// the whole of a model that had lost everything as fully examined.
+    /// </remarks>
     public int ClassesCompared { get; }
 
-    /// <summary>How many properties were compared.</summary>
+    /// <summary>
+    /// How many properties were found in the model and held against it.
+    /// </summary>
+    /// <remarks>
+    /// Properties of a class the model does not have are not among these. That
+    /// class is one divergence rather than one per property under it, so its
+    /// properties are neither compared nor separately reported.
+    /// </remarks>
     public int PropertiesCompared { get; }
 
-    /// <summary>How many enumerations were compared.</summary>
+    /// <summary>
+    /// How many enumerations were found in the model and held against it.
+    /// </summary>
     public int EnumsCompared { get; }
 
-    /// <summary>How many enumeration members were compared.</summary>
+    /// <summary>
+    /// How many enumeration members were found in the model and held against
+    /// it.
+    /// </summary>
     public int EnumMembersCompared { get; }
 
     /// <summary>How many divergences there are of each kind, including kinds with none.</summary>
@@ -137,7 +161,9 @@ public sealed class TypeModelAudit
         ArgumentNullException.ThrowIfNull(compiled);
 
         var divergences = new List<Divergence>();
+        var classesCompared = 0;
         var propertiesCompared = 0;
+        var enumsCompared = 0;
         var membersCompared = 0;
 
         foreach (var name in generated.Classes.Keys.OrderBy(name => name, StringComparer.Ordinal))
@@ -149,6 +175,8 @@ public sealed class TypeModelAudit
                 divergences.Add(new Divergence(DivergenceKind.ClassAbsentFromModel, name, null, name, null));
                 continue;
             }
+
+            classesCompared++;
 
             if (!SameParent(fromGame.ParentName, fromModel.ParentName))
             {
@@ -162,8 +190,6 @@ public sealed class TypeModelAudit
 
             foreach (var property in fromGame.Properties.OrderBy(entry => entry.Key, StringComparer.Ordinal))
             {
-                propertiesCompared++;
-
                 if (!fromModel.Properties.TryGetValue(property.Key, out var modelled))
                 {
                     divergences.Add(new Divergence(
@@ -174,6 +200,8 @@ public sealed class TypeModelAudit
                         null));
                     continue;
                 }
+
+                propertiesCompared++;
 
                 if (!string.Equals(property.Value, modelled, StringComparison.Ordinal))
                 {
@@ -197,6 +225,8 @@ public sealed class TypeModelAudit
                 continue;
             }
 
+            enumsCompared++;
+
             // Every value the model gives a name, not one of them. The game
             // registers a name twice with two values on at least one
             // enumeration, so a member is corroborated when the model has that
@@ -208,8 +238,6 @@ public sealed class TypeModelAudit
 
             foreach (var member in fromGame.Members.OrderBy(entry => entry.Name, StringComparer.Ordinal))
             {
-                membersCompared++;
-
                 var identifier = AsIdentifier(member.Name);
                 var modelled = valuesByIdentifier[identifier].ToArray();
 
@@ -234,6 +262,8 @@ public sealed class TypeModelAudit
                     continue;
                 }
 
+                membersCompared++;
+
                 if (modelled.Any(value => SameValue(member.Value, value, fromModel.ValueWidthInBits)))
                 {
                     continue;
@@ -254,9 +284,9 @@ public sealed class TypeModelAudit
             divergences,
             generated.Description,
             compiled.Description,
-            generated.Classes.Count,
+            classesCompared,
             propertiesCompared,
-            generated.Enums.Count,
+            enumsCompared,
             membersCompared);
     }
 
