@@ -162,10 +162,10 @@ public static class SchemaGeneration
         {
             return new GenerationReading(
                 GenerationState.StalenessCannotBeChecked,
-                $"There is a generated schema, made on {artifact.GeneratedAt:yyyy-MM-dd} from "
-                + $"{Describe(artifact.GameBuild)}. Whether it still describes the game cannot be checked "
-                + "from here, because no game install was given to compare it against. It is being used as "
-                + "it is - which is not the same as it having been found current.",
+                $"There is a generated schema, generated on {artifact.GeneratedAt:yyyy-MM-dd} against "
+                + $"{Describe(artifact.GameBuild)}. Whether the game has moved since cannot be checked from "
+                + "here, because no game install was given to compare it against. It is being used as it is "
+                + "- which is not the same as it having been found current.",
                 artifact,
                 null);
         }
@@ -174,9 +174,10 @@ public static class SchemaGeneration
         {
             return new GenerationReading(
                 GenerationState.StalenessCannotBeChecked,
-                $"There is a generated schema, made on {artifact.GeneratedAt:yyyy-MM-dd}, and it does not "
-                + $"record which build of the game it came from. The installed build is {installedBuild}, "
-                + "and there is nothing to compare it against. Generating again would settle it.",
+                $"There is a generated schema, generated on {artifact.GeneratedAt:yyyy-MM-dd}, and it "
+                + "does not record which build of the game was installed at the time. The installed build "
+                + $"is {installedBuild}, and there is nothing to compare it against. Generating again would "
+                + "settle it.",
                 artifact,
                 installedBuild);
         }
@@ -185,23 +186,26 @@ public static class SchemaGeneration
         {
             return new GenerationReading(
                 GenerationState.ArtifactDescribesAnotherBuild,
-                $"The generated schema describes {artifact.GameBuild} and the installed game is "
-                + $"{installedBuild}. It is out of date: types and fields the newer build added are not in "
-                + "it, and anything it says about them is missing rather than wrong. Produce the type "
-                + "information again and generate again. " + WhatIsNeeded,
+                $"The generated schema was generated against {artifact.GameBuild} and the installed game "
+                + $"is {installedBuild}. The game has moved since: types and fields the newer build added "
+                + "are not in it, and anything it says about them is missing rather than wrong. Produce the "
+                + "type information again and generate again. " + WhatIsNeeded,
                 artifact,
                 installedBuild);
         }
 
         return new GenerationReading(
             GenerationState.ArtifactCurrent,
-            $"The generated schema describes {artifact.GameBuild}, which is the installed build.",
+            $"The generated schema was generated against {artifact.GameBuild}, which is still the "
+            + "installed build. The game has not moved since it was generated - which is what can be "
+            + "checked from here, and is not the same as the type information behind it having come from "
+            + "that build.",
             artifact,
             installedBuild);
     }
 
     private static string Describe(string? build) =>
-        build is null ? "type information that did not record its game build" : build;
+        build is null ? "an install whose build was not recorded" : build;
 
     private static (SchemaIrDocument? Document, string? Unreadable) ReadArtifact(string path)
     {
@@ -307,7 +311,10 @@ public static class SchemaGeneration
 /// </param>
 /// <param name="GameExecutablePath">
 /// The game's own executable, read only for the build number it carries, or
-/// null where none was named. Nothing is written to an install, ever.
+/// null where none was named. That number is what an artifact records as the
+/// build it was generated against, so it says which game was installed at
+/// generation time and not which build the type information described. Nothing
+/// is written to an install, ever.
 /// </param>
 /// <param name="TypeInformationDescription">
 /// How the type information describes itself in anything produced from it.
@@ -335,13 +342,13 @@ public sealed record GenerationReading(
     string? InstalledBuild)
 {
     /// <summary>
-    /// Whether the generated schema here can be used as describing this game.
+    /// Whether the game is still the build this schema was generated against.
     /// </summary>
     /// <remarks>
     /// True in one state only. Every other one is either no schema, a schema
-    /// that describes something else, or a schema nobody could check - and the
-    /// last of those is deliberately not folded in with the first, because "it
-    /// might be current" and "it is current" are different answers.
+    /// generated against another build, or a schema nobody could check - and
+    /// the last of those is deliberately not folded in with the first, because
+    /// "it might be current" and "it is current" are different answers.
     /// </remarks>
     public bool ArtifactIsKnownCurrent => State == GenerationState.ArtifactCurrent;
 }
@@ -350,13 +357,20 @@ public sealed record GenerationReading(
 public enum GenerationState
 {
     /// <summary>
-    /// There is a generated schema and it describes the installed build.
+    /// There is a generated schema and the game has not moved since it was
+    /// generated.
     /// </summary>
+    /// <remarks>
+    /// Says the game is where it was, and no more. Whether the type information
+    /// the schema was derived from came from that build is a different question
+    /// and one nothing here can answer, because nothing in that information
+    /// states a build.
+    /// </remarks>
     ArtifactCurrent,
 
     /// <summary>
-    /// There is a generated schema and it describes a different build of the
-    /// game from the one installed.
+    /// There is a generated schema and the game has moved since it was
+    /// generated.
     /// </summary>
     ArtifactDescribesAnotherBuild,
 
