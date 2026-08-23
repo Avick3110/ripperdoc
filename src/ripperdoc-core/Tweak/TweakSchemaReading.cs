@@ -221,7 +221,13 @@ public sealed class TweakSchemaReading
             attributed++;
 
             var property = write.FlatName[(recordName.Length + 1)..];
-            var inTypeModel = type.Fields.ContainsKey(property);
+
+            // Asked under any spelling the schema offers, not only the one it
+            // keys the field by. A schema derived from accessor shapes cannot
+            // recover a name's capitalisation and carries both candidates, and
+            // shipped data really does use either - so a primary-name lookup
+            // would report a field the schema has as one it lacks.
+            var inTypeModel = type.FindField(property) is not null;
 
             if (!inTypeModel)
             {

@@ -207,3 +207,58 @@ public class ReferenceGraphTests
     private static RecordFieldShape Reference(string name, string referent) =>
         new(name, "TweakDBID", [], referent);
 }
+
+/// <summary>
+/// Looking a field up under a spelling the schema did not choose as its
+/// primary one.
+/// </summary>
+/// <remarks>
+/// Its own class because it is not about the reference graph. It is about the
+/// consequence of a source carrying more than one candidate name for one field:
+/// every caller that asks "does this type have this field" has to ask in a way
+/// that sees the alternates, or a field the schema really does have reads as
+/// one it lacks.
+/// </remarks>
+public class RecordFieldLookupTests
+{
+    [Fact]
+    public void AFieldIsFoundUnderItsPrimaryNameAndUnderItsAlternates()
+    {
+        var type = TypeWith(new RecordFieldShape("steamKey", "CName", ["SteamKey"], null));
+
+        Assert.Equal("steamKey", type.FindField("steamKey")!.Name);
+        Assert.Equal("steamKey", type.FindField("SteamKey")!.Name);
+        Assert.Null(type.FindField("somethingElse"));
+    }
+
+    [Fact]
+    public void AFieldWithNoAlternatesIsFoundOnlyUnderItsOwnName()
+    {
+        var type = TypeWith(new RecordFieldShape("speed", "Float"));
+
+        Assert.NotNull(type.FindField("speed"));
+        Assert.Null(type.FindField("Speed"));
+    }
+
+    [Fact]
+    public void AnAlternateThatIsAnotherFieldsRealNameDoesNotDisplaceIt()
+    {
+        // Two fields whose spellings overlap: one is really called Value and
+        // the other offers Value as a guess at how its own name is spelled.
+        // The one that is really called that is the better answer.
+        var type = TypeWith(
+            new RecordFieldShape("value", "Float", ["Value"], null),
+            new RecordFieldShape("Value", "Int32"));
+
+        Assert.Equal("Int32", type.FindField("Value")!.StorageType);
+        Assert.Equal("Float", type.FindField("value")!.StorageType);
+    }
+
+    private static RecordType TypeWith(params RecordFieldShape[] fields) =>
+        RecordSchemaDerivation.Derive(
+            new RecordTypeSourceReading(
+                [new RecordTypeShape("gamedataProbeThing_Record", null, true, fields)],
+                Array.Empty<DerivationFailure>()),
+            "a reading constructed for this test")
+            .Find("gamedataProbeThing_Record")!;
+}
