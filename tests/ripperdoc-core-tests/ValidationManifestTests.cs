@@ -313,6 +313,27 @@ public class ValidationManifestTests
     }
 
     [Fact]
+    public void AnUnaddressableFieldIsCountedOncePerNameItMightBeStoredUnder()
+    {
+        // The count is of probes, and a field the source offers two spellings of
+        // is two probes. Called a count of fields, or of record-and-field pairs,
+        // it would read as twice as many fields being unreachable as there are -
+        // and the two spellings need not fail together, since one can be short
+        // enough to address while the other is not.
+        var longEnough = new string('f', 60);
+        var schema = SchemaWith(new RecordFieldShape(longEnough, "Float", [longEnough + "Alternate"], null));
+        var shipped = new FakeDatabase((new string('r', 200), "gamedataThing_Record"));
+
+        var manifest = ValidationManifest.Build(schema, shipped);
+
+        Assert.Equal(2, manifest.UnaddressableFieldProbes);
+        Assert.Equal(2, Single(manifest).Spellings.Count);
+        Assert.All(
+            Single(manifest).Spellings,
+            spelling => Assert.Equal(ValidationState.NotAddressable, spelling.State));
+    }
+
+    [Fact]
     public void AnOrdinarySweepAddressesEverythingItLooksAt()
     {
         var schema = SchemaWith(Field("speed", "Float"));

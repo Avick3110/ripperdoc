@@ -74,21 +74,30 @@ public sealed class ValidationManifest
     public IReadOnlyList<string> RecordTypesNotInSchema { get; }
 
     /// <summary>
-    /// How many record-and-field pairs could not be addressed at all, for any
-    /// of the reasons a pair can have no identifier.
+    /// How many attempts to address a field on a record found no identifier, for
+    /// any of the reasons there can be none.
     /// </summary>
     /// <remarks>
-    /// Expected to be zero. Such a pair is not a failure of the sweep - no
+    /// <para>
+    /// Counted per attempt, which is per name a field might be stored under -
+    /// so a field the source offers two spellings of contributes two, and this
+    /// is not a count of fields or of record-and-field pairs. The unit is the
+    /// probe because the probe is what could not be made: one spelling of a name
+    /// can be too long to address while another is not.
+    /// </para>
+    /// <para>
+    /// Expected to be zero. Such a probe is not a failure of the sweep - no
     /// stored value can exist under a name with no identifier - but it is a
     /// place the sweep looked and could not look properly, so it is counted
     /// rather than passed over in silence. Which reasons, and how many of each,
     /// is in <see cref="UnaddressableFieldProbesByReason"/>: a total on its own
     /// invites whoever reads it to assume the reason that comes to mind.
+    /// </para>
     /// </remarks>
     public int UnaddressableFieldProbes { get; }
 
     /// <summary>
-    /// How many pairs could not be addressed for each reason.
+    /// How many such probes were refused for each reason.
     /// </summary>
     /// <remarks>
     /// Every reason appears, including those nothing hit, so a reader can see
