@@ -443,6 +443,78 @@ public class ValidationManifestTests
         Assert.Equal(field.State, spelling.State);
     }
 
+    [Fact]
+    public void AValueSittingAtASpellingTheDataRejectedIsNotSomethingTheSchemaExplains()
+    {
+        // The coverage number is what the arbitrated schema accounts for, and
+        // once the data confirms one spelling the others are guesses it
+        // rejected. What sits at a rejected guess's identifier belongs to
+        // whatever else that identifier addresses - counting it would credit
+        // this schema with explaining a value it does not describe, and would
+        // make a mode that probes two names per field look like a mode that
+        // covers more of the database.
+        var schema = SchemaWith(new RecordFieldShape("value", "Float", ["Value"], null));
+        var shipped = new FakeDatabase(("Vehicle.quadra", "gamedataThing_Record"));
+        shipped.Store("Vehicle.quadra", "value", "Float");
+        shipped.Store("Vehicle.quadra", "Value", "CName");
+
+        var manifest = ValidationManifest.Build(schema, shipped);
+
+        Assert.Equal(ValidationState.Corroborated, Single(manifest).State);
+        Assert.Equal(1, manifest.StoredValuesExplained);
+    }
+
+    [Fact]
+    public void WhereNoSpellingIsConfirmedEveryCandidateStillCounts()
+    {
+        // The other arm. Nothing has decided between the candidates, so the
+        // artifact goes on carrying all of them and the count says the same -
+        // a value under any of them is one this schema can address, even though
+        // it is wrong about its type and says so.
+        var schema = SchemaWith(new RecordFieldShape("value", "Float", ["Value"], null));
+        var shipped = new FakeDatabase(("Vehicle.quadra", "gamedataThing_Record"));
+        shipped.Store("Vehicle.quadra", "Value", "CName");
+
+        var manifest = ValidationManifest.Build(schema, shipped);
+
+        Assert.Equal(ValidationState.Contradicted, Single(manifest).State);
+        Assert.Equal(1, manifest.StoredValuesExplained);
+    }
+
+    [Fact]
+    public void AValueOfTheWrongTypeUnderAFieldsOnlyNameIsStillOneTheSchemaAccountsFor()
+    {
+        // Explaining a value and being right about it are different things, and
+        // only the first is counted here. A field whose name the source knew has
+        // no rejected spelling to exclude, so this is exactly the rule that held
+        // before there were candidates at all - which is every field of a schema
+        // read from a compiled type model.
+        var schema = SchemaWith(Field("speed", "Float"));
+        var shipped = new FakeDatabase(("Vehicle.quadra", "gamedataThing_Record"));
+        shipped.Store("Vehicle.quadra", "speed", "CName");
+
+        var manifest = ValidationManifest.Build(schema, shipped);
+
+        Assert.Equal(ValidationState.Contradicted, Single(manifest).State);
+        Assert.Equal(1, manifest.StoredValuesExplained);
+    }
+
+    [Fact]
+    public void WhereBothSpellingsAreConfirmedTheValuesUnderBothCount()
+    {
+        // Two confirmed spellings are two names the arbitrated schema is keyed
+        // by, and the values under each are the field's.
+        var schema = SchemaWith(new RecordFieldShape("value", "Float", ["Value"], null));
+        var shipped = new FakeDatabase(("Vehicle.quadra", "gamedataThing_Record"));
+        shipped.Store("Vehicle.quadra", "value", "Float");
+        shipped.Store("Vehicle.quadra", "Value", "Float");
+
+        var manifest = ValidationManifest.Build(schema, shipped);
+
+        Assert.Equal(2, Single(manifest).ConfirmedFieldNames.Count());
+        Assert.Equal(2, manifest.StoredValuesExplained);
+    }
+
     private static FieldValidation Single(ValidationManifest manifest) => Assert.Single(manifest.Fields());
 
     private static RecordFieldShape Field(string name, string storageType) => new(name, storageType);

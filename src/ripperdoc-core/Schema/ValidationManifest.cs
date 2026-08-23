@@ -53,6 +53,24 @@ public sealed class ValidationManifest
     /// <summary>
     /// How many distinct stored values the schema accounts for.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Counted under the names the arbitrated schema keys its fields by, which
+    /// are not always the names it was asked about. A field whose spelling the
+    /// source could not recover is probed under every candidate, and where the
+    /// data confirms one of them the others are guesses the data rejected -
+    /// what sits at a rejected guess's identifier belongs to whatever else that
+    /// identifier addresses, and counting it here would credit the schema with
+    /// explaining a value it does not describe.
+    /// </para>
+    /// <para>
+    /// Where no candidate was confirmed, nothing has decided between them, so
+    /// all of them still count - which is the same set of names the artifact
+    /// goes on carrying for such a field. The number therefore says what the
+    /// schema as it would be written down accounts for, rather than what the
+    /// widest possible probe happened to reach.
+    /// </para>
+    /// </remarks>
     public int StoredValuesExplained { get; }
 
     /// <summary>How many stored values the database holds in total.</summary>
@@ -245,7 +263,18 @@ public sealed class ValidationManifest
                 // and no spelling that is really another field's name. Asking
                 // for them here rather than reading the field's own alternates
                 // is what keeps that exclusion in one place.
-                foreach (var candidate in type.Spellings.Of(field))
+                var candidates = type.Spellings.Of(field);
+
+                // Whether this field's spellings are still in question. Where
+                // they are, what was found under each is kept apart until the
+                // verdicts are in, because which of them the schema ends up
+                // keyed by is not known until then. Where the source knew the
+                // name there is nothing to decide, so those go straight in and
+                // no list is allocated for them - which is every field of a
+                // schema read from a compiled type model.
+                var contested = candidates.Count > 1;
+
+                foreach (var candidate in candidates)
                 {
                     if (!fieldTallies.TryGetValue((field.Name, candidate), out var tally))
                     {
@@ -272,7 +301,14 @@ public sealed class ValidationManifest
                         continue;
                     }
 
-                    explained.Add(identifier);
+                    if (contested)
+                    {
+                        (tally.Found ??= new List<ulong>()).Add(identifier);
+                    }
+                    else
+                    {
+                        explained.Add(identifier);
+                    }
 
                     if (storedType is null)
                     {
@@ -314,6 +350,34 @@ public sealed class ValidationManifest
                     .ToArray();
 
                 var state = StateOfField(spellings, hasRecords);
+
+                // Now that the data has spoken, the values reached under the
+                // spellings it settled on are the ones this schema accounts
+                // for. A confirmed spelling settles the question the candidates
+                // existed to ask, so the rest are guesses the data rejected and
+                // what sits at their identifiers is somebody else's. Where it
+                // confirmed none, nothing has decided, and every candidate
+                // still counts - the same ones the artifact goes on carrying.
+                if (spellings.Length > 1)
+                {
+                    var settled = spellings.Any(spelling => spelling.State == ValidationState.Corroborated)
+                        ? spellings.Where(spelling => spelling.State == ValidationState.Corroborated)
+                        : spellings;
+
+                    foreach (var spelling in settled)
+                    {
+                        var found = fieldTallies?.GetValueOrDefault((field.Name, spelling.Name))?.Found;
+                        if (found is null)
+                        {
+                            continue;
+                        }
+
+                        foreach (var identifier in found)
+                        {
+                            explained.Add(identifier);
+                        }
+                    }
+                }
 
                 verdicts.Add(new FieldValidation(
                     typeName,
@@ -441,6 +505,14 @@ public sealed class ValidationManifest
         public int Unreadable;
         public int Unaddressable;
         public string? ObservedStorageType;
+
+        /// <summary>
+        /// The identifiers stored values were found under, held back until the
+        /// verdicts decide whether this spelling is one the schema is keyed by.
+        /// Null for a field whose name the source knew, because there is
+        /// nothing to decide and those identifiers are counted as they are met.
+        /// </summary>
+        public List<ulong>? Found;
     }
 }
 

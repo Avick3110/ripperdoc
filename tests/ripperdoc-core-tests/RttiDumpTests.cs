@@ -34,7 +34,10 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
     private const int FieldsCarryingAReferent = 1_234;
     private const int DistinctReferentTypes = 490;
     private const int ValuesInTheDatabase = 3_306_462;
-    private const int ValuesTheGeneratedSchemaExplains = 3_150_040;
+    private const int ValuesTheGeneratedSchemaExplains = 3_150_039;
+    private const int ValuesTheInheritedSchemaExplains = 3_150_037;
+    private const int ValuesReachedOnlyUnderARejectedSpelling = 1;
+    private const int ValuesReachedOnlyUnderAnUnvindicatedSpelling = 67_272;
     private const int SlotsTheDataContradicts = 66;
     private const int SlotsSomeSpellingContradicts = 100;
     private const int SlotsCondemnedOnlyByAGuessedSpelling = 34;
@@ -105,6 +108,73 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
         Assert.Equal(ValuesTheGeneratedSchemaExplains, _fixture.Manifest.StoredValuesExplained);
         Assert.Empty(_fixture.Manifest.RecordTypesNotInSchema);
         Assert.Equal(0, _fixture.Manifest.UnaddressableFieldProbes);
+    }
+
+    [Fact]
+    public void ProbingASecondNamePerFieldBuysAlmostNoneOfTheCoverage()
+    {
+        // What the coverage number would have been under the two other rules it
+        // could have been counted by, measured rather than argued. The published
+        // law rests on the gap between them being negligible, and a law resting
+        // on a number nothing reproduces is a law nobody can check.
+        //
+        // Counted here rather than read off the manifest, because the manifest
+        // deliberately reports one of these three and the finding quotes all of
+        // them.
+        var everyCandidate = new HashSet<ulong>();
+        var vindicatedOnly = new HashSet<ulong>();
+        var confirmedBySlot = _fixture.Manifest.Fields().ToDictionary(
+            field => (field.RecordTypeName, field.FieldName),
+            field => field.ConfirmedFieldNames.ToArray());
+
+        foreach (var record in _fixture.Database.Records)
+        {
+            if (_fixture.Schema.Find(record.TypeName) is not { } type)
+            {
+                continue;
+            }
+
+            foreach (var field in type.Fields.Values)
+            {
+                var confirmed = confirmedBySlot.GetValueOrDefault((type.Name, field.Name)) ?? [];
+
+                foreach (var candidate in type.Spellings.Of(field))
+                {
+                    if (!TweakIdentifier.TryForField(record.Identifier, candidate, out var identifier, out _)
+                        || !_fixture.Database.TryGetStoredValueType(identifier, out _))
+                    {
+                        continue;
+                    }
+
+                    everyCandidate.Add(identifier);
+
+                    if (confirmed.Contains(candidate, StringComparer.Ordinal))
+                    {
+                        vindicatedOnly.Add(identifier);
+                    }
+                }
+            }
+        }
+
+        // The widest possible probe, against what the schema is actually keyed
+        // by once the arbiter has spoken. One value between them.
+        Assert.Equal(
+            ValuesReachedOnlyUnderARejectedSpelling,
+            everyCandidate.Count - _fixture.Manifest.StoredValuesExplained);
+
+        // And how much of the widest probe rests on a spelling no shipped value
+        // ever vindicated, which is the size of the old artifact rather than of
+        // any disagreement between the two modes.
+        Assert.Equal(
+            ValuesReachedOnlyUnderAnUnvindicatedSpelling,
+            everyCandidate.Count - vindicatedOnly.Count);
+
+        // The whole of the generated mode's margin over the inherited one, which
+        // is what the finding leads with. Two values in three and a quarter
+        // million; both modes round to the same share to four decimal places.
+        Assert.Equal(
+            2,
+            _fixture.Manifest.StoredValuesExplained - ValuesTheInheritedSchemaExplains);
     }
 
     [Fact]
