@@ -159,6 +159,54 @@ public class TweakSchemaReadingTests
     }
 
     [Fact]
+    public void APropertyWrittenUnderAFieldsOtherSpellingIsOneTheSchemaHas()
+    {
+        // A schema derived from accessor shapes cannot recover how a name is
+        // capitalised, so it carries both spellings and the layer may use
+        // either. Asked under the primary name alone, a field the schema really
+        // does have reads as one it lacks - and the layer's write is then
+        // counted against the type model and, with no framework metadata to
+        // rescue it, reported as a property nothing declares.
+        var documents = Documents((
+            "alpha\\a.yaml",
+            $"Probe.one:\n  $type: {WidgetType}\n  SteamKey: hello\n"));
+
+        var reading = TweakSchemaReading.Of(documents, SchemaWithATwoSpelledField(), TweakExtraFlats.None);
+
+        Assert.Equal(0, reading.PropertiesTheTypeModelAloneLacks);
+        Assert.Equal(1, reading.PropertyWritesOnAResolvedType);
+    }
+
+    [Fact]
+    public void APropertyThatIsNoSpellingOfAnyFieldIsStillOneTheTypeModelLacks()
+    {
+        // The other arm. Asking under every spelling must not turn into asking
+        // loosely enough that anything matches - a name the schema offers under
+        // none of its spellings is still absent from it.
+        var documents = Documents((
+            "alpha\\a.yaml",
+            $"Probe.one:\n  $type: {WidgetType}\n  steamkey: hello\n"));
+
+        var reading = TweakSchemaReading.Of(documents, SchemaWithATwoSpelledField(), TweakExtraFlats.None);
+
+        Assert.Equal(1, reading.PropertiesTheTypeModelAloneLacks);
+    }
+
+    // A schema whose one field the source could not recover the capitalisation
+    // of, so it offers two spellings and the data decides.
+    private static RecordSchema SchemaWithATwoSpelledField() => RecordSchemaDerivation.Derive(
+        new RecordTypeSourceReading(
+            [
+                new RecordTypeShape(
+                    WidgetType,
+                    null,
+                    true,
+                    [new RecordFieldShape("steamKey", "CName", ["SteamKey"], null)]),
+            ],
+            []),
+        "a schema built for this check");
+
+    [Fact]
     public void WithoutTheFrameworksMetadataTheCountIsWithheldRatherThanReportedWrong()
     {
         var documents = Documents((
