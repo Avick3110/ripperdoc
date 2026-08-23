@@ -60,15 +60,28 @@ public sealed record SchemaIrDocument
     public required DateTimeOffset GeneratedAt { get; init; }
 
     /// <summary>
-    /// Which build of the game the type information behind this artifact
-    /// described, or null where nothing recorded it.
+    /// Which build of the game was installed when this artifact was generated,
+    /// or null where no install was named or none could be read.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Persisted rather than recomputed, unlike everything else here, because
     /// it is the one fact about this artifact that cannot be recovered from
-    /// the artifact. It is also what makes staleness checkable: a later run
-    /// compares it against the build actually installed and can say the
-    /// artifact describes an older game, instead of assuming either way.
+    /// the artifact. It is what makes staleness checkable: a later run compares
+    /// it against the build now installed and can say the game has moved since,
+    /// instead of assuming either way.
+    /// </para>
+    /// <para>
+    /// It is deliberately not "the build the type information described", which
+    /// is the question anyone reading it actually has. Nothing in the type
+    /// information states a build, so that question cannot be answered from
+    /// here at all; the two coincide when the type information was produced
+    /// from the install it is being generated against, and part company when it
+    /// was produced before a patch. Widening this field's meaning to the
+    /// question would make it wrong in exactly that case rather than silent,
+    /// and a run that generated from older type information would report an
+    /// artifact current with a game it does not describe.
+    /// </para>
     /// </remarks>
     [JsonPropertyName("gameBuild")]
     public string? GameBuild { get; init; }
@@ -310,6 +323,30 @@ public sealed record SchemaIrDocument
             throw new FileNotFoundException("There is no schema artifact at this path.", path);
         }
 
+        // The version is read on its own, and first. Read as part of the whole
+        // document it cannot be: a later format that stops writing a key this
+        // build requires fails to deserialise, and the version that would have
+        // explained why is inside the document that did not parse. What the
+        // reader then says is that the file is corrupt, of a file that is
+        // perfectly well formed and simply newer - and whoever reads that goes
+        // looking for damage instead of for a build that can read it.
+        var version = VersionOf(path);
+
+        if (version is null)
+        {
+            throw new InvalidDataException(
+                $"'{Path.GetFileName(path)}' does not say which artifact format it is written in, so there "
+                + "is no way to tell a file this build can read from one it cannot.");
+        }
+
+        if (version != CurrentFormatVersion)
+        {
+            throw new InvalidDataException(
+                $"'{Path.GetFileName(path)}' is written in artifact format {version} and this build reads "
+                + $"format {CurrentFormatVersion}. Generate the artifact again rather than reading it as "
+                + "though the formats agreed.");
+        }
+
         SchemaIrDocument? document;
         try
         {
@@ -328,15 +365,38 @@ public sealed record SchemaIrDocument
             throw new InvalidDataException($"'{Path.GetFileName(path)}' holds no schema artifact.");
         }
 
-        if (document.FormatVersion != CurrentFormatVersion)
+        return document;
+    }
+
+    /// <summary>
+    /// The format version a file states, or null where it states none.
+    /// </summary>
+    /// <remarks>
+    /// Deserialised into a shape that requires nothing, so that it answers for
+    /// a file written in any format this reader may ever meet. A file that is
+    /// not JSON at all still fails here, which is the right answer for one: it
+    /// is not a version this build cannot read, it is not an artifact.
+    /// </remarks>
+    private static int? VersionOf(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            return JsonSerializer.Deserialize<FormatVersionOnly>(stream, Format)?.FormatVersion;
+        }
+        catch (JsonException exception)
         {
             throw new InvalidDataException(
-                $"'{Path.GetFileName(path)}' is written in artifact format {document.FormatVersion} and this "
-                + $"build reads format {CurrentFormatVersion}. Generate the artifact again rather than "
-                + "reading it as though the formats agreed.");
+                $"'{Path.GetFileName(path)}' is not a readable schema artifact: {exception.Message}",
+                exception);
         }
+    }
 
-        return document;
+    /// <summary>The one field that has to be readable before anything else is.</summary>
+    private sealed record FormatVersionOnly
+    {
+        [JsonPropertyName("formatVersion")]
+        public int? FormatVersion { get; init; }
     }
 
     /// <summary>Write the artifact to a file.</summary>
