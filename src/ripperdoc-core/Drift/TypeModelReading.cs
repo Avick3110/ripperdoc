@@ -52,14 +52,26 @@ public sealed record TypeModelReading(
     /// <para>
     /// Two readings of the same description of the game give the same
     /// fingerprint, and any difference in what either says gives a different
-    /// one. That is what lets a machine holding only the compiled model decide
-    /// whether an audit recorded elsewhere was taken against the model it has.
+    /// one.
     /// </para>
     /// <para>
-    /// Everything is put in a fixed order first, because reflection does not
-    /// promise one. Ordered by arrival, the same model on two machines could
-    /// fingerprint differently, and the check built on it would report drift
-    /// that is really just a difference in what order types were handed over.
+    /// Everything is put in a fixed order first, because neither description
+    /// promises one. Ordered by arrival, the same description read on two
+    /// machines could fingerprint differently, and a check built on it would
+    /// report drift that is really just a difference in what order types were
+    /// handed over.
+    /// </para>
+    /// <para>
+    /// Ordering the input fixes what this can fix, and not what it cannot.
+    /// A reading taken from generated type information is stable, because the
+    /// files it comes from say the same thing every time they are read. A
+    /// reading reflected out of the compiled model is not: the model answers
+    /// what a property's stored type is, and for a small number of properties
+    /// its answer depends on what else in it has been resolved first, so two
+    /// readings in one process can differ in content and therefore here. That
+    /// is why nothing committed is keyed on this value for the compiled side -
+    /// see <see cref="PinnedAssemblyIdentity"/>, which is a property of the
+    /// file on disk and cannot move while the file does not.
     /// </para>
     /// </remarks>
     public string Fingerprint()
@@ -126,6 +138,7 @@ public sealed record TypeModelReading(
         var assembly = typeof(RedBaseClass).Assembly;
         var name = assembly.GetName();
         var failures = new List<string>();
+        var identity = PinnedAssemblyIdentity();
 
         var classes = new Dictionary<string, ModelClass>(StringComparer.Ordinal);
         var enums = new Dictionary<string, ModelEnum>(StringComparer.Ordinal);
@@ -150,8 +163,33 @@ public sealed record TypeModelReading(
                 classes,
                 enums,
                 failures.OrderBy(failure => failure, StringComparer.Ordinal).ToArray()),
-            $"{name.Name} {name.Version?.ToString(3) ?? "unknown version"}");
+            $"{name.Name} {name.Version?.ToString(3) ?? "unknown version"}",
+            identity);
     }
+
+    /// <summary>
+    /// What identifies the build of the pinned dependency this engine is
+    /// running against.
+    /// </summary>
+    /// <returns>The module's identity, lower-case hexadecimal.</returns>
+    /// <remarks>
+    /// <para>
+    /// The compiler writes this into the assembly when it builds it, so it
+    /// names one build of the dependency and changes whenever that build does.
+    /// It is read from the file rather than derived from anything the file
+    /// says, which is what makes it the same answer on every run and on every
+    /// machine holding the same file - and therefore the one thing about the
+    /// compiled model that a committed record can honestly be keyed on.
+    /// </para>
+    /// <para>
+    /// What it cannot see is the model resolving differently while the file
+    /// stays put. That question is not one a machine without generated type
+    /// information could answer anyway; the audit answers it where the
+    /// generated information is, by comparing the two descriptions outright.
+    /// </para>
+    /// </remarks>
+    public static string PinnedAssemblyIdentity() =>
+        typeof(RedBaseClass).Assembly.ManifestModule.ModuleVersionId.ToString("n", CultureInfo.InvariantCulture);
 
     /// <summary>
     /// Express generated type information in the comparison vocabulary.
@@ -165,6 +203,20 @@ public sealed record TypeModelReading(
 
         var failures = new List<string>();
         var classes = new Dictionary<string, ModelClass>(StringComparer.Ordinal);
+
+        // A key the reader does not read is a statement the generated side
+        // makes and this reading does not carry, so it belongs among the
+        // failures rather than only on the model it was read into. The audit
+        // compares what is here; anything the reader dropped is a place it
+        // could not have found drift, and a receipt counting read failures
+        // would otherwise report none while the reader had silently skipped
+        // whatever those keys say.
+        foreach (var key in model.UnrecognisedKeys)
+        {
+            failures.Add(
+                $"{key}: the generated type information carries this key and this reader does not read it, "
+                + "so whatever it says was not compared.");
+        }
 
         foreach (var type in model.Classes.Values)
         {
@@ -303,9 +355,14 @@ public sealed record TypeModelReading(
 /// <param name="DependencyVersion">
 /// The pinned dependency's name and version, as the receipt records it.
 /// </param>
+/// <param name="AssemblyIdentity">
+/// What identifies the build of the dependency the reading came out of, as
+/// <see cref="TypeModelReading.PinnedAssemblyIdentity"/> gives it.
+/// </param>
 public sealed record CompiledTypeModelReading(
     TypeModelReading Reading,
-    string DependencyVersion);
+    string DependencyVersion,
+    string AssemblyIdentity);
 
 /// <summary>One class, as either description of the game states it.</summary>
 /// <param name="Name">The class's name.</param>

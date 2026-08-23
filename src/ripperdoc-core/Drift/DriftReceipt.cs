@@ -18,11 +18,23 @@ namespace Ripperdoc.Core.Drift;
 /// <para>
 /// This is the third answer. The audit runs where the generated information is;
 /// what it produces is this receipt; and a build with no generated information
-/// checks the receipt against the one input it does have - the compiled type
-/// model, which is on disk wherever this engine builds. So a build can say, and
-/// says only, this: the accepted result of the audit was taken against exactly
-/// the type model in this build. Bump the dependency without re-running the
-/// audit and that stops being true, loudly.
+/// checks the receipt against the one input it does have - the pinned
+/// dependency's own file, which is on disk wherever this engine builds. So a
+/// build can say, and says only, this: the accepted result of the audit was
+/// taken against exactly this build of the dependency. Bump the dependency
+/// without re-running the audit and that stops being true, loudly.
+/// </para>
+/// <para>
+/// The claim is deliberately about identity and not about content. What a
+/// machine with no generated information can establish for itself is which
+/// build of the dependency it holds, which the file states and which cannot
+/// move while the file does not. What that build's type model actually says is
+/// read by reflecting over it, and a reflected reading is not stable enough to
+/// key a committed file on - the model's answer for a small number of
+/// properties depends on what else in it has been resolved first. So identity
+/// is what travels here, and content is compared where the generated
+/// information is, by the audit, which holds the two descriptions against each
+/// other outright.
 /// </para>
 /// <para>
 /// What it deliberately cannot say is whether the audit is current with respect
@@ -44,15 +56,18 @@ public sealed record DriftReceipt
     public required string Dependency { get; init; }
 
     /// <summary>
-    /// A fingerprint of the compiled type model the audit was run against.
+    /// What identifies the build of the pinned dependency the audit was run
+    /// against.
     /// </summary>
     /// <remarks>
     /// The one field a machine with no generated type information can check for
     /// itself, and therefore the whole of what makes this receipt more than an
-    /// assertion.
+    /// assertion. It says which build of the dependency was audited and not
+    /// what that build contains - see the type's own remarks for why the second
+    /// is not something a committed file can carry.
     /// </remarks>
-    [JsonPropertyName("compiledTypeModelFingerprint")]
-    public required string CompiledTypeModelFingerprint { get; init; }
+    [JsonPropertyName("typeModelAssemblyIdentity")]
+    public required string TypeModelAssemblyIdentity { get; init; }
 
     /// <summary>
     /// What the generated type information was, in the words its own provenance
@@ -60,6 +75,22 @@ public sealed record DriftReceipt
     /// </summary>
     [JsonPropertyName("generatedFrom")]
     public required string GeneratedFrom { get; init; }
+
+    /// <summary>
+    /// A fingerprint of everything the generated type information said, in the
+    /// vocabulary the audit compares in.
+    /// </summary>
+    /// <remarks>
+    /// The other side's identity, and unlike the compiled side's it is taken
+    /// from content: generated type information is read out of files that say
+    /// the same thing every time, so a fingerprint of the reading is stable and
+    /// is the more exact statement of which input was audited. It is a hash and
+    /// names nothing the game declares. A check that reproduces a number
+    /// measured against one dump can require this to match before believing the
+    /// number applies.
+    /// </remarks>
+    [JsonPropertyName("generatedTypeInformationFingerprint")]
+    public required string GeneratedTypeInformationFingerprint { get; init; }
 
     /// <summary>How many classes were compared.</summary>
     [JsonPropertyName("classesCompared")]
@@ -110,21 +141,30 @@ public sealed record DriftReceipt
     /// </summary>
     /// <param name="audit">The audit.</param>
     /// <param name="compiled">The compiled model it was run against.</param>
-    /// <param name="generatedFailures">
-    /// How many things the generated side could not be read for.
-    /// </param>
+    /// <param name="generated">The generated type information it was run against.</param>
     /// <returns>The receipt.</returns>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
-    public static DriftReceipt Of(TypeModelAudit audit, CompiledTypeModelReading compiled, int generatedFailures)
+    /// <remarks>
+    /// This is what regenerates the committed receipt. It is called where the
+    /// generated type information is - the audit's own tier - and what it
+    /// produces is written out beside the checks that ran it, so accepting a
+    /// new result is copying a file rather than editing one by hand.
+    /// </remarks>
+    public static DriftReceipt Of(
+        TypeModelAudit audit,
+        CompiledTypeModelReading compiled,
+        TypeModelReading generated)
     {
         ArgumentNullException.ThrowIfNull(audit);
         ArgumentNullException.ThrowIfNull(compiled);
+        ArgumentNullException.ThrowIfNull(generated);
 
         return new DriftReceipt
         {
             Dependency = compiled.DependencyVersion,
-            CompiledTypeModelFingerprint = compiled.Reading.Fingerprint(),
+            TypeModelAssemblyIdentity = compiled.AssemblyIdentity,
             GeneratedFrom = audit.GeneratedDescription,
+            GeneratedTypeInformationFingerprint = generated.Fingerprint(),
             ClassesCompared = audit.ClassesCompared,
             PropertiesCompared = audit.PropertiesCompared,
             EnumsCompared = audit.EnumsCompared,
@@ -133,9 +173,28 @@ public sealed record DriftReceipt
                 .OrderBy(entry => entry.Key.ToString(), StringComparer.Ordinal)
                 .ToDictionary(entry => entry.Key.ToString(), entry => entry.Value, StringComparer.Ordinal),
             DivergenceFingerprint = audit.DivergenceFingerprint,
-            ReadFailures = compiled.Reading.Failures.Count + generatedFailures,
+            ReadFailures = compiled.Reading.Failures.Count + generated.Failures.Count,
         };
     }
+
+    /// <summary>The name the receipt is kept under, wherever it is kept.</summary>
+    /// <remarks>
+    /// One home for the name, so that the committed file, the check that holds
+    /// a build against it, and the message telling a reader which file to
+    /// replace cannot come to disagree about what it is called.
+    /// </remarks>
+    public const string FileName = "drift-receipt.json";
+
+    /// <summary>
+    /// The name a freshly taken receipt is written out under, beside the
+    /// committed one.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not the committed name. A run that overwrote the committed
+    /// receipt would turn every red drift check green by the act of running,
+    /// which is the one failure mode a gate like this cannot have.
+    /// </remarks>
+    public const string ProducedFileName = "drift-receipt.produced.json";
 
     /// <summary>Read a receipt from the file it is kept in.</summary>
     /// <param name="path">The receipt's path.</param>

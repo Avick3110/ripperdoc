@@ -176,6 +176,31 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
     }
 
     [Fact]
+    public void TheReceiptThisRunTakesIsTheReceiptThatWasAccepted()
+    {
+        // Every field of the receipt at once, compared as the text the file
+        // holds. Checking the fields this run cares about one at a time would
+        // leave whichever ones no check names asserted by nothing at all - and
+        // a committed record with unasserted fields in it is a record that can
+        // drift from the run it claims to describe without anything noticing.
+        //
+        // What this run produced is written out beside the test binaries rather
+        // than over the committed file, so accepting a new result is a copy
+        // somebody makes deliberately.
+        var produced = _fixture.ProducedReceipt.ToJson();
+        var producedPath = Path.Combine(AppContext.BaseDirectory, DriftReceipt.ProducedFileName);
+        File.WriteAllText(producedPath, produced);
+
+        Assert.True(
+            string.Equals(File.ReadAllText(DriftReceiptTests.ReceiptPath).ReplaceLineEndings("\n"), produced,
+                StringComparison.Ordinal),
+            "The receipt this run takes is not the one that was accepted. What the audit found, or what it "
+            + "was run against, has moved. Read the divergences on this machine before accepting them - they "
+            + $"are not in the repository, deliberately - and then copy '{producedPath}' over "
+            + $"'tests/{DriftReceipt.FileName}'.");
+    }
+
+    [Fact]
     public void TheAuditComparedWhatTheAcceptedResultSaysItCompared()
     {
         // The fingerprint above would still match if the audit compared far
@@ -185,6 +210,17 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
         Assert.Equal(_fixture.Receipt.PropertiesCompared, _fixture.Audit.PropertiesCompared);
         Assert.Equal(_fixture.Receipt.EnumsCompared, _fixture.Audit.EnumsCompared);
         Assert.Equal(_fixture.Receipt.EnumMembersCompared, _fixture.Audit.EnumMembersCompared);
+    }
+
+    [Fact]
+    public void TheAcceptedResultNamesTheGeneratedInformationThisRunRead()
+    {
+        // The receipt's statement about its other input, checked where that
+        // input actually is. A machine with no dump takes this on trust because
+        // it has nothing to compare against; this one does not have to.
+        Assert.Equal(
+            _fixture.Receipt.GeneratedTypeInformationFingerprint,
+            _fixture.GeneratedReading.Fingerprint());
     }
 
     [Fact]
@@ -255,7 +291,9 @@ public sealed class RttiDumpFixture
         ReferenceCheck = ReferenceValidation.Build(Graph, Database, Database);
 
         var compiled = TypeModelReading.FromPinnedTypeModel();
-        Audit = TypeModelAudit.Run(TypeModelReading.From(Model), compiled.Reading);
+        GeneratedReading = TypeModelReading.From(Model);
+        Audit = TypeModelAudit.Run(GeneratedReading, compiled.Reading);
+        ProducedReceipt = DriftReceipt.Of(Audit, compiled, GeneratedReading);
         Receipt = DriftReceipt.Read(DriftReceiptTests.ReceiptPath);
     }
 
@@ -291,7 +329,13 @@ public sealed class RttiDumpFixture
 
     public ReferenceValidation ReferenceCheck { get; }
 
+    /// <summary>The generated type information in the audit's vocabulary.</summary>
+    public TypeModelReading GeneratedReading { get; }
+
     public TypeModelAudit Audit { get; }
+
+    /// <summary>The receipt this run takes, which the committed one must equal.</summary>
+    public DriftReceipt ProducedReceipt { get; }
 
     public DriftReceipt Receipt { get; }
 }
