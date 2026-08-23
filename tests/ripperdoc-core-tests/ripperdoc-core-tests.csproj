@@ -25,6 +25,12 @@
     <None Include="..\measured-database.sha256" Link="measured-database.sha256">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- The record of what the drift audit found, read by the checks that
+         verify it is current. Only the checks read it, so there is one reader
+         and nothing to disagree with. -->
+    <None Include="..\drift-receipt.json" Link="drift-receipt.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>
