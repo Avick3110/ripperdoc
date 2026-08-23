@@ -1,4 +1,5 @@
 using Ripperdoc.Core.Schema;
+using Ripperdoc.Core.Tweak;
 using Xunit;
 
 namespace Ripperdoc.Core.Tests;
@@ -127,6 +128,84 @@ public class ReferenceGraphTests
         }
 
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+    }
+
+    [Fact]
+    public void APairNoSpellingCanAddressIsCountedAsUncheckedRatherThanChecked()
+    {
+        // There was nowhere to look, so nothing was looked at. Counted as
+        // checked, this pair would report a check that could not have happened -
+        // the same lie the validation manifest gives a state of its own to, and
+        // that this reported nowhere at all.
+        var graph = GraphOf(Type(
+            "gamedataProbeThing_Record",
+            null,
+            Reference(new string('f', 60), "gamedataProbeThing_Record")));
+
+        // A record whose own name is long enough that no field name fits beside
+        // it inside an identifier.
+        var source = new SyntheticReferenceSource()
+            .WithRecord(TweakIdentifier.Of(new string('r', 250)), "gamedataProbeThing_Record");
+
+        var check = Check(graph, source);
+
+        Assert.Equal(0, check.TypedEdgesChecked);
+        Assert.Equal(1, check.PairsNotAddressable);
+        Assert.Equal(0, check.ReferencesFollowed);
+    }
+
+    [Fact]
+    public void AnAddressablePairIsStillCountedAsChecked()
+    {
+        // The other arm, so that moving the count after the probing did not
+        // quietly stop it counting.
+        var graph = GraphOf(Type(
+            "gamedataProbeThing_Record",
+            null,
+            Reference("owner", "gamedataProbeThing_Record")));
+
+        var source = new SyntheticReferenceSource()
+            .WithRecord(TweakIdentifier.Of("Probe.thing"), "gamedataProbeThing_Record");
+
+        var check = Check(graph, source);
+
+        Assert.Equal(1, check.TypedEdgesChecked);
+        Assert.Equal(0, check.PairsNotAddressable);
+    }
+
+    [Fact]
+    public void ARecordOfATypeTheSchemaLacksIsNamedRatherThanPassedOver()
+    {
+        // Such a record has no edges here, so it contributes to no count and
+        // leaves a sweep looking as complete as one that had a schema for
+        // everything it met.
+        var graph = GraphOf(Type(
+            "gamedataProbeThing_Record",
+            null,
+            Reference("owner", "gamedataProbeThing_Record")));
+
+        var source = new SyntheticReferenceSource()
+            .WithRecord(TweakIdentifier.Of("Probe.thing"), "gamedataProbeThing_Record")
+            .WithRecord(TweakIdentifier.Of("Probe.alien"), "gamedataProbeUnknown_Record");
+
+        var check = Check(graph, source);
+
+        Assert.Equal(new[] { "gamedataProbeUnknown_Record" }, check.RecordTypesNotInSchema);
+        Assert.Equal(1, check.TypedEdgesChecked);
+    }
+
+    [Fact]
+    public void ASweepThatMetEveryTypeInItsSchemaNamesNone()
+    {
+        var graph = GraphOf(Type(
+            "gamedataProbeThing_Record",
+            null,
+            Reference("owner", "gamedataProbeThing_Record")));
+
+        var source = new SyntheticReferenceSource()
+            .WithRecord(TweakIdentifier.Of("Probe.thing"), "gamedataProbeThing_Record");
+
+        Assert.Empty(Check(graph, source).RecordTypesNotInSchema);
     }
 
     [Fact]

@@ -34,22 +34,26 @@ public sealed class ReferenceValidation
     private ReferenceValidation(
         int typedEdgesChecked,
         int untypedEdgesNotChecked,
+        int pairsNotAddressable,
         int valuesRead,
         int valuesUnreadable,
         int referencesFollowed,
         int referencesOfPermittedKind,
         int referencesOfOtherKind,
         int referencesToNothing,
+        IReadOnlyList<string> recordTypesNotInSchema,
         IReadOnlyList<MistypedReference> examples)
     {
         TypedEdgesChecked = typedEdgesChecked;
         UntypedEdgesNotChecked = untypedEdgesNotChecked;
+        PairsNotAddressable = pairsNotAddressable;
         ValuesRead = valuesRead;
         ValuesUnreadable = valuesUnreadable;
         ReferencesFollowed = referencesFollowed;
         ReferencesOfPermittedKind = referencesOfPermittedKind;
         ReferencesOfOtherKind = referencesOfOtherKind;
         ReferencesToNothing = referencesToNothing;
+        RecordTypesNotInSchema = recordTypesNotInSchema;
         Examples = examples;
     }
 
@@ -69,6 +73,33 @@ public sealed class ReferenceValidation
     /// reports having checked nothing, instead of reporting no failures.
     /// </remarks>
     public int UntypedEdgesNotChecked { get; }
+
+    /// <summary>
+    /// How many pairs went unchecked because no name the field might be stored
+    /// under has an identifier on that record.
+    /// </summary>
+    /// <remarks>
+    /// Not folded into <see cref="TypedEdgesChecked"/>, which says how many
+    /// pairs were actually looked at. A pair with no identifier under any of its
+    /// spellings was not looked at - there was nowhere to look - and counting it
+    /// as checked reports a check that did not happen, which is the failure the
+    /// validation manifest gives its own state to and this had none for.
+    /// Expected to be zero.
+    /// </remarks>
+    public int PairsNotAddressable { get; }
+
+    /// <summary>
+    /// Record types the records carry that the schema has never heard of, in a
+    /// stable order.
+    /// </summary>
+    /// <remarks>
+    /// A record of such a type has no edges here, and so contributes nothing to
+    /// any count below - indistinguishable, without this, from a record of a
+    /// known type that holds no references. The first was examined against no
+    /// schema at all and the second was examined and found clean, and a run that
+    /// reported them alike would be reporting coverage it did not have.
+    /// </remarks>
+    public IReadOnlyList<string> RecordTypesNotInSchema { get; }
 
     /// <summary>How many stored values were found and read as references.</summary>
     public int ValuesRead { get; }
@@ -155,6 +186,8 @@ public sealed class ReferenceValidation
 
         var typedChecked = 0;
         var untypedSkipped = 0;
+        var notAddressable = 0;
+        var unknownTypes = new HashSet<string>(StringComparer.Ordinal);
         var read = 0;
         var unreadable = 0;
         var followed = 0;
@@ -165,6 +198,15 @@ public sealed class ReferenceValidation
 
         foreach (var record in shipped.Records)
         {
+            // A record of a type the schema never heard of has no edges here,
+            // so without this it would slip through contributing to nothing and
+            // be indistinguishable from a record examined and found clean.
+            if (!graph.DescribesRecordType(record.TypeName))
+            {
+                unknownTypes.Add(record.TypeName);
+                continue;
+            }
+
             foreach (var edge in graph.From(record.TypeName))
             {
                 if (edge.ReferentTypeName is null)
@@ -173,7 +215,10 @@ public sealed class ReferenceValidation
                     continue;
                 }
 
-                typedChecked++;
+                // Counted after the probing rather than before it. A pair whose
+                // every spelling is unaddressable was never looked at, and
+                // calling it checked would report a check that could not happen.
+                var addressed = false;
 
                 // Every spelling the schema offers for the field, not only the
                 // one it keys the field by. A schema derived from accessor
@@ -188,6 +233,8 @@ public sealed class ReferenceValidation
                     {
                         continue;
                     }
+
+                    addressed = true;
 
                     if (!values.TryGetStoredIdentifiers(identifier, out var targets))
                     {
@@ -232,18 +279,29 @@ public sealed class ReferenceValidation
                         }
                     }
                 }
+
+                if (addressed)
+                {
+                    typedChecked++;
+                }
+                else
+                {
+                    notAddressable++;
+                }
             }
         }
 
         return new ReferenceValidation(
             typedChecked,
             untypedSkipped,
+            notAddressable,
             read,
             unreadable,
             followed,
             permitted,
             other,
             toNothing,
+            unknownTypes.OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             examples);
     }
 }
