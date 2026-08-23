@@ -28,6 +28,18 @@ namespace Ripperdoc.Core.Schema;
 /// different field is exactly the disagreement that is invisible until a field
 /// is condemned on another field's values.
 /// </para>
+/// <para>
+/// Only a name some field is certain of takes a spelling away from a field that
+/// is guessing at it. Where two fields are both guessing at the same spelling
+/// neither is the better answer, so the forward direction offers it to both -
+/// dropping it from one of them would leave that field unprobed under a name
+/// its values might really use, and report the field as unconfirmed having
+/// looked in one of the two places. The reverse direction has to name one
+/// field, and names the first in a fixed order rather than whichever the field
+/// set happened to be enumerated in; which of two guesses a stored name belongs
+/// to is not something the schema knows, and the honest part of the answer is
+/// that it is the same answer on every run.
+/// </para>
 /// </remarks>
 public sealed class FieldSpellings
 {
@@ -39,12 +51,26 @@ public sealed class FieldSpellings
         _candidates = new Dictionary<string, IReadOnlyList<string>>(fields.Count, StringComparer.Ordinal);
         _byName = new Dictionary<string, RecordField>(fields.Count, StringComparer.Ordinal);
 
-        foreach (var field in fields.Values)
+        // Ordered once, and everything below reads this rather than the field
+        // set. Two of the three passes have an outcome that depends on which
+        // field is reached first, and a dictionary does not promise an order -
+        // so the same schema built twice could otherwise resolve a contested
+        // spelling to a different field each time.
+        var ordered = fields.Values.OrderBy(field => field.Name, StringComparer.Ordinal).ToArray();
+
+        // The certain names, complete before any guess is weighed against them.
+        // Filled in its own pass and not added to while the guesses are read:
+        // an accepted guess joining this set part-way through would start
+        // excluding later fields' guesses on the strength of an earlier guess,
+        // which is a wider rule than the one below and a different one.
+        var certain = new Dictionary<string, RecordField>(fields.Count, StringComparer.Ordinal);
+        foreach (var field in ordered)
         {
+            certain[field.Name] = field;
             _byName[field.Name] = field;
         }
 
-        foreach (var field in fields.Values)
+        foreach (var field in ordered)
         {
             var candidates = new List<string>(1 + field.AlternateNames.Count) { field.Name };
 
@@ -56,7 +82,7 @@ public sealed class FieldSpellings
                 // values as evidence about this one - agreeing with them, or
                 // being condemned by them, on a name this field was only
                 // guessing at.
-                if (_byName.TryGetValue(alternate, out var owner) && !ReferenceEquals(owner, field))
+                if (certain.TryGetValue(alternate, out var owner) && !ReferenceEquals(owner, field))
                 {
                     continue;
                 }
@@ -68,8 +94,14 @@ public sealed class FieldSpellings
             }
 
             _candidates[field.Name] = candidates;
+        }
 
-            foreach (var alternate in candidates.Skip(1))
+        // The reverse direction last, so that a spelling two fields both guess
+        // at goes to the first of them by name. A certain name is already here
+        // and cannot be displaced by a guess.
+        foreach (var field in ordered)
+        {
+            foreach (var alternate in _candidates[field.Name].Skip(1))
             {
                 _byName.TryAdd(alternate, field);
             }
@@ -106,6 +138,14 @@ public sealed class FieldSpellings
     /// <param name="name">The name to resolve.</param>
     /// <returns>The field, or null where this type has none of that name.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="name"/> is null.</exception>
+    /// <remarks>
+    /// A name some field is certain of resolves to that field. A name only
+    /// guessed at, by more than one field, resolves to the first of them by
+    /// name - the same one every time, and not necessarily the right one, which
+    /// is the whole of what this direction can say about a spelling nothing has
+    /// established. The forward direction still offers that name to every field
+    /// guessing at it, so no field goes unprobed on account of the answer here.
+    /// </remarks>
     public RecordField? Find(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
