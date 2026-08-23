@@ -372,9 +372,22 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
     [Fact]
     public void TheAuditComparedWhatTheAcceptedResultSaysItCompared()
     {
+        if (ComparisonCannotRun())
+        {
+            return;
+        }
+
         // The fingerprint above would still match if the audit compared far
         // less and happened to find the same divergences among what it did
         // look at.
+        //
+        // Guarded like its neighbours. These four counts happen to be
+        // insensitive to the instability as it has been measured - a property
+        // that is present on both sides and given a foreign stored type on one
+        // - but that is what has been seen and not what the reading can do. One
+        // that adds or drops a class, property, enumeration or member moves
+        // these counts, and a process reading differently would then redden a
+        // healthy tree while the gate printed a skip for the same run.
         Assert.Equal(_fixture.Receipt.ClassesCompared, _fixture.Audit.ClassesCompared);
         Assert.Equal(_fixture.Receipt.PropertiesCompared, _fixture.Audit.PropertiesCompared);
         Assert.Equal(_fixture.Receipt.EnumsCompared, _fixture.Audit.EnumsCompared);
