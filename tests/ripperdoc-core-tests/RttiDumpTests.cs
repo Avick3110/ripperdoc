@@ -40,6 +40,12 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
     private const int SlotsCondemnedOnlyByAGuessedSpelling = 34;
     private const int SlotsConfirmedOnlyUnderTheAccessorSpelling = 89;
     private const int SlotsConfirmedUnderBothSpellings = 8;
+    private const int EdgesChecked = 1_517_882;
+    private const int ReferencesFollowed = 2_300_852;
+    private const int ReferencesOfPermittedKind = 1_915_600;
+    private const int ReferencesOfOtherKind = 59;
+    private const int ReferencesToNothing = 385_193;
+    private const int ValuesUnreadableUnderATypedEdge = 8;
 
     private readonly RttiDumpFixture _fixture;
 
@@ -169,16 +175,27 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
         // the whole database, almost every stored reference agrees; the few
         // that do not are the game's own data putting an unrelated kind in a
         // field, which is worth reporting and is not the graph being wrong.
+        //
+        // The numbers are the ones the finding publishes, not bounds around
+        // them. Both inputs are pinned - the database by its hash, the type
+        // information by the fingerprint of what the source read out of it - so
+        // there is one answer here and a bound would only be hiding which of
+        // these five moved.
         var check = _fixture.ReferenceCheck;
 
         Assert.Equal(0, check.UntypedEdgesNotChecked);
-        Assert.True(check.ReferencesFollowed > 1_000_000, $"only {check.ReferencesFollowed} were followed");
+        Assert.Equal(EdgesChecked, check.TypedEdgesChecked);
+        Assert.Equal(ReferencesFollowed, check.ReferencesFollowed);
+        Assert.Equal(ReferencesOfPermittedKind, check.ReferencesOfPermittedKind);
+        Assert.Equal(ReferencesOfOtherKind, check.ReferencesOfOtherKind);
+        Assert.Equal(ReferencesToNothing, check.ReferencesToNothing);
+        Assert.Equal(ValuesUnreadableUnderATypedEdge, check.ValuesUnreadable);
 
-        var resolvable = check.ReferencesOfPermittedKind + check.ReferencesOfOtherKind;
-        Assert.True(
-            check.ReferencesOfOtherKind * 10_000 < resolvable,
-            $"{check.ReferencesOfOtherKind} of {resolvable} resolvable references name a kind the schema "
-            + "does not permit there, which is more than the shipped data was measured to do");
+        // And they add up. Five counts asserted apart could each be right while
+        // the run followed references it never accounted for.
+        Assert.Equal(
+            check.ReferencesFollowed,
+            check.ReferencesOfPermittedKind + check.ReferencesOfOtherKind + check.ReferencesToNothing);
     }
 
     [Fact]
@@ -322,7 +339,28 @@ public sealed class RttiDumpFixture
 
         DumpDirectory = path;
         Model = DumpTypeModel.Load(path, GeneratedDescription);
-        Schema = RecordSchemaDerivation.Derive(new DumpRecordTypeSource(Model));
+
+        var reading = new DumpRecordTypeSource(Model).Read();
+
+        // The counts below were measured against one body of type information,
+        // as they were against one build of the database. Another one is a
+        // different input rather than a defect here, and is announced as such
+        // instead of failing counts with a message blaming the engine for
+        // somebody else's dump.
+        //
+        // Fingerprinted over what the source read rather than over the files:
+        // what these counts depend on is the shapes, so type information that
+        // reads the same way is the same input here even if the files differ.
+        if (!string.Equals(reading.Fingerprint(), MeasuredTypeInformation, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"These checks reproduce counts measured against type information whose reading "
+                + $"fingerprints as {MeasuredTypeInformation}. {VariableName} names one that reads as "
+                + $"{reading.Fingerprint()}. That is different type information, so the counts do not apply "
+                + "to it - this is not a defect in the engine.");
+        }
+
+        Schema = RecordSchemaDerivation.Derive(reading, Model.Description);
         Graph = ReferenceGraph.Of(Schema);
 
         Database = TweakDatabaseSource.OpenReadOnly(databasePath);
@@ -366,6 +404,20 @@ public sealed class RttiDumpFixture
     /// in an artifact is a path in everything the artifact is pasted into.
     /// </remarks>
     public const string GeneratedDescription = "RTTI dump of game 2.31 with Phantom Liberty";
+
+    /// <summary>
+    /// The type information every count in these checks was measured against,
+    /// as the fingerprint of what the dump-bound source reads out of it.
+    /// </summary>
+    /// <remarks>
+    /// A hash of a thing rather than the thing, so it may live here. It is the
+    /// counterpart of the database's own fingerprint: without it the counts
+    /// below are pinned on one side only, and a run against different type
+    /// information would report the engine as wrong about numbers that were
+    /// never measured for it.
+    /// </remarks>
+    public const string MeasuredTypeInformation =
+        "c5e3c582d6573957063fbe65e8c6378f56b6bd7161a2fa7b89f54278b2e0f602";
 
     /// <summary>Where the generated type information was read from.</summary>
     public string DumpDirectory { get; }
