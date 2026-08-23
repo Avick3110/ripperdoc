@@ -157,4 +157,36 @@ public sealed class RecordType
 /// The type that declares this field, which is not necessarily the type it was
 /// resolved for.
 /// </param>
-public sealed record RecordField(string Name, string StorageType, string DeclaringTypeName);
+/// <param name="AlternateNames">
+/// Other spellings this field's stored values might be keyed by, where the
+/// source could not tell which one is used. Empty where it could.
+/// </param>
+/// <param name="ReferentTypeName">
+/// The kind of record this field's stored identifier points at, or null where
+/// the source does not say.
+/// </param>
+public sealed record RecordField(
+    string Name,
+    string StorageType,
+    string DeclaringTypeName,
+    IReadOnlyList<string> AlternateNames,
+    string? ReferentTypeName)
+{
+    /// <summary>
+    /// A field whose stored name is known and which is not a typed reference.
+    /// </summary>
+    /// <param name="name">The field's name.</param>
+    /// <param name="storageType">The name of the type the value is stored as.</param>
+    /// <param name="declaringTypeName">The type that declares it.</param>
+    public RecordField(string name, string storageType, string declaringTypeName)
+        : this(name, storageType, declaringTypeName, Array.Empty<string>(), null)
+    {
+    }
+
+    /// <summary>
+    /// Every spelling this field's stored values might be keyed by, the primary
+    /// one first.
+    /// </summary>
+    /// <returns>The candidate names, in probe order.</returns>
+    public IEnumerable<string> CandidateNames() => new[] { Name }.Concat(AlternateNames);
+}

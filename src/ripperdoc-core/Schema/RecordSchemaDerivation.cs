@@ -103,7 +103,14 @@ public static class RecordSchemaDerivation
                 continue;
             }
 
-            if (fields.TryAdd(field.FieldName, new RecordField(field.FieldName, field.StorageType, typeName)))
+            var resolved = new RecordField(
+                field.FieldName,
+                field.StorageType,
+                typeName,
+                field.AlternateFieldNames,
+                field.ReferentTypeName);
+
+            if (fields.TryAdd(field.FieldName, resolved))
             {
                 continue;
             }
