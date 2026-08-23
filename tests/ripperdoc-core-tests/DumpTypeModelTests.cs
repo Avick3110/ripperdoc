@@ -200,6 +200,40 @@ public class DumpTypeModelTests
     }
 
     [Theory]
+    [InlineData(64)]
+    [InlineData(65)]
+    [InlineData(-1)]
+    public void ABitfieldMemberOutsideTheWidthOfAValueIsRefusedRatherThanWrapped(int bit)
+    {
+        // Shifting by a bit this far out does not fail - the shift count is
+        // taken modulo the width, so bit 64 arrives carrying bit 0's value and
+        // bit 65 carries bit 1's. That is the same defaulted value the member
+        // with no bit is refused for, reached a different way: an audit would
+        // compare it, disagree, and report the game as having changed.
+        using var dump = SyntheticDump.Of(
+            bitfields: [$$"""{"name":"ProbeFlags","members":[{"name":"Low","bit":0},{"name":"Far","bit":{{bit}}}]}"""]);
+
+        var thrown = Assert.Throws<JsonException>(() => DumpTypeModel.Load(dump.JsonDirectory, Description));
+
+        Assert.Contains("Far", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains(bit.ToString(System.Globalization.CultureInfo.InvariantCulture), thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ABitfieldMemberAtTheHighestBitAValueHasIsStillRead()
+    {
+        // The other arm. The refusal is of bits outside the width, and the last
+        // bit inside it is the one a boundary written the other way round would
+        // have thrown away.
+        using var dump = SyntheticDump.Of(
+            bitfields: ["""{"name":"ProbeFlags","members":[{"name":"Top","bit":63}]}"""]);
+
+        var model = DumpTypeModel.Load(dump.JsonDirectory, Description);
+
+        Assert.Equal(1L << 63, model.Enums["ProbeFlags"].Members.Single().Value);
+    }
+
+    [Theory]
     [InlineData("classes")]
     [InlineData("enums")]
     [InlineData("bitfields")]

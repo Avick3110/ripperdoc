@@ -421,10 +421,27 @@ public sealed class DumpTypeModel
         {
             if (isBitfield)
             {
-                return Bit is null
-                    ? throw new JsonException(
-                        $"Bitfield member '{Name}' states no bit, so the value it sets is not in this dump.")
-                    : 1L << Bit.Value;
+                if (Bit is null)
+                {
+                    throw new JsonException(
+                        $"Bitfield member '{Name}' states no bit, so the value it sets is not in this dump.");
+                }
+
+                // A bit outside the width of the value it would set is refused
+                // on the same grounds as a member with no bit at all. Shifting
+                // by it does not fail: the shift count is taken modulo the
+                // width, so bit 64 sets bit 0 and the member arrives carrying
+                // another member's value - which an audit would then compare,
+                // disagree about, and report as the game having changed.
+                if (Bit.Value is < 0 or >= BitsInAValue)
+                {
+                    throw new JsonException(
+                        $"Bitfield member '{Name}' states bit {Bit.Value}, which is outside the "
+                        + $"{BitsInAValue} bits a value of a bitfield has, so the value it sets is not one "
+                        + "this reader can work out.");
+                }
+
+                return 1L << Bit.Value;
             }
 
             return MemberValue
@@ -432,6 +449,11 @@ public sealed class DumpTypeModel
                     $"Enumeration member '{Name}' states no value, so what it stands for is not in this dump.");
         }
     }
+
+    // How wide the number a bitfield member's bit sets is, here. The dump does
+    // not state a bitfield's width, so this is the width of what this reader
+    // carries a member's value in rather than a claim about the game's.
+    private const int BitsInAValue = 64;
 
     private const long OutputParameterFlag = 512;
 
