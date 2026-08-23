@@ -151,6 +151,21 @@ public sealed class SchemaIr
         }
         else
         {
+            // A field the data contradicts is the sharpest thing this artifact
+            // knows about itself, and it belongs beside the rest rather than
+            // only in the manifest a consumer might not read. The inherited
+            // mode has none of these against a shipped database, so the line
+            // stays absent there rather than being written as a zero.
+            var contradicted = validation.Fields().Count(field => field.State == ValidationState.Contradicted);
+            if (contradicted > 0)
+            {
+                losses.Add(
+                    $"{contradicted} field slot(s) in this schema are contradicted by shipped values: the "
+                    + "value is stored as a different type from the one claimed here. Reading one through "
+                    + "this schema gets the wrong type, and which slots they are is in the validation "
+                    + "manifest.");
+            }
+
             if (validation.RecordTypesNotInSchema.Count > 0)
             {
                 losses.Add(
