@@ -308,6 +308,70 @@ public class TweakDatabaseSourceTests
         }
     }
 
+    [Fact]
+    public void AStoredReferenceComesBackAsTheOneRecordItNames()
+    {
+        var database = new TweakDB();
+        TweakDBID target = "Probe.target";
+        database.Flats.Add("Probe.one.owner", target);
+
+        Assert.True(Source(database).TryGetStoredIdentifiers(Id("Probe.one.owner"), out var targets));
+        Assert.Equal(new[] { Id("Probe.target") }, targets);
+    }
+
+    [Fact]
+    public void AStoredListOfReferencesComesBackWhole()
+    {
+        // Order kept, because a caller reporting the third entry of a field as
+        // wrong has to be pointing at the third entry.
+        var database = new TweakDB();
+        TweakDBID first = "Probe.first";
+        TweakDBID second = "Probe.second";
+        database.Flats.Add("Probe.one.parts", new CArray<TweakDBID> { first, second });
+
+        Assert.True(Source(database).TryGetStoredIdentifiers(Id("Probe.one.parts"), out var targets));
+        Assert.Equal(new[] { Id("Probe.first"), Id("Probe.second") }, targets);
+    }
+
+    [Fact]
+    public void AValueThatIsThereAndIsNotAReferenceIsAnsweredAsUnreadRatherThanAsEmpty()
+    {
+        // The claim this branch makes, and the reason it is a branch at all: a
+        // caller counting references must never mistake one it could not read
+        // for one that named nothing. Answered false, with no targets - the
+        // same answer as absent, which is why the caller asks the database
+        // separately whether anything is stored there.
+        var database = new TweakDB();
+        CFloat speed = 1.5f;
+        database.Flats.Add("Probe.one.speed", speed);
+
+        var source = Source(database);
+
+        Assert.False(source.TryGetStoredIdentifiers(Id("Probe.one.speed"), out var targets));
+        Assert.Empty(targets);
+
+        // And the value really is there, so this is the unread case and not the
+        // absent one. Told apart by the caller exactly this way.
+        Assert.True(source.TryGetStoredValueType(Id("Probe.one.speed"), out var storageType));
+        Assert.Equal("Float", storageType);
+    }
+
+    [Fact]
+    public void AValueThatIsNotThereIsAnsweredAsNotThere()
+    {
+        var source = Source(new TweakDB());
+
+        Assert.False(source.TryGetStoredIdentifiers(Id("Probe.one.absent"), out var targets));
+        Assert.Empty(targets);
+        Assert.False(source.TryGetStoredValueType(Id("Probe.one.absent"), out _));
+    }
+
+    private static ulong Id(string name)
+    {
+        TweakDBID identifier = name;
+        return identifier;
+    }
+
     /// <summary>
     /// The library's own bytes for a database, so that the checks over them
     /// start from what the format's own writer produced rather than from
