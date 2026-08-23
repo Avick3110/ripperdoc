@@ -11,9 +11,16 @@ namespace Ripperdoc.Core.Tests;
 /// <para>
 /// The audit itself needs type information generated from a game install. This
 /// does not, and it is what a build without one can honestly say: that the
-/// accepted result of the audit was taken against exactly the compiled type
-/// model this build uses. Bump the dependency and leave the audit unrun, and
-/// this goes red naming what to do.
+/// accepted result of the audit was taken against exactly this build of the
+/// pinned dependency. Bump the dependency and leave the audit unrun, and this
+/// goes red naming what to do.
+/// </para>
+/// <para>
+/// It says which build and not what that build contains, because which build is
+/// a property of the file and what it contains is read by reflecting over it -
+/// and a reflected reading is not stable enough to hold a committed file
+/// against. The content comparison is the audit's, at the tier that has both
+/// descriptions of the game to compare.
 /// </para>
 /// <para>
 /// What it does not claim is that the audit is current with respect to the
@@ -25,21 +32,41 @@ namespace Ripperdoc.Core.Tests;
 public class DriftReceiptTests
 {
     [Fact]
-    public void TheAcceptedAuditWasTakenAgainstTheTypeModelThisBuildUses()
+    public void TheAcceptedAuditWasTakenAgainstThisBuildOfTheDependency()
     {
         var receipt = Receipt();
-        var compiled = TypeModelReading.FromPinnedTypeModel();
+        var identity = TypeModelReading.PinnedAssemblyIdentity();
 
         Assert.True(
-            string.Equals(
-                receipt.CompiledTypeModelFingerprint,
-                compiled.Reading.Fingerprint(),
-                StringComparison.Ordinal),
-            $"The accepted drift audit was taken against a type model whose fingerprint is "
-            + $"{receipt.CompiledTypeModelFingerprint}, and this build's is {compiled.Reading.Fingerprint()}. "
-            + "The audit's result therefore does not describe the dependency being built here. Re-run the "
-            + $"tier (iii) checks on a machine with generated type information and accept the result they "
-            + $"produce; do not edit '{ReceiptFileName}' to match this build without doing so.");
+            string.Equals(receipt.TypeModelAssemblyIdentity, identity, StringComparison.Ordinal),
+            $"The accepted drift audit was taken against dependency build {receipt.TypeModelAssemblyIdentity}, "
+            + $"and this one is {identity}. The audit's result therefore does not describe the dependency "
+            + "being built here. Run the gate on a machine with generated type information "
+            + $"({RttiDumpFixture.VariableName} set): the RTTI-dump checks take a fresh receipt and write it "
+            + $"to '{DriftReceipt.ProducedFileName}' beside the test binaries. Copy that file over "
+            + $"'tests/{DriftReceipt.FileName}'. Do not edit the committed receipt to match this build by "
+            + "hand - the numbers in it are an audit's result, and hand-editing them accepts a result nobody "
+            + "took.");
+    }
+
+    [Fact]
+    public void TheAcceptedAuditNamesWhichGeneratedInformationItWasTakenFrom()
+    {
+        var receipt = Receipt();
+
+        // The other half of what the receipt identifies. A machine with no
+        // generated type information cannot check this one for itself, which is
+        // exactly why it is written down: the tier that does have generated
+        // information holds its own reading against it, and a check reproducing
+        // a number measured from one dump can refuse to believe the number
+        // applies to a different one.
+        Assert.NotEmpty(receipt.GeneratedTypeInformationFingerprint);
+        Assert.Equal(64, receipt.GeneratedTypeInformationFingerprint.Length);
+        Assert.All(
+            receipt.GeneratedTypeInformationFingerprint,
+            character => Assert.True(
+                char.IsAsciiDigit(character) || (character >= 'a' && character <= 'f'),
+                $"'{character}' is not a lower-case hexadecimal digit"));
     }
 
     [Fact]
@@ -106,9 +133,7 @@ public class DriftReceiptTests
         Assert.Throws<FileNotFoundException>(() => DriftReceipt.Read(absent));
     }
 
-    internal const string ReceiptFileName = "drift-receipt.json";
-
-    internal static string ReceiptPath => Path.Combine(AppContext.BaseDirectory, ReceiptFileName);
+    internal static string ReceiptPath => Path.Combine(AppContext.BaseDirectory, DriftReceipt.FileName);
 
     private static DriftReceipt Receipt() => DriftReceipt.Read(ReceiptPath);
 }

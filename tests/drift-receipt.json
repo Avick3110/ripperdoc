@@ -1,7 +1,8 @@
 {
   "dependency": "WolvenKit.RED4 8.20.0",
-  "compiledTypeModelFingerprint": "fa00c367f7a1ce13856689fb315ae87c796b6d06ab01205eadc80a5ddfec6a47",
+  "typeModelAssemblyIdentity": "b63f90b746d0431abf827feca379768a",
   "generatedFrom": "RTTI dump of game 2.31 with Phantom Liberty",
+  "generatedTypeInformationFingerprint": "bf17c8dd3f36d0b489b6b103bb6789f66f8b2c5bbf058090d2413982c02fb25f",
   "classesCompared": 15830,
   "propertiesCompared": 43383,
   "enumsCompared": 1549,
