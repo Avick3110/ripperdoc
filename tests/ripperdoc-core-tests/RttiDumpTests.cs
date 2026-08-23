@@ -35,7 +35,11 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
     private const int DistinctReferentTypes = 490;
     private const int ValuesInTheDatabase = 3_306_462;
     private const int ValuesTheGeneratedSchemaExplains = 3_150_040;
-    private const int SlotsTheDataContradicts = 100;
+    private const int SlotsTheDataContradicts = 66;
+    private const int SlotsSomeSpellingContradicts = 100;
+    private const int SlotsCondemnedOnlyByAGuessedSpelling = 34;
+    private const int SlotsConfirmedOnlyUnderTheAccessorSpelling = 89;
+    private const int SlotsConfirmedUnderBothSpellings = 8;
 
     private readonly RttiDumpFixture _fixture;
 
@@ -105,6 +109,52 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
         Assert.Contains(
             _fixture.Artifact.Provenance.NamedLosses,
             loss => loss.Contains("contradicted by shipped values", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AFieldIsNotCondemnedForWhatSitsAtASpellingTheDataRejected()
+    {
+        // The whole return on tallying per spelling, on real data. A slot where
+        // some spelling holds a value of the wrong type is not thereby a slot
+        // the schema is wrong about: where another spelling holds values of the
+        // right type, the data has said which name is the field's and the
+        // wrong-typed value belongs to whatever else that identifier addresses.
+        //
+        // These three numbers have to add up, and the check says so rather than
+        // asserting each alone - two of them moving together in the wrong
+        // direction would leave three separate assertions all green.
+        var fields = _fixture.Manifest.Fields();
+
+        var anySpellingContradicts = fields
+            .Count(field => field.Spellings.Any(s => s.State == ValidationState.Contradicted));
+        var rescued = fields.Count(field =>
+            field.State == ValidationState.Corroborated
+            && field.Spellings.Any(s => s.State == ValidationState.Contradicted));
+        var condemned = fields.Count(field => field.State == ValidationState.Contradicted);
+
+        Assert.Equal(SlotsSomeSpellingContradicts, anySpellingContradicts);
+        Assert.Equal(SlotsCondemnedOnlyByAGuessedSpelling, rescued);
+        Assert.Equal(SlotsTheDataContradicts, condemned);
+        Assert.Equal(anySpellingContradicts, rescued + condemned);
+    }
+
+    [Fact]
+    public void TheDataDecidesWhichSpellingOfAFieldNameIsReal()
+    {
+        // The source cannot recover a name's capitalisation, so it offers both
+        // and the arbiter settles it. These say the settling actually happens
+        // and in both directions - a schema where the source's first guess were
+        // always right would not need the alternates at all, and one where it
+        // were never right would mean the guess is wrong rather than uncertain.
+        var multi = _fixture.Manifest.Fields().Where(field => field.Spellings.Count > 1).ToArray();
+
+        Assert.Equal(
+            SlotsConfirmedOnlyUnderTheAccessorSpelling,
+            multi.Count(field => field.ConfirmedFieldNames.Any()
+                && !field.ConfirmedFieldNames.Contains(field.FieldName, StringComparer.Ordinal)));
+        Assert.Equal(
+            SlotsConfirmedUnderBothSpellings,
+            multi.Count(field => field.ConfirmedFieldNames.Count() > 1));
     }
 
     [Fact]

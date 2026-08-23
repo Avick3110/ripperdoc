@@ -175,51 +175,61 @@ public sealed class ReferenceValidation
 
                 typedChecked++;
 
-                if (!TweakIdentifier.TryForField(record.Identifier, edge.FieldName, out var identifier, out _))
+                // Every spelling the schema offers for the field, not only the
+                // one it keys the field by. A schema derived from accessor
+                // shapes cannot recover a name's capitalisation and carries
+                // both, and shipped data really does use either - so a
+                // primary-name probe would find nothing for a field whose
+                // values are all there under the other spelling, and this whole
+                // check would report a clean run having examined none of them.
+                foreach (var candidate in edge.CandidateFieldNames)
                 {
-                    continue;
-                }
-
-                if (!values.TryGetStoredIdentifiers(identifier, out var targets))
-                {
-                    // Absent and unreadable are told apart here rather than
-                    // together: a field a record simply does not carry is the
-                    // ordinary case, and a value that is there and is not a
-                    // reference is a disagreement worth counting.
-                    if (shipped.TryGetStoredValueType(identifier, out _))
+                    if (!TweakIdentifier.TryForField(record.Identifier, candidate, out var identifier, out _))
                     {
-                        unreadable++;
-                    }
-
-                    continue;
-                }
-
-                read++;
-
-                foreach (var target in targets)
-                {
-                    followed++;
-
-                    if (!kindOf.TryGetValue(target, out var actual))
-                    {
-                        toNothing++;
                         continue;
                     }
 
-                    if (graph.Permits(edge.ReferentTypeName, actual))
+                    if (!values.TryGetStoredIdentifiers(identifier, out var targets))
                     {
-                        permitted++;
+                        // Absent and unreadable are told apart here rather than
+                        // together: a field a record simply does not carry is the
+                        // ordinary case, and a value that is there and is not a
+                        // reference is a disagreement worth counting.
+                        if (shipped.TryGetStoredValueType(identifier, out _))
+                        {
+                            unreadable++;
+                        }
+
                         continue;
                     }
 
-                    other++;
-                    if (examples.Count < ExampleLimit)
+                    read++;
+
+                    foreach (var target in targets)
                     {
-                        examples.Add(new MistypedReference(
-                            record.TypeName,
-                            edge.FieldName,
-                            edge.ReferentTypeName,
-                            actual));
+                        followed++;
+
+                        if (!kindOf.TryGetValue(target, out var actual))
+                        {
+                            toNothing++;
+                            continue;
+                        }
+
+                        if (graph.Permits(edge.ReferentTypeName, actual))
+                        {
+                            permitted++;
+                            continue;
+                        }
+
+                        other++;
+                        if (examples.Count < ExampleLimit)
+                        {
+                            examples.Add(new MistypedReference(
+                                record.TypeName,
+                                candidate,
+                                edge.ReferentTypeName,
+                                actual));
+                        }
                     }
                 }
             }

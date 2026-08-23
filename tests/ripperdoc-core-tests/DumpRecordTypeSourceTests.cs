@@ -114,7 +114,6 @@ public class DumpRecordTypeSourceTests
 
         Assert.Equal(stored, fields[stored].Name);
         Assert.Equal(new[] { alternate }, fields[stored].AlternateNames);
-        Assert.Equal(new[] { stored, alternate }, fields[stored].CandidateNames());
     }
 
     [Fact]

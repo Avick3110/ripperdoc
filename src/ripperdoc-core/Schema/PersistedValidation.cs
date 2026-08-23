@@ -46,9 +46,18 @@ public sealed record PersistedValidation
 
     /// <summary>Put a manifest into the form it is kept in.</summary>
     /// <param name="manifest">The manifest.</param>
+    /// <param name="resolved">
+    /// Which name each field is written down under once the data has decided,
+    /// or null where nothing decided. A verdict is recorded against the name
+    /// the field has in the same document; leaving it under the name the source
+    /// guessed would leave the schema and its own verdicts disagreeing about
+    /// what a field is called.
+    /// </param>
     /// <returns>The persisted form.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="manifest"/> is null.</exception>
-    public static PersistedValidation Of(ValidationManifest manifest)
+    public static PersistedValidation Of(
+        ValidationManifest manifest,
+        IReadOnlyDictionary<(string Type, string Field), IReadOnlyList<string>>? resolved = null)
     {
         ArgumentNullException.ThrowIfNull(manifest);
 
@@ -66,14 +75,26 @@ public sealed record PersistedValidation
                 .Select(field => new PersistedFieldValidation
                 {
                     RecordTypeName = field.RecordTypeName,
-                    FieldName = field.FieldName,
+                    FieldName = SchemaIrDocument.PersistedNameOf(
+                        field.DeclaringTypeName,
+                        field.FieldName,
+                        resolved),
                     StorageType = field.StorageType,
                     DeclaringTypeName = field.DeclaringTypeName,
                     State = field.State.ToString(),
                     CorroboratingValueCount = field.CorroboratingValueCount,
                     ContradictingValueCount = field.ContradictingValueCount,
                     ObservedStorageType = field.ObservedStorageType,
-                    ConfirmedFieldNames = field.ConfirmedFieldNames,
+                    Spellings = field.Spellings
+                        .Select(spelling => new PersistedSpellingValidation
+                        {
+                            Name = spelling.Name,
+                            State = spelling.State.ToString(),
+                            CorroboratingValueCount = spelling.CorroboratingValueCount,
+                            ContradictingValueCount = spelling.ContradictingValueCount,
+                            ObservedStorageType = spelling.ObservedStorageType,
+                        })
+                        .ToArray(),
                     ReferentTypeName = field.ReferentTypeName,
                 })
                 .ToArray(),
@@ -98,6 +119,26 @@ public sealed record PersistedValidation
                     + "can be reported as validated.");
             }
 
+            var spellings = new List<SpellingValidation>(field.Spellings.Count);
+            foreach (var spelling in field.Spellings)
+            {
+                if (!Enum.TryParse<ValidationState>(spelling.State, out var spellingState))
+                {
+                    throw new InvalidDataException(
+                        $"'{field.RecordTypeName}.{field.FieldName}' under the name '{spelling.Name}' is "
+                        + $"recorded as '{spelling.State}', which is not a verdict this build knows. A "
+                        + "spelling whose verdict cannot be read is not one that can be reported as "
+                        + "confirming anything.");
+                }
+
+                spellings.Add(new SpellingValidation(
+                    spelling.Name,
+                    spellingState,
+                    spelling.CorroboratingValueCount,
+                    spelling.ContradictingValueCount,
+                    spelling.ObservedStorageType));
+            }
+
             verdicts.Add(new FieldValidation(
                 field.RecordTypeName,
                 field.FieldName,
@@ -107,7 +148,7 @@ public sealed record PersistedValidation
                 field.CorroboratingValueCount,
                 field.ContradictingValueCount,
                 field.ObservedStorageType,
-                field.ConfirmedFieldNames,
+                spellings,
                 field.ReferentTypeName));
         }
 
@@ -169,11 +210,44 @@ public sealed record PersistedFieldValidation
     [JsonPropertyName("observedStorageType")]
     public string? ObservedStorageType { get; init; }
 
-    /// <summary>The spellings a value was actually found under.</summary>
-    [JsonPropertyName("confirmedNames")]
-    public IReadOnlyList<string> ConfirmedFieldNames { get; init; } = Array.Empty<string>();
+    /// <summary>
+    /// What the data said about each name the field might be stored under.
+    /// </summary>
+    /// <remarks>
+    /// Written out rather than reduced to the names that were confirmed. Which
+    /// spelling was contradicted, and by what, is the evidence behind the
+    /// field's own verdict, and a reader holding only the confirmed names
+    /// cannot tell a field nothing was found for from one whose every candidate
+    /// was contradicted.
+    /// </remarks>
+    [JsonPropertyName("spellings")]
+    public required IReadOnlyList<PersistedSpellingValidation> Spellings { get; init; }
 
     /// <summary>The kind of record the field may point at, or null.</summary>
     [JsonPropertyName("referentType")]
     public string? ReferentTypeName { get; init; }
+}
+
+/// <summary>What shipped data said about one spelling of one field.</summary>
+public sealed record PersistedSpellingValidation
+{
+    /// <summary>The spelling probed.</summary>
+    [JsonPropertyName("name")]
+    public required string Name { get; init; }
+
+    /// <summary>The verdict on this spelling.</summary>
+    [JsonPropertyName("state")]
+    public required string State { get; init; }
+
+    /// <summary>How many values under this name were of the claimed type.</summary>
+    [JsonPropertyName("corroborating")]
+    public required int CorroboratingValueCount { get; init; }
+
+    /// <summary>How many were of some other type.</summary>
+    [JsonPropertyName("contradicting")]
+    public required int ContradictingValueCount { get; init; }
+
+    /// <summary>The type of the first such value, or null.</summary>
+    [JsonPropertyName("observedStorageType")]
+    public string? ObservedStorageType { get; init; }
 }
