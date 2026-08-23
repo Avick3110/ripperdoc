@@ -195,6 +195,27 @@ public sealed class ReferenceGraph
     }
 
     /// <summary>
+    /// Whether the schema this graph came from carries a record type of this
+    /// name at all.
+    /// </summary>
+    /// <param name="recordTypeName">The record type to ask about.</param>
+    /// <returns>True where the schema has it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="recordTypeName"/> is null.</exception>
+    /// <remarks>
+    /// <see cref="From"/> is empty for a type with no references and for a type
+    /// the schema never heard of, and a caller sweeping real records has to tell
+    /// those apart: the first examined a record and found nothing to check, and
+    /// the second examined it against no schema at all. Answered here rather
+    /// than by handing the caller the schema, so that "does this graph describe
+    /// that kind of record" has one answer.
+    /// </remarks>
+    public bool DescribesRecordType(string recordTypeName)
+    {
+        ArgumentNullException.ThrowIfNull(recordTypeName);
+        return _schema.Find(recordTypeName) is not null;
+    }
+
+    /// <summary>
     /// Every referent this graph names that is not a record type the schema
     /// knows, in a stable order.
     /// </summary>

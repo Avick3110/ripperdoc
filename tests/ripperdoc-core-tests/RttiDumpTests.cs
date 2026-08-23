@@ -255,6 +255,14 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
 
         Assert.Equal(0, check.UntypedEdgesNotChecked);
         Assert.Equal(EdgesChecked, check.TypedEdgesChecked);
+
+        // The two ways a pair or a record can contribute to none of the counts
+        // below. Both expected empty here, and both asserted rather than
+        // assumed: a sweep that quietly stopped addressing pairs, or met records
+        // of a type the schema had lost, would otherwise report a smaller
+        // examination as an equally clean one.
+        Assert.Equal(0, check.PairsNotAddressable);
+        Assert.Empty(check.RecordTypesNotInSchema);
         Assert.Equal(ReferencesFollowed, check.ReferencesFollowed);
         Assert.Equal(ReferencesOfPermittedKind, check.ReferencesOfPermittedKind);
         Assert.Equal(ReferencesOfOtherKind, check.ReferencesOfOtherKind);
