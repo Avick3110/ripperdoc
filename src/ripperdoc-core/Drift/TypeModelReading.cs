@@ -218,6 +218,12 @@ public sealed record TypeModelReading(
                 + "so whatever it says was not compared.");
         }
 
+        // And what the model could not take in at all. A type missing from this
+        // side is one the audit will report as absent from the compiled model's
+        // opposite number or not report at all, and either way it is drift the
+        // audit did not really look for.
+        failures.AddRange(model.ReadFailures);
+
         foreach (var type in model.Classes.Values)
         {
             var properties = new Dictionary<string, string>(StringComparer.Ordinal);

@@ -92,6 +92,15 @@ public sealed class DumpRecordTypeSource : IRecordTypeSource
                 + "whatever it says is not in this schema."));
         }
 
+        // What the model itself could not take in. A type the model does not
+        // describe is one this schema cannot carry either, and a schema that
+        // was short by a type without saying so is short in a way nothing
+        // downstream can notice.
+        foreach (var failure in _model.ReadFailures)
+        {
+            failures.Add(new DerivationFailure(_model.Description, null, failure));
+        }
+
         return new RecordTypeSourceReading(shapes, failures);
     }
 

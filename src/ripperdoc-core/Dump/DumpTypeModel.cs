@@ -31,12 +31,14 @@ public sealed class DumpTypeModel
         IReadOnlyDictionary<string, DumpClass> classes,
         IReadOnlyDictionary<string, DumpEnum> enums,
         string description,
-        IReadOnlyList<string> unrecognised)
+        IReadOnlyList<string> unrecognised,
+        IReadOnlyList<string> readFailures)
     {
         Classes = classes;
         Enums = enums;
         Description = description;
         UnrecognisedKeys = unrecognised;
+        ReadFailures = readFailures;
     }
 
     /// <summary>Every class and struct the dump describes, keyed by name.</summary>
@@ -69,6 +71,29 @@ public sealed class DumpTypeModel
     /// knowing before a conclusion is drawn from what it did read.
     /// </remarks>
     public IReadOnlyList<string> UnrecognisedKeys { get; }
+
+    /// <summary>
+    /// What the generated information described that this model does not carry,
+    /// in a stable order.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Expected to be empty, and separate from <see cref="UnrecognisedKeys"/>:
+    /// a key this reader does not read is something it chose not to take in,
+    /// and an entry here is something it could not.
+    /// </para>
+    /// <para>
+    /// Everything is addressed by name here, so two descriptions sharing one
+    /// name cannot both be in the model and a description with no name cannot
+    /// be addressed at all. Keeping the first and stating the rest is the only
+    /// answer that does not decide the question by which file happened to be
+    /// read first - and deciding it that way is worse than it sounds, because
+    /// enumerations and bitfields are two directories and one namespace here,
+    /// so a name shared across the two would be settled by directory order and
+    /// nothing would say which one won.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> ReadFailures { get; }
 
     /// <summary>
     /// Read a dump's JSON output.
@@ -104,13 +129,14 @@ public sealed class DumpTypeModel
         RequireDirectory(bitfieldsDirectory, "the dump's bitfield descriptions");
 
         var unrecognised = new SortedSet<string>(StringComparer.Ordinal);
+        var failures = new List<string>();
 
         var classes = new Dictionary<string, DumpClass>(StringComparer.Ordinal);
         foreach (var file in Files(classesDirectory))
         {
             var read = Read<ClassDocument>(file);
             CollectUnrecognised(read, unrecognised);
-            classes[read.Name] = read.ToClass();
+            Add(classes, read.Name, read.ToClass(), "class", failures);
         }
 
         var enums = new Dictionary<string, DumpEnum>(StringComparer.Ordinal);
@@ -118,17 +144,55 @@ public sealed class DumpTypeModel
         {
             var read = Read<EnumDocument>(file);
             CollectUnrecognised(read, unrecognised);
-            enums[read.Name] = read.ToEnum(isBitfield: false);
+            Add(enums, read.Name, read.ToEnum(isBitfield: false), "enumeration", failures);
         }
 
         foreach (var file in Files(bitfieldsDirectory))
         {
             var read = Read<EnumDocument>(file);
             CollectUnrecognised(read, unrecognised);
-            enums[read.Name] = read.ToEnum(isBitfield: true);
+
+            // Bitfields land in the same map as enumerations, so a name used by
+            // both is named here as sharing with "an enumeration or bitfield"
+            // rather than with a bitfield - the one already in the map may have
+            // come from either directory.
+            Add(enums, read.Name, read.ToEnum(isBitfield: true), "enumeration or bitfield", failures);
         }
 
-        return new DumpTypeModel(classes, enums, description, unrecognised.ToArray());
+        return new DumpTypeModel(
+            classes,
+            enums,
+            description,
+            unrecognised.ToArray(),
+            failures.OrderBy(failure => failure, StringComparer.Ordinal).ToArray());
+    }
+
+    /// <summary>
+    /// File one description under its name, or state why it is not in the model.
+    /// </summary>
+    private static void Add<T>(
+        Dictionary<string, T> into,
+        string name,
+        T described,
+        string what,
+        List<string> failures)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            // Filed under the empty name it would be addressable only by a
+            // caller that asked for the empty name, and would displace the next
+            // nameless one. Nothing can reach it, so nothing pretends it is
+            // there.
+            failures.Add($"A {what} in the generated information states no name, so it is not in this model.");
+            return;
+        }
+
+        if (!into.TryAdd(name, described))
+        {
+            failures.Add(
+                $"{name}: more than one {what} in the generated information has this name; the first was "
+                + "kept, so the model describes one of them and not the other.");
+        }
     }
 
     private const string ClassesDirectoryName = "classes";

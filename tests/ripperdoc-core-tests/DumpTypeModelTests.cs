@@ -43,6 +43,76 @@ public class DumpTypeModelTests
     }
 
     [Fact]
+    public void TwoClassesOfOneNameLeaveTheSecondStatedRatherThanSubstituted()
+    {
+        using var dump = SyntheticDump.Of(classes:
+        [
+            """{"name":"gamedataProbeThing_Record","flags":66}""",
+            """{"name":"gamedataProbeThing_Record","parent":"gamedataProbeBase_Record","flags":66}""",
+            """{"name":"gamedataProbeBase_Record","flags":66}""",
+        ]);
+
+        var model = DumpTypeModel.Load(dump.JsonDirectory, Description);
+
+        // The first is kept, and which one that is stops mattering because the
+        // fact that there were two is on the record. Silently keeping the last
+        // would have made the model depend on the order the files were read in,
+        // with nothing saying a choice had been made at all.
+        Assert.Equal(2, model.Classes.Count);
+        Assert.Null(model.Classes["gamedataProbeThing_Record"].ParentName);
+        Assert.Contains(
+            model.ReadFailures,
+            failure => failure.Contains("more than one class", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AnEnumerationAndABitfieldOfOneNameAreNotDecidedByDirectoryOrder()
+    {
+        // The two share one namespace here, so this collision is invisible
+        // unless it is stated: whichever directory is read second would quietly
+        // replace the other, and the model would describe a bitfield where the
+        // dump described an enumeration.
+        using var dump = SyntheticDump.Of(
+            enums: ["""{"name":"gamedataProbeKind","members":[{"name":"First","value":1}]}"""],
+            bitfields: ["""{"name":"gamedataProbeKind","members":[{"name":"First","bit":0}]}"""]);
+
+        var model = DumpTypeModel.Load(dump.JsonDirectory, Description);
+
+        Assert.False(model.Enums["gamedataProbeKind"].IsBitfield);
+        Assert.Contains(
+            model.ReadFailures,
+            failure => failure.Contains("more than one enumeration or bitfield", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ADescriptionWithNoNameIsStatedRatherThanFiledUnderTheEmptyName()
+    {
+        using var dump = SyntheticDump.Of(
+            classes: ["""{"flags":66}"""],
+            enums: ["""{"members":[{"name":"First","value":1}]}"""]);
+
+        var model = DumpTypeModel.Load(dump.JsonDirectory, Description);
+
+        // Nothing can ask for it, so nothing pretends it is there.
+        Assert.Empty(model.Classes);
+        Assert.Empty(model.Enums);
+        Assert.Equal(2, model.ReadFailures.Count);
+        Assert.All(
+            model.ReadFailures,
+            failure => Assert.Contains("states no name", failure, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AModelThatReadEverythingStatesNoFailure()
+    {
+        using var dump = SyntheticDump.Of(
+            classes: ["""{"name":"gamedataProbeThing_Record","flags":66}"""],
+            enums: ["""{"name":"gamedataProbeKind","members":[{"name":"First","value":1}]}"""]);
+
+        Assert.Empty(DumpTypeModel.Load(dump.JsonDirectory, Description).ReadFailures);
+    }
+
+    [Fact]
     public void AParameterIsAnOutputOnlyWhenTheDumpMarksItAsOne()
     {
         using var dump = SyntheticDump.Of(classes:
