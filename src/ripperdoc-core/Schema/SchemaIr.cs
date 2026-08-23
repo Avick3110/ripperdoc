@@ -22,15 +22,31 @@ namespace Ripperdoc.Core.Schema;
 /// </remarks>
 public sealed class SchemaIr
 {
-    private SchemaIr(RecordSchema records, ValidationManifest? validation, SchemaProvenance provenance)
+    private SchemaIr(
+        RecordSchema records,
+        ReferenceGraph references,
+        ValidationManifest? validation,
+        SchemaProvenance provenance)
     {
         Records = records;
+        References = references;
         Validation = validation;
         Provenance = provenance;
     }
 
     /// <summary>The derived record schema.</summary>
     public RecordSchema Records { get; }
+
+    /// <summary>
+    /// Which record types point at which, recovered from the schema.
+    /// </summary>
+    /// <remarks>
+    /// Part of the artifact rather than something a consumer builds, because
+    /// how much of it is typed is a property of the mode that produced the
+    /// schema - and an artifact that carried the schema without the graph would
+    /// hand every consumer the job of rediscovering that.
+    /// </remarks>
+    public ReferenceGraph References { get; }
 
     /// <summary>
     /// What shipped data confirmed, or null where nothing arbitrated the
@@ -65,14 +81,16 @@ public sealed class SchemaIr
     {
         ArgumentNullException.ThrowIfNull(records);
 
+        var references = ReferenceGraph.Of(records);
+
         var provenance = new SchemaProvenance(
             mode,
             records.SourceDescription,
             validation?.SourceDescription,
             generatedAt,
-            LossesOf(records, validation, mode));
+            LossesOf(references, validation, mode));
 
-        return new SchemaIr(records, validation, provenance);
+        return new SchemaIr(records, references, validation, provenance);
     }
 
     /// <summary>
@@ -91,41 +109,29 @@ public sealed class SchemaIr
     {
         ArgumentNullException.ThrowIfNull(records);
 
-        return records.RecordTypeNames
-            .Select(records.Find)
-            .Sum(type => type!.Fields.Values.Count(field => IsReference(field.StorageType)));
-    }
-
-    private static bool IsReference(string storageType)
-    {
-        const string identifierStorageType = "TweakDBID";
-        const string elementPrefix = "array:";
-
-        var element = storageType;
-        while (element.StartsWith(elementPrefix, StringComparison.Ordinal))
-        {
-            element = element[elementPrefix.Length..];
-        }
-
-        return string.Equals(element, identifierStorageType, StringComparison.Ordinal);
+        return ReferenceGraph.Of(records).Edges.Count;
     }
 
     private static IReadOnlyList<string> LossesOf(
-        RecordSchema records,
+        ReferenceGraph references,
         ValidationManifest? validation,
         SchemaMode mode)
     {
         var losses = new List<string>();
 
         // A loss belongs to the artifact, not to the mode, wherever the
-        // artifact can be asked directly. This one can: no field in this
-        // schema carries the kind of record its stored identifier may point
-        // at, so the shortfall is stated from the schema rather than inferred
-        // from how it was made.
-        losses.Add(
-            $"Reference targets are checked for existence, not for kind: {ReferenceFieldCount(records)} "
-            + "field slots store a record identifier, and no field in this schema says which kind of record "
-            + "it is allowed to point at.");
+        // artifact can be asked directly. This one can: the graph knows how
+        // many of its own edges say what kind of record they point at, so the
+        // shortfall is stated from the schema rather than inferred from how it
+        // was made - and a mode that closes it partly is described as closing
+        // it partly rather than as closing it.
+        if (references.UntypedEdgeCount > 0)
+        {
+            losses.Add(
+                $"{references.UntypedEdgeCount} of {references.Edges.Count} field slots storing a record "
+                + "identifier do not say which kind of record they may point at, so a reference in them is "
+                + "checked for existence and not for kind.");
+        }
 
         if (mode == SchemaMode.InheritedTypeModel)
         {

@@ -22,7 +22,7 @@ namespace Ripperdoc.Core.Tweak;
 /// everything the artifact is ever pasted into.
 /// </para>
 /// </remarks>
-public sealed class TweakDatabaseSource : IShippedRecordSource, ITweakValueSource
+public sealed class TweakDatabaseSource : IShippedRecordSource, ITweakValueSource, IStoredReferenceSource
 {
     /// <summary>
     /// The type name reported for a record whose own type the database does not
@@ -272,6 +272,42 @@ public sealed class TweakDatabaseSource : IShippedRecordSource, ITweakValueSourc
 
         _storageTypeNames[valueType] = storageType;
         return true;
+    }
+
+    /// <inheritdoc />
+    public bool TryGetStoredIdentifiers(ulong identifier, out IReadOnlyList<ulong> targets)
+    {
+        targets = Array.Empty<ulong>();
+
+        if (!_database.Flats.Exists(identifier))
+        {
+            return false;
+        }
+
+        switch (_database.Flats.GetValue(identifier))
+        {
+            case TweakDBID single:
+                targets = new[] { (ulong)single };
+                return true;
+
+            case CArray<TweakDBID> many:
+                var read = new ulong[many.Count];
+                for (var index = 0; index < many.Count; index++)
+                {
+                    read[index] = (ulong)many[index];
+                }
+
+                targets = read;
+                return true;
+
+            default:
+                // Present, and not a reference this can follow - a value of
+                // another type, or a nesting of lists no shipped value uses.
+                // Answered as unread rather than as empty, so that a caller
+                // counting references never mistakes one it could not read for
+                // one that named nothing.
+                return false;
+        }
     }
 
     private static string ComputeFingerprint(Stream stream)
