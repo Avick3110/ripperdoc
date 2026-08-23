@@ -32,9 +32,12 @@ internal static class GateRecovery
         + "naming a shipped tweak database; and that database's sha256 matching the one recorded in "
         + "'tests/measured-database.sha256'. With any of them missing the gate announces the tier as skipped "
         + $"and nothing is produced. A run that does happen writes '{DriftReceipt.ProducedFileName}' beside "
-        + $"the test binaries - copy it over 'tests/{DriftReceipt.FileName}', then run the gate again to "
-        + "confirm it comes back green. Do not edit the committed receipt to match this build by hand: the "
-        + "numbers in it are an audit's result, and hand-editing them accepts a result nobody took.";
+        + $"the test binaries - copy it over 'tests/{DriftReceipt.FileName}'. Then run the gate again and "
+        + "check that it does NOT announce the drift audit comparison as skipped: a receipt produced by a run "
+        + "that could not compare has not been held against the game's description at all, and accepting one "
+        + "pins whatever that run happened to read. A green gate alone does not say this - an announced skip "
+        + "is green too. Do not edit the committed receipt to match this build by hand: the numbers in it are "
+        + "an audit's result, and hand-editing them accepts a result nobody took.";
 
     /// <summary>The file the gate reads to learn whether the tier ran.</summary>
     internal const string MeasuredDatabaseFile = "tests/measured-database.sha256";
