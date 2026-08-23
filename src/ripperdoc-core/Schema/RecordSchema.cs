@@ -143,7 +143,64 @@ public sealed class RecordType
     /// Every field a value of this type can carry, inherited ones included,
     /// keyed by field name.
     /// </summary>
+    /// <remarks>
+    /// Keyed by each field's primary name only. A source that could not recover
+    /// how a name is capitalised reports the other spellings as alternates, and
+    /// a caller asking whether this type has a field should ask
+    /// <see cref="FindField"/> rather than this dictionary - otherwise a field
+    /// the schema does carry, under the spelling the data actually uses, reads
+    /// as one the schema lacks.
+    /// </remarks>
     public IReadOnlyDictionary<string, RecordField> Fields { get; }
+
+    /// <summary>
+    /// The field of this name, under any spelling the schema offers for it.
+    /// </summary>
+    /// <param name="fieldName">The name to look up.</param>
+    /// <returns>The field, or null if this type has none of that name.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="fieldName"/> is null.</exception>
+    /// <remarks>
+    /// The alternates are indexed once, when they are first asked for, rather
+    /// than scanned per call. A per-call scan over a record type's whole field
+    /// set is the shape of cost this engine has already measured the price of
+    /// somewhere else, and the caller here is a loop over every value a layer
+    /// writes.
+    /// </remarks>
+    public RecordField? FindField(string fieldName)
+    {
+        ArgumentNullException.ThrowIfNull(fieldName);
+
+        if (Fields.TryGetValue(fieldName, out var field))
+        {
+            return field;
+        }
+
+        _byAlternateName ??= BuildAlternateIndex();
+        return _byAlternateName.GetValueOrDefault(fieldName);
+    }
+
+    private IReadOnlyDictionary<string, RecordField>? _byAlternateName;
+
+    private Dictionary<string, RecordField> BuildAlternateIndex()
+    {
+        var index = new Dictionary<string, RecordField>(StringComparer.Ordinal);
+
+        foreach (var field in Fields.Values)
+        {
+            foreach (var alternate in field.AlternateNames)
+            {
+                // A spelling that is already some other field's primary name is
+                // left alone. That field is the better answer, and overwriting
+                // it would answer a lookup with a different field entirely.
+                if (!Fields.ContainsKey(alternate))
+                {
+                    index.TryAdd(alternate, field);
+                }
+            }
+        }
+
+        return index;
+    }
 }
 
 /// <summary>
