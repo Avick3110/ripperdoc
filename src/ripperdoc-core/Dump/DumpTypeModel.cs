@@ -195,6 +195,20 @@ public sealed class DumpTypeModel
         }
     }
 
+    /// <summary>
+    /// The three directories a dump's json output must have for this reader to
+    /// read it.
+    /// </summary>
+    /// <remarks>
+    /// Named here rather than only used here, because the gate decides whether
+    /// the tier that reads a dump can run at all, and it decides by looking for
+    /// these. Looking for fewer of them than the reader requires lets a
+    /// half-written capture past the gate and into a red run, where the same
+    /// input should have been announced as one this project cannot read.
+    /// </remarks>
+    internal static readonly IReadOnlyList<string> RequiredDirectoryNames =
+        [ClassesDirectoryName, EnumsDirectoryName, BitfieldsDirectoryName];
+
     private const string ClassesDirectoryName = "classes";
     private const string EnumsDirectoryName = "enums";
     private const string BitfieldsDirectoryName = "bitfields";
