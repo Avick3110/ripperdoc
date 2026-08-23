@@ -154,52 +154,29 @@ public sealed class RecordType
     public IReadOnlyDictionary<string, RecordField> Fields { get; }
 
     /// <summary>
+    /// Which names this type's stored values can be keyed by, and which field
+    /// each belongs to.
+    /// </summary>
+    /// <remarks>
+    /// Built once, when it is first asked for, rather than scanned per call. A
+    /// per-call scan over a record type's whole field set is the shape of cost
+    /// this engine has already measured the price of somewhere else, and the
+    /// callers are loops over every value a database or a layer holds.
+    /// </remarks>
+    public FieldSpellings Spellings => _spellings ??= new FieldSpellings(Fields);
+
+    private FieldSpellings? _spellings;
+
+    /// <summary>
     /// The field of this name, under any spelling the schema offers for it.
     /// </summary>
     /// <param name="fieldName">The name to look up.</param>
     /// <returns>The field, or null if this type has none of that name.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="fieldName"/> is null.</exception>
-    /// <remarks>
-    /// The alternates are indexed once, when they are first asked for, rather
-    /// than scanned per call. A per-call scan over a record type's whole field
-    /// set is the shape of cost this engine has already measured the price of
-    /// somewhere else, and the caller here is a loop over every value a layer
-    /// writes.
-    /// </remarks>
     public RecordField? FindField(string fieldName)
     {
         ArgumentNullException.ThrowIfNull(fieldName);
-
-        if (Fields.TryGetValue(fieldName, out var field))
-        {
-            return field;
-        }
-
-        _byAlternateName ??= BuildAlternateIndex();
-        return _byAlternateName.GetValueOrDefault(fieldName);
-    }
-
-    private IReadOnlyDictionary<string, RecordField>? _byAlternateName;
-
-    private Dictionary<string, RecordField> BuildAlternateIndex()
-    {
-        var index = new Dictionary<string, RecordField>(StringComparer.Ordinal);
-
-        foreach (var field in Fields.Values)
-        {
-            foreach (var alternate in field.AlternateNames)
-            {
-                // A spelling that is already some other field's primary name is
-                // left alone. That field is the better answer, and overwriting
-                // it would answer a lookup with a different field entirely.
-                if (!Fields.ContainsKey(alternate))
-                {
-                    index.TryAdd(alternate, field);
-                }
-            }
-        }
-
-        return index;
+        return Spellings.Find(fieldName);
     }
 }
 
@@ -239,11 +216,4 @@ public sealed record RecordField(
         : this(name, storageType, declaringTypeName, Array.Empty<string>(), null)
     {
     }
-
-    /// <summary>
-    /// Every spelling this field's stored values might be keyed by, the primary
-    /// one first.
-    /// </summary>
-    /// <returns>The candidate names, in probe order.</returns>
-    public IEnumerable<string> CandidateNames() => new[] { Name }.Concat(AlternateNames);
 }

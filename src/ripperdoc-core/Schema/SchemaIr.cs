@@ -88,7 +88,7 @@ public sealed class SchemaIr
             records.SourceDescription,
             validation?.SourceDescription,
             generatedAt,
-            LossesOf(references, validation, mode));
+            LossesOf(records, references, validation, mode));
 
         return new SchemaIr(records, references, validation, provenance);
     }
@@ -113,6 +113,7 @@ public sealed class SchemaIr
     }
 
     private static IReadOnlyList<string> LossesOf(
+        RecordSchema records,
         ReferenceGraph references,
         ValidationManifest? validation,
         SchemaMode mode)
@@ -148,6 +149,23 @@ public sealed class SchemaIr
             losses.Add(
                 "No shipped data arbitrated this schema, so no field in it is confirmed - not one of them is "
                 + "known to describe a value that really exists.");
+
+            // A schema whose source could not recover how a name is spelled
+            // says so out loud when nothing has decided between the spellings.
+            // Left unsaid, a consumer reads a field's name as the name its
+            // values are keyed by, which here it may not be - and finding
+            // nothing under it would look like a field the game does not use.
+            var guessed = records.RecordTypeNames
+                .Select(records.Find)
+                .Sum(type => type!.Fields.Values.Count(field => type.Spellings.Of(field).Count > 1));
+
+            if (guessed > 0)
+            {
+                losses.Add(
+                    $"{guessed} field slot(s) offer more than one candidate spelling of their name and "
+                    + "nothing arbitrated between them, so the name each is listed under is the likelier of "
+                    + "the candidates rather than the one stored values are keyed by.");
+            }
         }
         else
         {
@@ -164,6 +182,22 @@ public sealed class SchemaIr
                     + "value is stored as a different type from the one claimed here. Reading one through "
                     + "this schema gets the wrong type, and which slots they are is in the validation "
                     + "manifest.");
+            }
+
+            // The arbiter decides between candidate spellings wherever it finds
+            // a value under one of them. Where it found none, the candidates
+            // survive into the artifact and the schema is still guessing which
+            // name the field's values would be keyed by - which is a smaller
+            // loss than the unarbitrated one above and is not nothing.
+            var undecided = validation.Fields().Count(field =>
+                field.Spellings.Count > 1 && !field.ConfirmedFieldNames.Any());
+
+            if (undecided > 0)
+            {
+                losses.Add(
+                    $"{undecided} field slot(s) offer more than one candidate spelling of their name and no "
+                    + "shipped value was found under any of them, so which name their values would be keyed "
+                    + "by is still undecided.");
             }
 
             if (validation.RecordTypesNotInSchema.Count > 0)

@@ -96,7 +96,13 @@ public sealed class ReferenceGraph
                     field.Name,
                     field.ReferentTypeName,
                     depth > 0,
-                    field.DeclaringTypeName));
+                    field.DeclaringTypeName,
+                    // Taken here rather than left for whoever follows the edge.
+                    // An edge is a claim about the values stored under a field,
+                    // and which names those values are keyed by is the schema's
+                    // answer to give - a caller working it out again is a second
+                    // home for the rule and eventually a different answer.
+                    type.Spellings.Of(field)));
             }
         }
 
@@ -203,9 +209,16 @@ public sealed class ReferenceGraph
 /// The type that declares the field, which may be an ancestor of
 /// <paramref name="RecordTypeName"/>.
 /// </param>
+/// <param name="CandidateFieldNames">
+/// Every name the field's stored values might be keyed by, the one the schema
+/// keys it by first, as <see cref="FieldSpellings"/> gives them. Following the
+/// edge under <paramref name="FieldName"/> alone examines one of these and
+/// reports on all of them.
+/// </param>
 public sealed record ReferenceEdge(
     string RecordTypeName,
     string FieldName,
     string? ReferentTypeName,
     bool IsSequence,
-    string DeclaringTypeName);
+    string DeclaringTypeName,
+    IReadOnlyList<string> CandidateFieldNames);

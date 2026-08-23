@@ -114,6 +114,16 @@ public sealed record SchemaIrDocument
         ArgumentNullException.ThrowIfNull(artifact);
         ArgumentNullException.ThrowIfNull(reading);
 
+        // Where an arbiter was present, the candidate spellings have already
+        // served their purpose and are not written down again. A schema that
+        // was checked against real values knows which name those values are
+        // keyed by, and carrying the guesses forward would leave every later
+        // run probing under names the data has already ruled out - and would
+        // leave the artifact unable to say whether a spelling in it is a fact
+        // or a guess. Where no arbiter was present, or where it found nothing
+        // to decide with, the candidates stay and the provenance says so.
+        var resolved = artifact.Validation is null ? null : ConfirmedSpellings(artifact.Validation);
+
         return new SchemaIrDocument
         {
             FormatVersion = CurrentFormatVersion,
@@ -130,13 +140,7 @@ public sealed record SchemaIrDocument
                     IsRecordType = type.IsRecordType,
                     Fields = type.DeclaredFields
                         .OrderBy(field => field.FieldName, StringComparer.Ordinal)
-                        .Select(field => new PersistedField
-                        {
-                            Name = field.FieldName,
-                            StorageType = field.StorageType,
-                            AlternateNames = field.AlternateFieldNames,
-                            ReferentTypeName = field.ReferentTypeName,
-                        })
+                        .Select(field => Persist(field, type.TypeName, resolved))
                         .ToArray(),
                 })
                 .ToArray(),
@@ -148,8 +152,104 @@ public sealed record SchemaIrDocument
                     Reason = failure.Reason,
                 })
                 .ToArray(),
-            Validation = artifact.Validation is null ? null : PersistedValidation.Of(artifact.Validation),
+            Validation = artifact.Validation is null
+                ? null
+                : PersistedValidation.Of(artifact.Validation, resolved),
         };
+    }
+
+    /// <summary>
+    /// Which names the data vindicated, for each field a source declared.
+    /// </summary>
+    /// <remarks>
+    /// Keyed by the type that declares the field rather than by the types that
+    /// carry it. One declaration is inherited by many record types and is
+    /// written down once, so the evidence from every type that carries it is
+    /// evidence about the one declaration - and a name confirmed on any of them
+    /// is confirmed.
+    /// </remarks>
+    private static Dictionary<(string Type, string Field), IReadOnlyList<string>> ConfirmedSpellings(
+        ValidationManifest manifest)
+    {
+        var byDeclaration = new Dictionary<(string, string), SortedSet<string>>();
+
+        foreach (var verdict in manifest.Fields())
+        {
+            foreach (var confirmed in verdict.ConfirmedFieldNames)
+            {
+                var key = (verdict.DeclaringTypeName, verdict.FieldName);
+                if (!byDeclaration.TryGetValue(key, out var names))
+                {
+                    byDeclaration[key] = names = new SortedSet<string>(StringComparer.Ordinal);
+                }
+
+                names.Add(confirmed);
+            }
+        }
+
+        return byDeclaration.ToDictionary(
+            entry => entry.Key,
+            entry => (IReadOnlyList<string>)entry.Value.ToArray());
+    }
+
+    /// <summary>
+    /// The name a field is written down under, and which other names go with it.
+    /// </summary>
+    /// <remarks>
+    /// The schema's own spelling is kept where the data confirmed it. Where the
+    /// data confirmed only another candidate, that one becomes the name -
+    /// which is the whole return on arbitrating: the guess the source led with
+    /// was wrong, real values say so, and a later run should not have to
+    /// rediscover it.
+    /// </remarks>
+    private static PersistedField Persist(
+        RecordFieldShape field,
+        string declaringTypeName,
+        IReadOnlyDictionary<(string Type, string Field), IReadOnlyList<string>>? resolved)
+    {
+        var confirmed = resolved?.GetValueOrDefault((declaringTypeName, field.FieldName));
+
+        if (confirmed is null || confirmed.Count == 0)
+        {
+            return new PersistedField
+            {
+                Name = field.FieldName,
+                StorageType = field.StorageType,
+                AlternateNames = field.AlternateFieldNames,
+                ReferentTypeName = field.ReferentTypeName,
+            };
+        }
+
+        var name = confirmed.Contains(field.FieldName, StringComparer.Ordinal)
+            ? field.FieldName
+            : confirmed[0];
+
+        return new PersistedField
+        {
+            Name = name,
+            StorageType = field.StorageType,
+            AlternateNames = confirmed
+                .Where(confirmedName => !string.Equals(confirmedName, name, StringComparison.Ordinal))
+                .ToArray(),
+            ReferentTypeName = field.ReferentTypeName,
+        };
+    }
+
+    /// <summary>
+    /// The name a field was written down under, for a caller that recorded a
+    /// verdict against the name it had before arbitration.
+    /// </summary>
+    internal static string PersistedNameOf(
+        string declaringTypeName,
+        string fieldName,
+        IReadOnlyDictionary<(string Type, string Field), IReadOnlyList<string>>? resolved)
+    {
+        var confirmed = resolved?.GetValueOrDefault((declaringTypeName, fieldName));
+
+        return confirmed is null || confirmed.Count == 0
+            || confirmed.Contains(fieldName, StringComparer.Ordinal)
+                ? fieldName
+                : confirmed[0];
     }
 
     /// <summary>

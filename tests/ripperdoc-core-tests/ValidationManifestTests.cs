@@ -322,6 +322,106 @@ public class ValidationManifestTests
         Assert.Equal(0, ValidationManifest.Build(schema, shipped).UnaddressableFieldProbes);
     }
 
+    [Fact]
+    public void AFieldConfirmedUnderItsOwnNameIsNotCondemnedByAGuessedSpelling()
+    {
+        // The case the old field-level tally could not represent. The field is
+        // really called speed and shipped values say so; the source also
+        // guessed it might be spelled Speed, and something unrelated happens to
+        // sit at that identifier. Run together, one value of the wrong type
+        // outranks every value of the right one and the field is reported as a
+        // slot the schema is wrong about - on evidence about a name it does not
+        // have.
+        var schema = SchemaWith(new RecordFieldShape("speed", "Float", ["Speed"], null));
+        var shipped = new FakeDatabase(("Vehicle.quadra", "gamedataThing_Record"));
+        shipped.Store("Vehicle.quadra", "speed", "Float");
+        shipped.Store("Vehicle.quadra", "Speed", "CName");
+
+        var field = Single(ValidationManifest.Build(schema, shipped));
+
+        Assert.Equal(ValidationState.Corroborated, field.State);
+        Assert.Equal(new[] { "speed" }, field.ConfirmedFieldNames);
+
+        // The contradiction is not swept away; it is attributed.
+        Assert.Equal(
+            ValidationState.Contradicted,
+            field.Spellings.Single(spelling => spelling.Name == "Speed").State);
+        Assert.Equal("CName", field.Spellings.Single(spelling => spelling.Name == "Speed").ObservedStorageType);
+
+        // And the field-level reading of it stays quiet, because a type named
+        // there is read as the type this field's values really have.
+        Assert.Null(field.ObservedStorageType);
+    }
+
+    [Fact]
+    public void AFieldNoSpellingConfirmsIsStillCondemnedByAContradictionUnderAny()
+    {
+        // The other arm. Nothing has established which spelling is real, so
+        // there is no ground for calling the contradiction somebody else's.
+        var schema = SchemaWith(new RecordFieldShape("speed", "Float", ["Speed"], null));
+        var shipped = new FakeDatabase(("Vehicle.quadra", "gamedataThing_Record"));
+        shipped.Store("Vehicle.quadra", "Speed", "CName");
+
+        var field = Single(ValidationManifest.Build(schema, shipped));
+
+        Assert.Equal(ValidationState.Contradicted, field.State);
+        Assert.Empty(field.ConfirmedFieldNames);
+        Assert.Equal("CName", field.ObservedStorageType);
+    }
+
+    [Fact]
+    public void OneValueOfTheWrongTypeUnderAFieldsOwnNameStillCondemnsIt()
+    {
+        // The rule that was there before there were any alternates to weigh,
+        // unchanged. Agreement under the same name does not outvote it.
+        var schema = SchemaWith(Field("speed", "Float"));
+        var shipped = new FakeDatabase(
+            ("Vehicle.quadra", "gamedataThing_Record"),
+            ("Vehicle.other", "gamedataThing_Record"));
+        shipped.Store("Vehicle.quadra", "speed", "Float");
+        shipped.Store("Vehicle.other", "speed", "CName");
+
+        Assert.Equal(ValidationState.Contradicted, Single(ValidationManifest.Build(schema, shipped)).State);
+    }
+
+    [Fact]
+    public void AFieldIsNotProbedUnderASpellingThatIsAnotherFieldsName()
+    {
+        // Two fields whose spellings overlap. Probing the guess would take the
+        // other field's value as evidence about this one - here, as a
+        // contradiction that condemns a field nothing is wrong with.
+        var schema = SchemaWith(
+            new RecordFieldShape("value", "Float", ["Value"], null),
+            new RecordFieldShape("Value", "Int32"));
+        var shipped = new FakeDatabase(("Vehicle.quadra", "gamedataThing_Record"));
+        shipped.Store("Vehicle.quadra", "value", "Float");
+        shipped.Store("Vehicle.quadra", "Value", "Int32");
+
+        var manifest = ValidationManifest.Build(schema, shipped);
+
+        var guessing = manifest.Fields().Single(field => field.FieldName == "value");
+        Assert.Equal(ValidationState.Corroborated, guessing.State);
+        Assert.Equal(new[] { "value" }, guessing.Spellings.Select(spelling => spelling.Name));
+
+        Assert.Equal(
+            ValidationState.Corroborated,
+            manifest.Fields().Single(field => field.FieldName == "Value").State);
+    }
+
+    [Fact]
+    public void AFieldTheSourceKnewTheNameOfHasOneSpellingAndOneVerdict()
+    {
+        var schema = SchemaWith(Field("speed", "Float"));
+        var shipped = new FakeDatabase(("Vehicle.quadra", "gamedataThing_Record"));
+        shipped.Store("Vehicle.quadra", "speed", "Float");
+
+        var field = Single(ValidationManifest.Build(schema, shipped));
+        var spelling = Assert.Single(field.Spellings);
+
+        Assert.Equal("speed", spelling.Name);
+        Assert.Equal(field.State, spelling.State);
+    }
+
     private static FieldValidation Single(ValidationManifest manifest) => Assert.Single(manifest.Fields());
 
     private static RecordFieldShape Field(string name, string storageType) => new(name, storageType);

@@ -149,6 +149,78 @@ public class ReferenceGraphTests
     }
 
     [Fact]
+    public void AnEdgeIsFollowedUnderEverySpellingTheSchemaOffersForItsField()
+    {
+        // The failure this guards against does not look like a failure. A
+        // schema derived from accessor shapes offers two spellings of a name;
+        // the values are all stored under the one it did not lead with; and a
+        // check probing only the leading spelling finds nothing, follows
+        // nothing, and reports that nothing contradicted the graph. Every count
+        // it prints is true and the run examined no reference at all.
+        var check = Check(
+            GraphOf(
+                Type(
+                    "gamedataProbeThing_Record",
+                    null,
+                    new RecordFieldShape("owner", "TweakDBID", ["Owner"], "gamedataProbeOther_Record")),
+                Type("gamedataProbeOther_Record", null)),
+            new SyntheticReferenceSource()
+                .WithRecord(1, "gamedataProbeThing_Record")
+                .WithRecord(2, "gamedataProbeOther_Record")
+                .PointingFrom(1, "Owner", 2));
+
+        Assert.Equal(1, check.ReferencesFollowed);
+        Assert.Equal(1, check.ReferencesOfPermittedKind);
+        Assert.Equal(1, check.ValuesRead);
+    }
+
+    [Fact]
+    public void AWronglyTypedReferenceIsNamedUnderTheSpellingItWasFoundAt()
+    {
+        // Whoever reads the example goes looking for the value. Naming the
+        // spelling the schema leads with, when the value sits at the other one,
+        // sends them to an identifier that holds nothing.
+        var check = Check(
+            GraphOf(
+                Type(
+                    "gamedataProbeThing_Record",
+                    null,
+                    new RecordFieldShape("owner", "TweakDBID", ["Owner"], "gamedataProbeOther_Record")),
+                Type("gamedataProbeOther_Record", null),
+                Type("gamedataProbeElse_Record", null)),
+            new SyntheticReferenceSource()
+                .WithRecord(1, "gamedataProbeThing_Record")
+                .WithRecord(2, "gamedataProbeElse_Record")
+                .PointingFrom(1, "Owner", 2));
+
+        Assert.Equal("Owner", Assert.Single(check.Examples).FieldName);
+    }
+
+    [Fact]
+    public void AnEdgeIsNotFollowedUnderASpellingThatIsAnotherFieldsName()
+    {
+        // The exclusion, seen from the reference side. One field is really
+        // called Owner and holds a reference of its own; another guesses that
+        // its name might be spelled that way. Probing the guess would take the
+        // first field's values as evidence about the second - and here that
+        // would double every reference the type carries.
+        var check = Check(
+            GraphOf(
+                Type(
+                    "gamedataProbeThing_Record",
+                    null,
+                    new RecordFieldShape("owner", "TweakDBID", ["Owner"], "gamedataProbeOther_Record"),
+                    new RecordFieldShape("Owner", "TweakDBID", [], "gamedataProbeOther_Record")),
+                Type("gamedataProbeOther_Record", null)),
+            new SyntheticReferenceSource()
+                .WithRecord(1, "gamedataProbeThing_Record")
+                .WithRecord(2, "gamedataProbeOther_Record")
+                .PointingFrom(1, "Owner", 2));
+
+        Assert.Equal(1, check.ReferencesFollowed);
+    }
+
+    [Fact]
     public void AnUntypedEdgeIsReportedAsUncheckedRatherThanAsHavingPassed()
     {
         var check = Check(

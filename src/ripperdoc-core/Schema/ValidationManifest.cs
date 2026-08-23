@@ -195,7 +195,14 @@ public sealed class ValidationManifest
         ArgumentNullException.ThrowIfNull(schema);
         ArgumentNullException.ThrowIfNull(shipped);
 
-        var tallies = new Dictionary<string, Dictionary<string, Tally>>(StringComparer.Ordinal);
+        // Tallied per spelling, not per field. A field the source offers more
+        // than one spelling of is one field the data is asked about several
+        // ways, and the answers differ: run together, a value sitting at a
+        // guessed spelling's identifier is evidence about the field, and the
+        // field is condemned for what some unrelated value happens to be. Kept
+        // apart, the guess is what the contradiction is about.
+        var tallies = new Dictionary<string, Dictionary<(string Field, string Spelling), Tally>>(
+            StringComparer.Ordinal);
         var recordsPerType = new Dictionary<string, int>(StringComparer.Ordinal);
         var unknownTypes = new HashSet<string>(StringComparer.Ordinal);
         var explained = new HashSet<ulong>();
@@ -219,25 +226,23 @@ public sealed class ValidationManifest
 
             if (!tallies.TryGetValue(record.TypeName, out var fieldTallies))
             {
-                tallies[record.TypeName] = fieldTallies = new Dictionary<string, Tally>(StringComparer.Ordinal);
+                tallies[record.TypeName] = fieldTallies =
+                    new Dictionary<(string Field, string Spelling), Tally>();
             }
 
             foreach (var field in type.Fields.Values)
             {
-                if (!fieldTallies.TryGetValue(field.Name, out var tally))
+                // Every spelling the schema offers for this field on this type,
+                // and no spelling that is really another field's name. Asking
+                // for them here rather than reading the field's own alternates
+                // is what keeps that exclusion in one place.
+                foreach (var candidate in type.Spellings.Of(field))
                 {
-                    fieldTallies[field.Name] = tally = new Tally();
-                }
+                    if (!fieldTallies.TryGetValue((field.Name, candidate), out var tally))
+                    {
+                        fieldTallies[(field.Name, candidate)] = tally = new Tally();
+                    }
 
-                // Every spelling the field might be stored under is probed, and
-                // the outcomes are tallied against the one field rather than
-                // against each spelling. A source that cannot recover the
-                // capitalisation of a name is describing one field it is unsure
-                // how to spell, not several fields - so counting each candidate
-                // as its own field would inflate the schema with slots that
-                // were never claimed to exist.
-                foreach (var candidate in field.CandidateNames())
-                {
                     if (!TweakIdentifier.TryForField(record.Identifier, candidate, out var identifier, out var reason))
                     {
                         // No identifier exists for this pair, so there is
@@ -267,7 +272,6 @@ public sealed class ValidationManifest
                     else if (string.Equals(storedType, field.StorageType, StringComparison.Ordinal))
                     {
                         tally.Agreeing++;
-                        tally.Confirmed.Add(candidate);
                     }
                     else
                     {
@@ -287,17 +291,34 @@ public sealed class ValidationManifest
 
             foreach (var field in type.Fields.Values.OrderBy(field => field.Name, StringComparer.Ordinal))
             {
-                var tally = fieldTallies?.GetValueOrDefault(field.Name) ?? Tally.Empty;
+                var spellings = type.Spellings.Of(field)
+                    .Select(candidate =>
+                    {
+                        var tally = fieldTallies?.GetValueOrDefault((field.Name, candidate)) ?? Tally.Empty;
+                        return new SpellingValidation(
+                            candidate,
+                            StateOf(tally, hasRecords),
+                            tally.Agreeing,
+                            tally.Disagreeing,
+                            tally.ObservedStorageType);
+                    })
+                    .ToArray();
+
+                var state = StateOfField(spellings, hasRecords);
+
                 verdicts.Add(new FieldValidation(
                     typeName,
                     field.Name,
                     field.StorageType,
                     field.DeclaringTypeName,
-                    StateOf(tally, hasRecords),
-                    tally.Agreeing,
-                    tally.Disagreeing,
-                    tally.ObservedStorageType,
-                    tally.Confirmed.ToArray(),
+                    state,
+                    spellings.Sum(spelling => spelling.CorroboratingValueCount),
+                    spellings.Sum(spelling => spelling.ContradictingValueCount),
+                    state == ValidationState.Contradicted
+                        ? spellings.FirstOrDefault(spelling => spelling.State == ValidationState.Contradicted)
+                            ?.ObservedStorageType
+                        : null,
+                    spellings,
                     field.ReferentTypeName));
             }
         }
@@ -312,6 +333,57 @@ public sealed class ValidationManifest
             unaddressable,
             unaddressableByReason);
     }
+
+    /// <summary>
+    /// The verdict on a field, from the verdicts on the names it might be
+    /// stored under.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A spelling the data confirms settles the question the alternates existed
+    /// to ask. Once one name is known to be the one values are keyed by, what
+    /// sits at another candidate's identifier is that candidate's business and
+    /// says nothing about this field - so corroboration under any spelling
+    /// outranks contradiction under another, and only here.
+    /// </para>
+    /// <para>
+    /// Within a single spelling the order is the other way round, and stays
+    /// that way: one value of the wrong type under the name a field really is
+    /// keyed by is a finding about the schema, and is not outvoted by the
+    /// values that matched. So a field with one spelling - which is every field
+    /// of a schema read from a compiled type model - is judged exactly as it
+    /// was before there were any alternates to weigh.
+    /// </para>
+    /// <para>
+    /// Where no spelling is confirmed, a contradiction under any of them stands
+    /// against the field. Nothing has established which name is real, so there
+    /// is no ground for calling the contradiction somebody else's.
+    /// </para>
+    /// </remarks>
+    private static ValidationState StateOfField(
+        IReadOnlyList<SpellingValidation> spellings,
+        bool typeHasRecords)
+    {
+        foreach (var ranked in RankedStates)
+        {
+            if (spellings.Any(spelling => spelling.State == ranked))
+            {
+                return ranked;
+            }
+        }
+
+        return typeHasRecords
+            ? ValidationState.NoCorroboratingValue
+            : ValidationState.NoShippedRecordsOfType;
+    }
+
+    private static readonly ValidationState[] RankedStates =
+    [
+        ValidationState.Corroborated,
+        ValidationState.Contradicted,
+        ValidationState.StorageTypeUnreadable,
+        ValidationState.NotAddressable,
+    ];
 
     private static ValidationState StateOf(Tally tally, bool typeHasRecords)
     {
@@ -360,12 +432,6 @@ public sealed class ValidationManifest
         public int Unreadable;
         public int Unaddressable;
         public string? ObservedStorageType;
-
-        /// <summary>
-        /// The spellings a corroborating value was actually found under, in a
-        /// stable order.
-        /// </summary>
-        public SortedSet<string> Confirmed { get; } = new(StringComparer.Ordinal);
     }
 }
 
@@ -381,29 +447,35 @@ public sealed class ValidationManifest
 /// </param>
 /// <param name="State">The verdict.</param>
 /// <param name="CorroboratingValueCount">
-/// How many stored values were found for this field, of the claimed type.
+/// How many stored values of the claimed type were found, added up over every
+/// spelling probed.
 /// </param>
 /// <param name="ContradictingValueCount">
-/// How many stored values were found for this field, of some other type.
+/// How many stored values of some other type were found, added up over every
+/// spelling probed. Can be non-zero on a corroborated field: the contradiction
+/// then sits under a spelling the data rejected, and
+/// <paramref name="Spellings"/> says which.
 /// </param>
 /// <param name="ObservedStorageType">
-/// The storage type of the first contradicting value, or null where there was
-/// none.
+/// The storage type of the first contradicting value, or null where the field
+/// is not contradicted. Deliberately null rather than reported from a rejected
+/// spelling - a type named here is read as the type this field's values really
+/// have.
 /// </param>
-/// <param name="ConfirmedFieldNames">
-/// The spellings of the field name that stored values were actually found
-/// under, in a stable order. Empty where none was.
+/// <param name="Spellings">
+/// What the data said about each name the field might be stored under, in probe
+/// order. One entry where the source knew the name; more where it did not, and
+/// the entries are then how the two are told apart.
 /// </param>
 /// <param name="ReferentTypeName">
 /// The kind of record this field's stored identifier points at, or null where
 /// the schema does not say.
 /// </param>
 /// <remarks>
-/// <see cref="ConfirmedFieldNames"/> is a list rather than a name because a
-/// schema derived from accessor shapes offers more than one spelling of the
-/// same field and the data decides between them. It says which spelling was
-/// vindicated - and if more than one was, it says that too rather than picking
-/// one and reporting a certainty nothing established.
+/// The per-spelling entries are what makes "confirmed under its own name and
+/// contradicted under a guess" something this can say. Tallied into one field
+/// it is not sayable at all, and the field is reported as contradicted on
+/// evidence about a name it never had.
 /// </remarks>
 public sealed record FieldValidation(
     string RecordTypeName,
@@ -414,7 +486,7 @@ public sealed record FieldValidation(
     int CorroboratingValueCount,
     int ContradictingValueCount,
     string? ObservedStorageType,
-    IReadOnlyList<string> ConfirmedFieldNames,
+    IReadOnlyList<SpellingValidation> Spellings,
     string? ReferentTypeName)
 {
     /// <summary>
@@ -426,7 +498,49 @@ public sealed record FieldValidation(
     /// be worth reading separately - which is what <see cref="State"/> is for.
     /// </remarks>
     public bool IsValidated => State == ValidationState.Corroborated;
+
+    /// <summary>
+    /// The spellings the data vindicated, in probe order. Empty where it
+    /// vindicated none.
+    /// </summary>
+    /// <remarks>
+    /// Derived from <see cref="Spellings"/> rather than recorded beside it, so
+    /// that "which spelling was confirmed" and "what the data said about each
+    /// spelling" cannot come to disagree. A spelling is vindicated when values
+    /// were found under it and every one of them was of the claimed type; one
+    /// that also holds a value of another type has not been shown to be this
+    /// field's name.
+    /// </remarks>
+    public IEnumerable<string> ConfirmedFieldNames => Spellings
+        .Where(spelling => spelling.State == ValidationState.Corroborated)
+        .Select(spelling => spelling.Name);
 }
+
+/// <summary>
+/// What a shipped database had to say about one name a field might be stored
+/// under.
+/// </summary>
+/// <param name="Name">The spelling probed.</param>
+/// <param name="State">
+/// The verdict on this spelling alone, reached by the same rule that once
+/// judged a whole field: a contradiction under a name outranks agreement under
+/// the same name.
+/// </param>
+/// <param name="CorroboratingValueCount">
+/// How many stored values under this name were of the claimed type.
+/// </param>
+/// <param name="ContradictingValueCount">
+/// How many were of some other type.
+/// </param>
+/// <param name="ObservedStorageType">
+/// The type of the first such value, or null where there was none.
+/// </param>
+public sealed record SpellingValidation(
+    string Name,
+    ValidationState State,
+    int CorroboratingValueCount,
+    int ContradictingValueCount,
+    string? ObservedStorageType);
 
 /// <summary>
 /// What a shipped database was able to say about a schema field.

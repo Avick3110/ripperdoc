@@ -1,5 +1,6 @@
 using Ripperdoc.Core.Dump;
 using Ripperdoc.Core.Schema;
+using Ripperdoc.Core.Tweak;
 using Xunit;
 
 namespace Ripperdoc.Core.Tests;
@@ -111,6 +112,114 @@ public class SchemaGenerationTests : IDisposable
         Assert.Equal(1, read.References.TypedEdgeCount);
         Assert.Equal(0, read.References.UntypedEdgeCount);
     }
+
+    [Fact]
+    public void AnArtifactNothingArbitratedKeepsItsGuessesAndSaysThatIsWhatTheyAre()
+    {
+        // The other arm of the one below. With no arbiter the candidates are
+        // all the schema has, so they are kept - and the artifact says the name
+        // it lists a field under is the likelier candidate rather than the one
+        // values are keyed by. Unsaid, a consumer finding nothing under it
+        // would read that as a field the game does not use.
+        using var dump = SyntheticDump.Of(classes: [ThingRecord]);
+
+        var written = SchemaGeneration.Generate(
+            new GenerationInputs(ArtifactPath, dump.JsonDirectory),
+            shipped: null,
+            When);
+
+        Assert.Equal(
+            new[] { "Owner" },
+            SchemaIrDocument.Read(ArtifactPath).ToArtifact()
+                .Records.Find("gamedataProbeThing_Record")!.Fields["owner"].AlternateNames);
+
+        Assert.Contains(
+            written.Provenance.NamedLosses,
+            loss => loss.Contains("nothing arbitrated between them", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AnArbitratedArtifactIsWrittenUnderTheNameTheDataConfirmed()
+    {
+        // What arbitrating buys, made permanent. The source led with 'owner'
+        // and real values are keyed by 'Owner'; the artifact records the name
+        // the data confirmed, so a later run does not rediscover it, and the
+        // guess is not carried forward as though it were still open.
+        using var dump = SyntheticDump.Of(classes: [ThingRecord]);
+        var shipped = new StubShipped("Vehicle.quadra", "gamedataProbeThing_Record", "Owner", "TweakDBID");
+
+        var written = SchemaGeneration.Generate(
+            new GenerationInputs(ArtifactPath, dump.JsonDirectory),
+            shipped,
+            When);
+
+        // The schema in hand still carries both, because nothing has been
+        // written yet and the manifest beside it is what says which won.
+        Assert.Equal(new[] { "Owner" }, written.Records.Find("gamedataProbeThing_Record")!.Fields["owner"].AlternateNames);
+
+        var read = SchemaIrDocument.Read(ArtifactPath).ToArtifact();
+        var field = read.Records.Find("gamedataProbeThing_Record")!.Fields["Owner"];
+
+        Assert.Equal("Owner", field.Name);
+        Assert.Empty(field.AlternateNames);
+        Assert.Equal("gamedataProbeOther_Record", field.ReferentTypeName);
+
+        // The verdict travels under the same name as the field it is about.
+        Assert.Equal("Owner", Assert.Single(read.Validation!.Fields()).FieldName);
+    }
+
+    [Fact]
+    public void AnArbiterThatFoundNothingLeavesTheSpellingUndecidedAndSaysSo()
+    {
+        // Arbitration is not the same as an answer. A database with no value
+        // under either candidate decides nothing, so the candidates survive -
+        // and the artifact distinguishes that from the case where a spelling
+        // was confirmed, rather than reporting a resolved name it has no
+        // grounds for.
+        using var dump = SyntheticDump.Of(classes: [ThingRecord]);
+        var shipped = new StubShipped("Vehicle.quadra", "gamedataProbeThing_Record", null, null);
+
+        var written = SchemaGeneration.Generate(
+            new GenerationInputs(ArtifactPath, dump.JsonDirectory),
+            shipped,
+            When);
+
+        Assert.Equal(
+            new[] { "Owner" },
+            SchemaIrDocument.Read(ArtifactPath).ToArtifact()
+                .Records.Find("gamedataProbeThing_Record")!.Fields["owner"].AlternateNames);
+
+        Assert.Contains(
+            written.Provenance.NamedLosses,
+            loss => loss.Contains("still undecided", StringComparison.Ordinal));
+    }
+
+    /// <summary>One record, and at most one value on it, with nothing of the game's.</summary>
+    private sealed class StubShipped(
+        string recordName,
+        string typeName,
+        string? fieldName,
+        string? storageType) : IShippedRecordSource
+    {
+        private readonly ulong _record = TweakIdentifier.Of(recordName);
+
+        public string Description => "a database constructed for this test";
+
+        public int StoredValueCount => fieldName is null ? 0 : 1;
+
+        public IEnumerable<ShippedRecord> Records => [new ShippedRecord(_record, typeName)];
+
+        public bool TryGetStoredValueType(ulong identifier, out string? found)
+        {
+            found = storageType;
+
+            return fieldName is not null
+                && TweakIdentifier.TryForField(_record, fieldName, out var stored, out _)
+                && stored == identifier;
+        }
+    }
+
+    private static readonly DateTimeOffset When = new(2026, 8, 23, 9, 0, 0, TimeSpan.Zero);
 
     [Fact]
     public void AGeneratedSchemaMatchingTheInstalledBuildIsCurrent()
