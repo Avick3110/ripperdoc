@@ -47,6 +47,16 @@ extra_flats_variable="RIPPERDOC_EXTRA_FLATS_PATH"
 # needs that too.
 inheritance_variable="RIPPERDOC_INHERITANCE_PATH"
 
+# Tier (iii) reads type information generated from the user's own game install.
+# It is the input the dependency-drift audit needs, and no runner has one - the
+# dump is derived from the publisher's binary and is no more this project's to
+# carry than the database is. The audit's result travels instead, as a committed
+# receipt carrying counts and fingerprints and nothing the game declares, and
+# the tier (i) checks hold that receipt against the type model this build uses.
+# So a runner with no dump still says something true about drift, and says only
+# that.
+rtti_dump_variable="RIPPERDOC_RTTI_DUMP_PATH"
+
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 
@@ -84,7 +94,7 @@ run "build"                  dotnet build ripperdoc.sln --nologo -v minimal
 # A filter that matches nothing exits 0, so without the last flag a mistyped
 # filter would print PASS having run no checks at all - the failure mode where
 # verification machinery fails toward green.
-run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase&Tier!=InstalledTweakLayer" -- RunConfiguration.TreatNoTestsAsError=true
+run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase&Tier!=InstalledTweakLayer&Tier!=RttiDump" -- RunConfiguration.TreatNoTestsAsError=true
 
 # Tiers (ii) and (iii): see tests/fixtures/README.md. Named here rather than
 # left silent, so the gate's coverage is legible from its own output.
@@ -161,7 +171,17 @@ else
   run "installed-tweak-layer checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=InstalledTweakLayer" -- RunConfiguration.TreatNoTestsAsError=true
 fi
 
-skip "RTTI-dump checks"        "needs a dump generated from the user's own install - tier (iii), local only"
+rtti_dump_path="$(printenv "$rtti_dump_variable" || true)"
+
+if [ -z "$rtti_dump_path" ]; then
+  skip "RTTI-dump checks" "needs type information generated from the user's own install - tier (iii), local only; set $rtti_dump_variable to a dump's json directory to run it. The drift audit's accepted result is checked against this build's type model either way, by the tier (i) checks"
+elif [ ! -d "$rtti_dump_path" ]; then
+  skip "RTTI-dump checks" "$rtti_dump_variable names a path with no directory at it - tier (iii) has nothing to read"
+elif [ ! -d "$rtti_dump_path/classes" ]; then
+  skip "RTTI-dump checks" "$rtti_dump_variable names a directory with no classes/ in it, so it is not a dump's json output - tier (iii) has nothing to read"
+else
+  run "RTTI-dump checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=RttiDump" -- RunConfiguration.TreatNoTestsAsError=true
+fi
 
 echo ""
 echo "================ gate summary ================"

@@ -19,4 +19,9 @@ public static class TierTrait
 
     /// <summary>Checks that read a real install's tweak lane.</summary>
     public const string InstalledTweakLayer = "InstalledTweakLayer";
+
+    /// <summary>
+    /// Checks that read type information generated from a game install.
+    /// </summary>
+    public const string RttiDump = "RttiDump";
 }
