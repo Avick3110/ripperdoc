@@ -1,4 +1,6 @@
+using System.Reflection;
 using Ripperdoc.Core.Drift;
+using WolvenKit.RED4.Types;
 using Xunit;
 
 namespace Ripperdoc.Core.Tests;
@@ -81,6 +83,64 @@ public class TypeModelReadingTests
             Assert.Equal(1L, TypeModelReading.AsComparableValue(underlying));
         }
     }
+
+    [Fact]
+    public void TwoPropertiesStoredUnderOneNameLeaveTheSecondStatedRatherThanSubstituted()
+    {
+        // The audit addresses a property by the name it is stored under, so two
+        // properties sharing one cannot both be in the reading. Keeping
+        // whichever the runtime handed over last would decide it by reflection
+        // order, and the audit would then report a type difference on a
+        // property the model carries correctly - or agreement about a name the
+        // model is ambiguous on - with nothing anywhere saying a property had
+        // been dropped.
+        var alone = Read(typeof(ProbeStoredNameAlone)).Properties[SharedStoredName];
+        var otherAlone = Read(typeof(ProbeStoredNameAloneOther)).Properties[SharedStoredName];
+        Assert.NotEqual(alone, otherAlone);
+
+        var failures = new List<string>();
+        var read = Read(typeof(ProbeDuplicateStoredName), failures);
+
+        var kept = Assert.Single(read.Properties);
+        Assert.Equal(SharedStoredName, kept.Key);
+        Assert.Equal(
+            DeclaredFirst(typeof(ProbeDuplicateStoredName)) == nameof(ProbeDuplicateStoredName.Bar)
+                ? alone
+                : otherAlone,
+            kept.Value);
+
+        var stated = Assert.Single(failures);
+        Assert.Contains(
+            $"{nameof(ProbeDuplicateStoredName)}.{SharedStoredName}",
+            stated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "more than one property in the model is stored under this name; the first was kept",
+            stated,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>The stored name the probe types deliberately share.</summary>
+    private const string SharedStoredName = "bar";
+
+    private static ModelClass Read(Type type, List<string>? failures = null)
+    {
+        var classes = new Dictionary<string, ModelClass>(StringComparer.Ordinal);
+        TypeModelReading.ReadClass(type, classes, failures ?? []);
+
+        return classes[type.Name];
+    }
+
+    /// <summary>
+    /// Which annotated property the runtime hands over first, asked of the same
+    /// call the reader asks. Nothing promises an order across runtimes, so the
+    /// check works out which one "the first" is here rather than assuming the
+    /// declaration order is it.
+    /// </summary>
+    private static string DeclaredFirst(Type type) => type
+        .GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+        .First(property => property.GetCustomAttribute<REDAttribute>() is not null)
+        .Name;
 
     private static TypeModelReading Reading(params string[] failures) =>
         new("a description constructed for this test",

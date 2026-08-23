@@ -278,7 +278,20 @@ public sealed record TypeModelReading(
             failures.OrderBy(failure => failure, StringComparer.Ordinal).ToArray());
     }
 
-    private static void ReadClass(Type type, Dictionary<string, ModelClass> into, List<string> failures)
+    /// <summary>
+    /// Read one compiled class into the comparison vocabulary.
+    /// </summary>
+    /// <param name="type">The class.</param>
+    /// <param name="into">Where the class is filed, keyed by name.</param>
+    /// <param name="failures">Where what could not be read is stated.</param>
+    /// <remarks>
+    /// Reachable from a check rather than private, because the two things it
+    /// states - a name carried twice by types, and a stored name carried twice
+    /// by properties - are properties of whatever assembly is reflected, and
+    /// the pinned one cannot be made to hold either on demand. A type written
+    /// for a check holds them by construction.
+    /// </remarks>
+    internal static void ReadClass(Type type, Dictionary<string, ModelClass> into, List<string> failures)
     {
         var properties = new Dictionary<string, string>(StringComparer.Ordinal);
 
@@ -312,7 +325,13 @@ public sealed record TypeModelReading(
                 continue;
             }
 
-            properties[string.IsNullOrEmpty(annotation.Name) ? property.Name : annotation.Name] = storedType;
+            var storedName = string.IsNullOrEmpty(annotation.Name) ? property.Name : annotation.Name;
+            if (!properties.TryAdd(storedName, storedType))
+            {
+                failures.Add(
+                    $"{type.Name}.{storedName}: more than one property in the model is stored under this "
+                    + "name; the first was kept, so the audit compares one of them and not the other.");
+            }
         }
 
         var baseType = type.BaseType;
