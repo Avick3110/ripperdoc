@@ -125,6 +125,14 @@ public class SchemaIrTests
             .Provenance.NamedLosses;
 
         Assert.Contains(losses, loss => loss.Contains("no identifier at", StringComparison.Ordinal));
+
+        // And it counts what it says it counts. The number is of names looked
+        // under, and a sentence calling them fields or record-and-field pairs
+        // would report a field the source spells two ways as two of whatever it
+        // named.
+        Assert.Contains(
+            losses,
+            loss => loss.Contains("name(s) a field might be stored under", StringComparison.Ordinal));
     }
 
     [Fact]

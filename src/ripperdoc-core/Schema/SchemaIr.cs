@@ -208,9 +208,15 @@ public sealed class SchemaIr
             }
 
             // One line per reason that actually occurred, rather than one line
-            // naming the reason that usually would. A pair can fail to have an
+            // naming the reason that usually would. A name can fail to have an
             // identifier three ways, and a reader told the wrong one goes
             // looking for long names among fields whose names are short.
+            //
+            // The unit is the name looked under, not the field. A field the
+            // source offers two spellings of contributes one line's worth per
+            // spelling that could not be addressed, and calling those two
+            // fields - or one - would be a count of something the sweep did not
+            // do.
             foreach (var reason in validation.UnaddressableFieldProbesByReason.Keys.OrderBy(reason => reason))
             {
                 var count = validation.UnaddressableFieldProbesByReason[reason];
@@ -220,7 +226,7 @@ public sealed class SchemaIr
                 }
 
                 losses.Add(
-                    $"{count} record-and-field pair(s) have no identifier at all, because "
+                    $"{count} name(s) a field might be stored under have no identifier at all, because "
                     + TweakIdentifier.Describe(reason)
                     + "; nothing could be stored under them and nothing was checked for them.");
             }
