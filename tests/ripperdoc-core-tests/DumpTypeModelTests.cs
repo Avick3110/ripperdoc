@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Ripperdoc.Core.Dump;
+using Ripperdoc.Core.Schema;
 using Xunit;
 
 namespace Ripperdoc.Core.Tests;
@@ -111,6 +112,62 @@ public class DumpTypeModelTests
 
         Assert.Empty(DumpTypeModel.Load(dump.JsonDirectory, Description).ReadFailures);
     }
+
+    [Fact]
+    public void AFileThatWillNotParseIsNamedRatherThanEndingTheRead()
+    {
+        // The half-written capture. The tool writes a fresh copy every time the
+        // game starts, so one truncated file among tens of thousands is an
+        // input this reader can really be handed - and ending the read there
+        // would send a parse failure out through a call whose stated failures
+        // are an absent directory and a null argument, past a caller that wrote
+        // its catch against what the documentation named.
+        using var dump = SyntheticDump.Of(classes:
+        [
+            """{"name":"gamedataProbeThing_Record","flags":66}""",
+            """{"name":"gamedataProbeTruncated_Reco""",
+            """{"name":"gamedataProbeOther_Record","flags":66}""",
+        ]);
+
+        var model = DumpTypeModel.Load(dump.JsonDirectory, Description);
+
+        Assert.Equal(2, model.Classes.Count);
+        Assert.True(model.Classes.ContainsKey("gamedataProbeThing_Record"));
+        Assert.True(model.Classes.ContainsKey("gamedataProbeOther_Record"));
+
+        var stated = Assert.Single(model.ReadFailures);
+        Assert.Contains(TruncatedFileName, stated, StringComparison.Ordinal);
+        Assert.Contains("is not in this model", stated, StringComparison.Ordinal);
+        Assert.DoesNotContain(dump.JsonDirectory, stated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AFileThatWillNotParseTravelsOnAsSomethingTheSchemaDoesNotCarry()
+    {
+        // The other half of the same claim: the failure has to reach whoever is
+        // deriving a schema, or the model states it to nobody. It travels the
+        // route the model's other failures already take, and the generation
+        // step above it keeps the failure it documents rather than growing a
+        // parse failure it does not.
+        using var dump = SyntheticDump.Of(classes:
+        [
+            """{"name":"gamedataProbeThing_Record","flags":66}""",
+            """{"name":"gamedataProbeTruncated_Reco""",
+        ]);
+
+        var reading = new DumpRecordTypeSource(DumpTypeModel.Load(dump.JsonDirectory, Description)).Read();
+
+        Assert.Contains(
+            reading.Failures,
+            failure => failure.Reason.Contains(TruncatedFileName, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// What the fixture names the second file it writes. The reader states the
+    /// file's name and nothing else about where it is, so a check that the name
+    /// arrives has to know which name to expect.
+    /// </summary>
+    private const string TruncatedFileName = "document-0001.json";
 
     [Fact]
     public void AParameterIsAnOutputOnlyWhenTheDumpMarksItAsOne()

@@ -83,6 +83,13 @@ public sealed class DumpTypeModel
     /// and an entry here is something it could not.
     /// </para>
     /// <para>
+    /// A file that will not parse at all is in here too, named. It is the one
+    /// entry that is about a file rather than about a description, because a
+    /// file the reader could not get a description out of is the plainest case
+    /// of something the generated information described and this model does not
+    /// carry.
+    /// </para>
+    /// <para>
     /// Everything is addressed by name here, so two descriptions sharing one
     /// name cannot both be in the model and a description with no name cannot
     /// be addressed at all. Keeping the first and stating the rest is the only
@@ -134,7 +141,11 @@ public sealed class DumpTypeModel
         var classes = new Dictionary<string, DumpClass>(StringComparer.Ordinal);
         foreach (var file in Files(classesDirectory))
         {
-            var read = Read<ClassDocument>(file);
+            if (!TryRead<ClassDocument>(file, failures, out var read))
+            {
+                continue;
+            }
+
             CollectUnrecognised(read, unrecognised);
             Add(classes, read.Name, read.ToClass(), "class", failures);
         }
@@ -142,14 +153,22 @@ public sealed class DumpTypeModel
         var enums = new Dictionary<string, DumpEnum>(StringComparer.Ordinal);
         foreach (var file in Files(enumsDirectory))
         {
-            var read = Read<EnumDocument>(file);
+            if (!TryRead<EnumDocument>(file, failures, out var read))
+            {
+                continue;
+            }
+
             CollectUnrecognised(read, unrecognised);
             Add(enums, read.Name, read.ToEnum(isBitfield: false), "enumeration", failures);
         }
 
         foreach (var file in Files(bitfieldsDirectory))
         {
-            var read = Read<EnumDocument>(file);
+            if (!TryRead<EnumDocument>(file, failures, out var read))
+            {
+                continue;
+            }
+
             CollectUnrecognised(read, unrecognised);
 
             // Bitfields land in the same map as enumerations, so a name used by
@@ -233,11 +252,61 @@ public sealed class DumpTypeModel
         }
     }
 
-    private static T Read<T>(string file)
+    /// <summary>
+    /// Read one of the dump's files, or state why this model does not carry
+    /// what it describes.
+    /// </summary>
+    /// <param name="file">The file.</param>
+    /// <param name="failures">Where a file that could not be read is stated.</param>
+    /// <param name="read">What the file described, where it could be read.</param>
+    /// <returns>Whether the file was read.</returns>
+    /// <remarks>
+    /// <para>
+    /// A dump is tens of thousands of files and the tool writes a fresh copy
+    /// every time the game starts, so a capture taken or copied while it was
+    /// still being written is an input this reader can really be handed - one
+    /// truncated file among the rest. Ending the read there would put a parse
+    /// failure out through a call whose stated failures are an absent directory
+    /// and a null argument, and out through the generation step above it, whose
+    /// stated failure for unusable type information is a different exception
+    /// again. Neither caller could catch what it was told to catch, and the
+    /// message would not say the dump was incomplete.
+    /// </para>
+    /// <para>
+    /// So it is a failure rather than an exception: a file that will not parse
+    /// is exactly what this model does not carry. The file's name is stated and
+    /// its path is not - a failure travels into a provenance block, and nothing
+    /// carrying a machine path may.
+    /// </para>
+    /// </remarks>
+    private static bool TryRead<T>(string file, List<string> failures, out T read)
     {
-        using var stream = File.OpenRead(file);
-        return JsonSerializer.Deserialize<T>(stream, ReadOptions)
-            ?? throw new JsonException($"'{Path.GetFileName(file)}' holds no object.");
+        var name = Path.GetFileName(file);
+
+        try
+        {
+            using var stream = File.OpenRead(file);
+            var document = JsonSerializer.Deserialize<T>(stream, ReadOptions);
+            if (document is null)
+            {
+                failures.Add(
+                    $"{name}: this file in the generated information holds no object, so whatever it "
+                    + "describes is not in this model.");
+                read = default!;
+                return false;
+            }
+
+            read = document;
+            return true;
+        }
+        catch (JsonException exception)
+        {
+            failures.Add(
+                $"{name}: this file in the generated information could not be read, so whatever it "
+                + $"describes is not in this model. {exception.Message}");
+            read = default!;
+            return false;
+        }
     }
 
     private static void CollectUnrecognised(IUnrecognisedKeys document, SortedSet<string> into)
