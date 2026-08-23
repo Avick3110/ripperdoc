@@ -212,11 +212,12 @@ public sealed class SchemaIr
             // identifier three ways, and a reader told the wrong one goes
             // looking for long names among fields whose names are short.
             //
-            // The unit is the name looked under, not the field. A field the
-            // source offers two spellings of contributes one line's worth per
-            // spelling that could not be addressed, and calling those two
-            // fields - or one - would be a count of something the sweep did not
-            // do.
+            // The unit is the attempt, which is one record and one name
+            // together. Not the field, and not the name either: whether a name
+            // can be addressed depends on the record it is being addressed on,
+            // so the same field is reachable on one record of a type and not on
+            // another. A reader adding a count of names up against the schema
+            // would find fewer than the sweep refused.
             foreach (var reason in validation.UnaddressableFieldProbesByReason.Keys.OrderBy(reason => reason))
             {
                 var count = validation.UnaddressableFieldProbesByReason[reason];
@@ -226,9 +227,10 @@ public sealed class SchemaIr
                 }
 
                 losses.Add(
-                    $"{count} name(s) a field might be stored under have no identifier at all, because "
+                    $"{count} attempt(s) to address a field on a record found no identifier, because "
                     + TweakIdentifier.Describe(reason)
-                    + "; nothing could be stored under them and nothing was checked for them.");
+                    + "; nothing could be stored under those names on those records and nothing was "
+                    + "checked for them.");
             }
         }
 

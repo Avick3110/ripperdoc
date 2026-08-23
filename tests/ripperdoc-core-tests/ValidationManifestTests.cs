@@ -334,6 +334,53 @@ public class ValidationManifestTests
     }
 
     [Fact]
+    public void AnUnaddressableFieldIsCountedOncePerRecordAsWellAsPerName()
+    {
+        // The half a single-record fixture cannot see. The counter sits inside
+        // the sweep over records, so three records and two spellings are six
+        // attempts - and a sentence calling that a count of names would report
+        // six names where the schema has two.
+        var longEnough = new string('f', 60);
+        var schema = SchemaWith(new RecordFieldShape(longEnough, "Float", [longEnough + "Alternate"], null));
+        var shipped = new FakeDatabase(
+            (new string('r', 200), "gamedataThing_Record"),
+            (new string('s', 200), "gamedataThing_Record"),
+            (new string('t', 200), "gamedataThing_Record"));
+
+        var manifest = ValidationManifest.Build(schema, shipped);
+
+        Assert.Equal(6, manifest.UnaddressableFieldProbes);
+        Assert.Equal(6, manifest.UnaddressableFieldProbesByReason.Values.Sum());
+
+        // Two names, three records, one field. The multiplication is the point:
+        // asserted against the operands rather than against the literal above,
+        // so a fixture grown by a record moves the expectation with it.
+        Assert.Equal(2, Single(manifest).Spellings.Count);
+        Assert.Equal(3, manifest.RecordsExamined);
+        Assert.Equal(
+            Single(manifest).Spellings.Count * manifest.RecordsExamined,
+            manifest.UnaddressableFieldProbes);
+    }
+
+    [Fact]
+    public void AFieldAddressableOnOneRecordOfATypeAndNotAnotherCountsOnlyWhereItFailed()
+    {
+        // Why the unit has to be the attempt and cannot be the name: whether a
+        // name can be addressed depends on the record it is addressed on. The
+        // same field is out of reach on the long-named record and perfectly
+        // reachable on the short-named one, and no count of names could say so.
+        var schema = SchemaWith(Field(new string('f', 60), "Float"));
+        var shipped = new FakeDatabase(
+            (new string('r', 200), "gamedataThing_Record"),
+            ("Thing.short", "gamedataThing_Record"));
+
+        var manifest = ValidationManifest.Build(schema, shipped);
+
+        Assert.Equal(1, manifest.UnaddressableFieldProbes);
+        Assert.Equal(2, manifest.RecordsExamined);
+    }
+
+    [Fact]
     public void AnOrdinarySweepAddressesEverythingItLooksAt()
     {
         var schema = SchemaWith(Field("speed", "Float"));

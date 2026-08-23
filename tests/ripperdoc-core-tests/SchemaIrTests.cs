@@ -124,22 +124,22 @@ public class SchemaIrTests
         var losses = SchemaIr.Create(schema, manifest, SchemaMode.InheritedTypeModel, When)
             .Provenance.NamedLosses;
 
-        Assert.Contains(losses, loss => loss.Contains("no identifier at", StringComparison.Ordinal));
+        Assert.Contains(losses, loss => loss.Contains("found no identifier", StringComparison.Ordinal));
 
-        // And it counts what it says it counts. The number is of names looked
-        // under, and a sentence calling them fields or record-and-field pairs
-        // would report a field the source spells two ways as two of whatever it
-        // named.
+        // And it counts what it says it counts. The number is of attempts, one
+        // per record and name together, and a sentence calling them fields,
+        // names, or record-and-field pairs would report a different quantity
+        // from the one the sweep put in it.
         Assert.Contains(
             losses,
-            loss => loss.Contains("name(s) a field might be stored under", StringComparison.Ordinal));
+            loss => loss.Contains("attempt(s) to address a field on a record", StringComparison.Ordinal));
     }
 
     [Fact]
     public void AFieldNamedCafeIsNotReportedAsAOverlongName()
     {
         // A field named caf\u00e9 has a short name on a short record. Told that its
-        // pair has no identifier because the combined name is too long, a
+        // addressing it failed because the combined name is too long, a
         // reader goes hunting for long record names and finds none, and the
         // character that actually caused it is never mentioned.
         var schema = SchemaOfOneField("caf\u00e9");
@@ -147,7 +147,7 @@ public class SchemaIrTests
 
         var loss = Assert.Single(
             SchemaIr.Create(schema, manifest, SchemaMode.InheritedTypeModel, When).Provenance.NamedLosses,
-            candidate => candidate.Contains("no identifier at all", StringComparison.Ordinal));
+            candidate => candidate.Contains("found no identifier", StringComparison.Ordinal));
 
         Assert.Contains("no defined place", loss, StringComparison.Ordinal);
         Assert.DoesNotContain("longer than", loss, StringComparison.Ordinal);
@@ -163,7 +163,7 @@ public class SchemaIrTests
 
         var loss = Assert.Single(
             SchemaIr.Create(schema, manifest, SchemaMode.InheritedTypeModel, When).Provenance.NamedLosses,
-            candidate => candidate.Contains("no identifier at all", StringComparison.Ordinal));
+            candidate => candidate.Contains("found no identifier", StringComparison.Ordinal));
 
         Assert.Contains("longer than", loss, StringComparison.Ordinal);
         Assert.DoesNotContain("no defined place", loss, StringComparison.Ordinal);
