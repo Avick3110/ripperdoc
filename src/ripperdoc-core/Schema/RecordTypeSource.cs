@@ -78,7 +78,55 @@ public sealed record RecordTypeShape(
 /// name the source's own programming language uses for it.
 /// </param>
 /// <param name="StorageType">The name of the type the field's value is stored as.</param>
-public sealed record RecordFieldShape(string FieldName, string StorageType);
+/// <param name="AlternateFieldNames">
+/// Other spellings the same field's stored values might be keyed by, where the
+/// source cannot tell which one is used.
+/// </param>
+/// <param name="ReferentTypeName">
+/// The kind of record this field's stored identifier points at, or null where
+/// the source does not say - which includes every field that is not a
+/// reference.
+/// </param>
+/// <remarks>
+/// <para>
+/// <paramref name="AlternateFieldNames"/> exists because one of the two sources
+/// genuinely does not know. A source reading a compiled type model is told the
+/// stored name outright; a source deriving fields from accessor shapes recovers
+/// a name whose capitalisation the accessor does not preserve, and the shipped
+/// data uses both spellings. Carrying the alternatives and letting real data
+/// decide is the honest form of that, and it is why a field is one field with
+/// several possible names rather than several fields.
+/// </para>
+/// <para>
+/// <paramref name="ReferentTypeName"/> is the one thing the generated mode
+/// knows and the inherited mode structurally cannot: a stored reference is an
+/// identifier, and an identifier says which record is pointed at but not what
+/// kind of record was allowed there.
+/// </para>
+/// </remarks>
+public sealed record RecordFieldShape(
+    string FieldName,
+    string StorageType,
+    IReadOnlyList<string> AlternateFieldNames,
+    string? ReferentTypeName)
+{
+    /// <summary>
+    /// A field whose stored name is known and which is not a typed reference.
+    /// </summary>
+    /// <param name="fieldName">The field's name as stored values are keyed by it.</param>
+    /// <param name="storageType">The name of the type the value is stored as.</param>
+    public RecordFieldShape(string fieldName, string storageType)
+        : this(fieldName, storageType, Array.Empty<string>(), null)
+    {
+    }
+
+    /// <summary>
+    /// Every spelling this field's stored values might be keyed by, the primary
+    /// one first.
+    /// </summary>
+    /// <returns>The candidate names, in probe order.</returns>
+    public IEnumerable<string> CandidateFieldNames() => new[] { FieldName }.Concat(AlternateFieldNames);
+}
 
 /// <summary>
 /// Something a source or the transform could not derive, kept rather than

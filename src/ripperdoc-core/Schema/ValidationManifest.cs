@@ -179,45 +179,57 @@ public sealed class ValidationManifest
 
             foreach (var field in type.Fields.Values)
             {
-                if (!TweakIdentifier.TryForField(record.Identifier, field.Name, out var identifier, out var reason))
+                if (!fieldTallies.TryGetValue(field.Name, out var tally))
                 {
-                    // No identifier exists for this pair, so there is nothing to
-                    // look under. Recorded as its own outcome: marking it the
-                    // same way as a field the records were checked for and did
-                    // not carry would claim a check that never happened. The
-                    // reason is kept beside the count because the three reasons
-                    // send a reader to three different places.
-                    unaddressable++;
-                    unaddressableByReason[reason]++;
-                    var missing = fieldTallies.GetValueOrDefault(field.Name);
-                    missing.Unaddressable++;
-                    fieldTallies[field.Name] = missing;
-                    continue;
+                    fieldTallies[field.Name] = tally = new Tally();
                 }
 
-                if (!shipped.TryGetStoredValueType(identifier, out var storedType))
+                // Every spelling the field might be stored under is probed, and
+                // the outcomes are tallied against the one field rather than
+                // against each spelling. A source that cannot recover the
+                // capitalisation of a name is describing one field it is unsure
+                // how to spell, not several fields - so counting each candidate
+                // as its own field would inflate the schema with slots that
+                // were never claimed to exist.
+                foreach (var candidate in field.CandidateNames())
                 {
-                    continue;
-                }
+                    if (!TweakIdentifier.TryForField(record.Identifier, candidate, out var identifier, out var reason))
+                    {
+                        // No identifier exists for this pair, so there is
+                        // nothing to look under. Recorded as its own outcome:
+                        // marking it the same way as a field the records were
+                        // checked for and did not carry would claim a check that
+                        // never happened. The reason is kept beside the count
+                        // because the three reasons send a reader to three
+                        // different places.
+                        unaddressable++;
+                        unaddressableByReason[reason]++;
+                        tally.Unaddressable++;
+                        continue;
+                    }
 
-                explained.Add(identifier);
+                    if (!shipped.TryGetStoredValueType(identifier, out var storedType))
+                    {
+                        continue;
+                    }
 
-                var tally = fieldTallies.GetValueOrDefault(field.Name);
-                if (storedType is null)
-                {
-                    tally.Unreadable++;
-                }
-                else if (string.Equals(storedType, field.StorageType, StringComparison.Ordinal))
-                {
-                    tally.Agreeing++;
-                }
-                else
-                {
-                    tally.Disagreeing++;
-                    tally.ObservedStorageType ??= storedType;
-                }
+                    explained.Add(identifier);
 
-                fieldTallies[field.Name] = tally;
+                    if (storedType is null)
+                    {
+                        tally.Unreadable++;
+                    }
+                    else if (string.Equals(storedType, field.StorageType, StringComparison.Ordinal))
+                    {
+                        tally.Agreeing++;
+                        tally.Confirmed.Add(candidate);
+                    }
+                    else
+                    {
+                        tally.Disagreeing++;
+                        tally.ObservedStorageType ??= storedType;
+                    }
+                }
             }
         }
 
@@ -230,7 +242,7 @@ public sealed class ValidationManifest
 
             foreach (var field in type.Fields.Values.OrderBy(field => field.Name, StringComparer.Ordinal))
             {
-                var tally = fieldTallies?.GetValueOrDefault(field.Name) ?? default;
+                var tally = fieldTallies?.GetValueOrDefault(field.Name) ?? Tally.Empty;
                 verdicts.Add(new FieldValidation(
                     typeName,
                     field.Name,
@@ -239,7 +251,9 @@ public sealed class ValidationManifest
                     StateOf(tally, hasRecords),
                     tally.Agreeing,
                     tally.Disagreeing,
-                    tally.ObservedStorageType));
+                    tally.ObservedStorageType,
+                    tally.Confirmed.ToArray(),
+                    field.ReferentTypeName));
             }
         }
 
@@ -287,13 +301,26 @@ public sealed class ValidationManifest
             : ValidationState.NoShippedRecordsOfType;
     }
 
-    private struct Tally
+    private sealed class Tally
     {
+        /// <summary>
+        /// The tally of a field nothing was recorded against - a type with no
+        /// shipped records of it at all. Shared rather than allocated per
+        /// field, and never written to, because the reporting pass only reads.
+        /// </summary>
+        public static readonly Tally Empty = new();
+
         public int Agreeing;
         public int Disagreeing;
         public int Unreadable;
         public int Unaddressable;
         public string? ObservedStorageType;
+
+        /// <summary>
+        /// The spellings a corroborating value was actually found under, in a
+        /// stable order.
+        /// </summary>
+        public SortedSet<string> Confirmed { get; } = new(StringComparer.Ordinal);
     }
 }
 
@@ -318,6 +345,21 @@ public sealed class ValidationManifest
 /// The storage type of the first contradicting value, or null where there was
 /// none.
 /// </param>
+/// <param name="ConfirmedFieldNames">
+/// The spellings of the field name that stored values were actually found
+/// under, in a stable order. Empty where none was.
+/// </param>
+/// <param name="ReferentTypeName">
+/// The kind of record this field's stored identifier points at, or null where
+/// the schema does not say.
+/// </param>
+/// <remarks>
+/// <see cref="ConfirmedFieldNames"/> is a list rather than a name because a
+/// schema derived from accessor shapes offers more than one spelling of the
+/// same field and the data decides between them. It says which spelling was
+/// vindicated - and if more than one was, it says that too rather than picking
+/// one and reporting a certainty nothing established.
+/// </remarks>
 public sealed record FieldValidation(
     string RecordTypeName,
     string FieldName,
@@ -326,7 +368,9 @@ public sealed record FieldValidation(
     ValidationState State,
     int CorroboratingValueCount,
     int ContradictingValueCount,
-    string? ObservedStorageType)
+    string? ObservedStorageType,
+    IReadOnlyList<string> ConfirmedFieldNames,
+    string? ReferentTypeName)
 {
     /// <summary>
     /// Whether real shipped data confirms this field.
