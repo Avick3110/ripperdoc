@@ -48,7 +48,85 @@ public interface IRecordTypeSource
 /// <param name="Failures">Members the source could not turn into fields.</param>
 public sealed record RecordTypeSourceReading(
     IReadOnlyList<RecordTypeShape> Types,
-    IReadOnlyList<DerivationFailure> Failures);
+    IReadOnlyList<DerivationFailure> Failures)
+{
+    /// <summary>
+    /// A fingerprint of everything this reading says.
+    /// </summary>
+    /// <returns>The fingerprint, lower-case hexadecimal.</returns>
+    /// <remarks>
+    /// <para>
+    /// What identifies the type information a schema came out of. Two readings
+    /// of the same information give the same fingerprint, and any difference in
+    /// what either says gives a different one - so a measurement taken against
+    /// one body of type information can require this to match before it is
+    /// believed to apply.
+    /// </para>
+    /// <para>
+    /// Deliberately over the shapes rather than over anything upstream of them.
+    /// A fingerprint of what the type information contains would answer a
+    /// question nobody asks: what a schema depends on is what its source made
+    /// of that information, and two bodies of it that a source reads the same
+    /// way should be the same input here.
+    /// </para>
+    /// <para>
+    /// Everything is put in a fixed order first, because a source does not
+    /// promise one. Ordered by arrival, the same information read on two
+    /// machines could fingerprint differently and a check built on it would
+    /// report a difference nobody made.
+    /// </para>
+    /// </remarks>
+    public string Fingerprint()
+    {
+        var builder = new System.Text.StringBuilder();
+
+        foreach (var type in Types.OrderBy(type => type.TypeName, StringComparer.Ordinal))
+        {
+            builder.Append(type.TypeName).Append(Separator)
+                .Append(type.BaseTypeName ?? string.Empty).Append(Separator)
+                .Append(type.IsRecordType ? '1' : '0').Append(Separator);
+
+            foreach (var field in type.DeclaredFields.OrderBy(field => field.FieldName, StringComparer.Ordinal))
+            {
+                builder.Append(field.FieldName).Append(Separator)
+                    .Append(field.StorageType).Append(Separator)
+                    .Append(field.ReferentTypeName ?? string.Empty).Append(Separator);
+
+                foreach (var alternate in field.AlternateFieldNames.OrderBy(name => name, StringComparer.Ordinal))
+                {
+                    builder.Append(alternate).Append(Separator);
+                }
+
+                builder.Append(EndOfEntry);
+            }
+
+            builder.Append(EndOfType);
+        }
+
+        // The failures are part of what the reading says. A body of type
+        // information that produced the same shapes and a different set of
+        // things the source could not read is not the same input, and a
+        // fingerprint that ignored them would call it one.
+        foreach (var failure in Failures)
+        {
+            builder.Append(failure.TypeName).Append(Separator)
+                .Append(failure.MemberName ?? string.Empty).Append(Separator)
+                .Append(failure.Reason).Append(EndOfEntry);
+        }
+
+        return Convert.ToHexString(
+                System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(builder.ToString())))
+            .ToLower(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    // Parts of one entry, the end of an entry, and the end of one type's
+    // contribution. Characters no name or type can contain, so two different
+    // readings cannot be run together into the same text and fingerprint alike.
+    private const char Separator = '\u001f';
+    private const char EndOfEntry = '\u001d';
+    private const char EndOfType = '\u001e';
+}
 
 /// <summary>
 /// One type as a source reports it, before any chain resolution.
