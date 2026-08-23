@@ -176,6 +176,14 @@ public sealed record RecordTypeShape(
 /// several possible names rather than several fields.
 /// </para>
 /// <para>
+/// They are the raw material of the question "which names might this field's
+/// values be stored under", and not the answer to it. The answer excludes a
+/// spelling that belongs to some other field, and it is
+/// <see cref="FieldSpellings"/>'s alone to give. A caller that reads these
+/// straight off a shape gets the unexcluded list and takes another field's
+/// stored values as evidence about this one.
+/// </para>
+/// <para>
 /// <paramref name="ReferentTypeName"/> is the one thing the generated mode
 /// knows and the inherited mode structurally cannot: a stored reference is an
 /// identifier, and an identifier says which record is pointed at but not what
@@ -197,13 +205,6 @@ public sealed record RecordFieldShape(
         : this(fieldName, storageType, Array.Empty<string>(), null)
     {
     }
-
-    /// <summary>
-    /// Every spelling this field's stored values might be keyed by, the primary
-    /// one first.
-    /// </summary>
-    /// <returns>The candidate names, in probe order.</returns>
-    public IEnumerable<string> CandidateFieldNames() => new[] { FieldName }.Concat(AlternateFieldNames);
 }
 
 /// <summary>
