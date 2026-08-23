@@ -52,7 +52,8 @@ public sealed record TypeModelReading(
     /// <para>
     /// Two readings of the same description of the game give the same
     /// fingerprint, and any difference in what either says gives a different
-    /// one.
+    /// one - the types it carries and the things it could not read alike, since
+    /// both are part of what a reading says.
     /// </para>
     /// <para>
     /// Everything is put in a fixed order first, because neither description
@@ -65,13 +66,19 @@ public sealed record TypeModelReading(
     /// Ordering the input fixes what this can fix, and not what it cannot.
     /// A reading taken from generated type information is stable, because the
     /// files it comes from say the same thing every time they are read. A
-    /// reading reflected out of the compiled model is not: the model answers
-    /// what a property's stored type is, and for a small number of properties
-    /// its answer depends on what else in it has been resolved first, so two
-    /// readings in one process can differ in content and therefore here. That
-    /// is why nothing committed is keyed on this value for the compiled side -
-    /// see <see cref="PinnedAssemblyIdentity"/>, which is a property of the
-    /// file on disk and cannot move while the file does not.
+    /// reading reflected out of the compiled model is not: for a small number
+    /// of properties the model's answer depends on what else in it has been
+    /// resolved first, and that is settled once per process - so two readings
+    /// in one process agree, and two processes running the same build need not.
+    /// </para>
+    /// <para>
+    /// So this value identifies a reading and not a build. What identifies a
+    /// build is <see cref="PinnedAssemblyIdentity"/>, which is a property of the
+    /// file on disk and cannot move while the file does not, and that is what a
+    /// machine with nothing to compare against checks. This is written down too,
+    /// and used only where the comparison happens: a run whose reading differs
+    /// from the one an accepted result came out of announces the comparison as
+    /// not run rather than reporting drift nobody caused.
     /// </para>
     /// </remarks>
     public string Fingerprint()
@@ -112,6 +119,17 @@ public sealed record TypeModelReading(
             }
 
             builder.Append(EndOfType);
+        }
+
+        // What could not be read is part of what this reading says. Two
+        // descriptions that yielded the same types and a different set of
+        // things the reader could not take in are not the same input, and a
+        // fingerprint blind to that would call them one - which is the reading
+        // this file's sibling in the schema layer takes, for the same reason.
+        // The failures are already in a fixed order.
+        foreach (var failure in Failures)
+        {
+            builder.Append(failure).Append(EndOfType);
         }
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())))
