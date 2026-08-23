@@ -31,6 +31,7 @@ public class ShippedDatabaseValidationTests : IClassFixture<ShippedDatabaseFixtu
     private const int FieldSlotsCorroborated = 6_584;
     private const int FieldSlotsNoValueCarriesThem = 13;
     private const int FieldSlotsOnTypesWithNoRecords = 658;
+    private const int ReferenceSlots = 2_095;
 
     // Every candidate is compared against the ones before it, so the scan is
     // bounded. Generous against the case it exists for: a record whose name and
@@ -115,6 +116,22 @@ public class ShippedDatabaseValidationTests : IClassFixture<ShippedDatabaseFixtu
     {
         Assert.Equal(ValuesTheSchemaExplains, _fixture.Manifest.StoredValuesExplained);
         Assert.Equal(0.9527d, Math.Round(_fixture.Manifest.ExplainedShare, 4));
+    }
+
+    [Fact]
+    public void NotOneReferenceSlotInTheInheritedSchemaSaysWhatItPointsAt()
+    {
+        // The other half of a published comparison, and the half that was
+        // pinned by nothing. The finding says this mode types none of its 2,095
+        // reference slots where the generated one types all 2,085 of its own -
+        // and "none of them are typed" stays true however many slots there
+        // turn out to be, so the count has to be asserted beside it.
+        var graph = ReferenceGraph.Of(_fixture.Schema);
+
+        Assert.Equal(ReferenceSlots, graph.Edges.Count);
+        Assert.Equal(0, graph.TypedEdgeCount);
+        Assert.Equal(ReferenceSlots, graph.UntypedEdgeCount);
+        Assert.Empty(graph.ReferentTypeNames);
     }
 
     [Fact]

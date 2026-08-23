@@ -33,6 +33,7 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
     private const int DeclaredFields = 4_796;
     private const int FieldsCarryingAReferent = 1_234;
     private const int DistinctReferentTypes = 490;
+    private const int TypedEdges = 2_085;
     private const int ValuesInTheDatabase = 3_306_462;
     private const int ValuesTheGeneratedSchemaExplains = 3_150_039;
     private const int ValuesTheInheritedSchemaExplains = 3_150_037;
@@ -77,6 +78,13 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
     [Fact]
     public void EveryReferenceInTheDerivedSchemaSaysWhatKindOfRecordItPointsAt()
     {
+        // How many there are, pinned rather than left to be inferred. Every
+        // other published figure is asserted somewhere and this one was not, so
+        // a derivation that quietly stopped producing a few hundred edges would
+        // have left this check green: "all of them are typed" is true of a
+        // smaller set too.
+        Assert.Equal(TypedEdges, _fixture.Graph.Edges.Count);
+
         // The one capability the inherited mode structurally cannot have. If
         // this ever reports untyped edges, the generated mode has stopped
         // buying the thing it costs a generation step to buy.
