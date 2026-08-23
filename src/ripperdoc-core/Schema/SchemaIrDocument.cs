@@ -116,8 +116,8 @@ public sealed record SchemaIrDocument
     /// <returns>The document.</returns>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     /// <param name="gameBuild">
-    /// Which build of the game the type information described, or null where
-    /// nothing recorded it.
+    /// Which build of the game is installed as this is generated, or null where
+    /// none was named or none could be read.
     /// </param>
     public static SchemaIrDocument Of(
         SchemaIr artifact,
