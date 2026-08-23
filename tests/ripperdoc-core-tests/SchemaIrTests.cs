@@ -162,6 +162,46 @@ public class SchemaIrTests
     }
 
     [Fact]
+    public void ASchemaThatTypesEveryReferenceClaimsNoShortfallInsteadOfClaimingAZeroOne()
+    {
+        // The absent arm of a line that is only ever seen present. A loss
+        // written as "0 of 3" reads to whoever holds the artifact as a loss
+        // this schema has, and the whole point of naming losses is that the
+        // list is the ones that apply.
+        var losses = SchemaIr
+            .Create(TypedReferenceSchema(), null, SchemaMode.GeneratedTypeInformation, When)
+            .Provenance.NamedLosses;
+
+        Assert.DoesNotContain(losses, loss => loss.Contains("not for kind", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ASchemaNoShippedValueContradictsClaimsNoContradictionAtAll()
+    {
+        var losses = SchemaIr.Create(Schema(), Manifest(), SchemaMode.InheritedTypeModel, When)
+            .Provenance.NamedLosses;
+
+        Assert.DoesNotContain(
+            losses,
+            loss => loss.Contains("contradicted by shipped values", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ASchemaWhoseSourceKnewEveryNameClaimsNoUnresolvedSpellings()
+    {
+        // Both spelling lines at once, on a schema with no alternates in it:
+        // the unarbitrated one and the arbitrated one are each absent, rather
+        // than each reporting that nothing is unresolved.
+        Assert.DoesNotContain(
+            SchemaIr.Create(Schema(), null, SchemaMode.InheritedTypeModel, When).Provenance.NamedLosses,
+            loss => loss.Contains("nothing arbitrated between them", StringComparison.Ordinal));
+
+        Assert.DoesNotContain(
+            SchemaIr.Create(Schema(), Manifest(), SchemaMode.InheritedTypeModel, When).Provenance.NamedLosses,
+            loss => loss.Contains("still undecided", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ASweepThatCouldLookEverywhereClaimsNoSuchLoss()
     {
         var losses = SchemaIr.Create(Schema(), Manifest(), SchemaMode.InheritedTypeModel, When)
@@ -178,6 +218,21 @@ public class SchemaIrTests
                 {
                     new RecordFieldShape(fieldName, "Float"),
                 }),
+            },
+            Array.Empty<DerivationFailure>()),
+        "a reading constructed for this test");
+
+    /// <summary>A schema every one of whose references says what it points at.</summary>
+    private static RecordSchema TypedReferenceSchema() => RecordSchemaDerivation.Derive(
+        new RecordTypeSourceReading(
+            new[]
+            {
+                new RecordTypeShape("gamedataThing_Record", null, true, new[]
+                {
+                    new RecordFieldShape("owner", "TweakDBID", [], "gamedataOther_Record"),
+                    new RecordFieldShape("speed", "Float"),
+                }),
+                new RecordTypeShape("gamedataOther_Record", null, true, Array.Empty<RecordFieldShape>()),
             },
             Array.Empty<DerivationFailure>()),
         "a reading constructed for this test");
