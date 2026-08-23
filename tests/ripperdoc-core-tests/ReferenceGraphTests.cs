@@ -221,6 +221,51 @@ public class ReferenceGraphTests
     }
 
     [Fact]
+    public void AKindDerivingThroughAnAncestorThatIsNotARecordTypeStillDerives()
+    {
+        // The chain a record type's ancestry is allowed to take: through a
+        // class that is carried so the chain resolves and is not itself a
+        // record type. Walking only the record types stops there, and stopping
+        // reads the same as reaching the top - so a reference naming a kind
+        // that really does derive from the permitted one would be reported as
+        // naming an unrelated kind, on the game's own data, with the graph
+        // being right about it.
+        var check = Check(
+            GraphOf(
+                Type("gamedataProbeThing_Record", null, Reference("owner", "gamedataProbeBase_Record")),
+                Type("gamedataProbeBase_Record", null),
+                new RecordTypeShape("ProbeCarrier", "gamedataProbeBase_Record", false, []),
+                Type("gamedataProbeDerived_Record", "ProbeCarrier")),
+            new SyntheticReferenceSource()
+                .WithRecord(1, "gamedataProbeThing_Record")
+                .WithRecord(2, "gamedataProbeDerived_Record")
+                .PointingFrom(1, "owner", 2));
+
+        Assert.Equal(1, check.ReferencesOfPermittedKind);
+        Assert.Equal(0, check.ReferencesOfOtherKind);
+        Assert.True(check.NothingContradictsTheGraph);
+    }
+
+    [Fact]
+    public void AnUnrelatedKindIsStillUnrelatedHoweverLongItsChainIs()
+    {
+        // The other arm: widening the walk must not make everything permitted.
+        var check = Check(
+            GraphOf(
+                Type("gamedataProbeThing_Record", null, Reference("owner", "gamedataProbeBase_Record")),
+                Type("gamedataProbeBase_Record", null),
+                new RecordTypeShape("ProbeCarrier", null, false, []),
+                Type("gamedataProbeElse_Record", "ProbeCarrier")),
+            new SyntheticReferenceSource()
+                .WithRecord(1, "gamedataProbeThing_Record")
+                .WithRecord(2, "gamedataProbeElse_Record")
+                .PointingFrom(1, "owner", 2));
+
+        Assert.Equal(1, check.ReferencesOfOtherKind);
+        Assert.False(check.NothingContradictsTheGraph);
+    }
+
+    [Fact]
     public void AnUntypedEdgeIsReportedAsUncheckedRatherThanAsHavingPassed()
     {
         var check = Check(

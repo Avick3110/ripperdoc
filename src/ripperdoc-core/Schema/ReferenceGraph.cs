@@ -26,10 +26,22 @@ public sealed class ReferenceGraph
 {
     private readonly ILookup<string, ReferenceEdge> _bySource;
     private readonly RecordSchema _schema;
+    private readonly Dictionary<string, string?> _parentOf;
 
     private ReferenceGraph(RecordSchema schema, IReadOnlyList<ReferenceEdge> edges)
     {
         _schema = schema;
+
+        // Every type the schema carries, not only the record types. Walking a
+        // chain through the record types alone stops at the first ancestor that
+        // is not one - and stopping is indistinguishable from arriving at the
+        // top, so a kind that really does derive from the permitted one would be
+        // reported as unrelated to it.
+        _parentOf = schema.AllTypes().ToDictionary(
+            type => type.Name,
+            type => type.BaseTypeName,
+            StringComparer.Ordinal);
+
         _bySource = edges.ToLookup(edge => edge.RecordTypeName, StringComparer.Ordinal);
         Edges = edges;
         ReferentTypeNames = edges
@@ -150,7 +162,7 @@ public sealed class ReferenceGraph
                 return true;
             }
 
-            current = _schema.Find(current)?.BaseTypeName;
+            current = _parentOf.GetValueOrDefault(current);
         }
 
         return false;
