@@ -57,3 +57,37 @@ public interface IShippedRecordSource
 /// <param name="Identifier">The record's identifier.</param>
 /// <param name="TypeName">The name of the record's type.</param>
 public readonly record struct ShippedRecord(ulong Identifier, string TypeName);
+
+/// <summary>
+/// Stored values read as the record identifiers they name.
+/// </summary>
+/// <remarks>
+/// Separate from <see cref="IShippedRecordSource"/> because arbitrating a
+/// schema and following a reference are different questions, and only the
+/// second one needs a stored value's contents rather than its type. Keeping
+/// them apart means a source built to answer the first is not obliged to
+/// answer the second, and neither check is written against a surface wider
+/// than it uses.
+/// </remarks>
+public interface IStoredReferenceSource
+{
+    /// <summary>
+    /// The record identifiers a stored value names.
+    /// </summary>
+    /// <param name="identifier">The identifier of the value to read.</param>
+    /// <param name="targets">
+    /// The identifiers it names, in stored order. Empty where the value is a
+    /// list with nothing in it.
+    /// </param>
+    /// <returns>
+    /// True where a value is there and is an identifier, or a list of them.
+    /// False where there is no value, or where the value is something else.
+    /// </returns>
+    /// <remarks>
+    /// A value of some other type answers false rather than an empty list. The
+    /// two would otherwise be indistinguishable, and a caller counting
+    /// references would read "this holds no references" off a field whose
+    /// contents it never managed to read.
+    /// </remarks>
+    bool TryGetStoredIdentifiers(ulong identifier, out IReadOnlyList<ulong> targets);
+}

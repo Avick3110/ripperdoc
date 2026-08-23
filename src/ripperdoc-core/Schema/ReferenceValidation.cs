@@ -1,0 +1,258 @@
+using Ripperdoc.Core.Tweak;
+
+namespace Ripperdoc.Core.Schema;
+
+/// <summary>
+/// What real stored references say about a reference graph's typed edges.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A typed edge claims that values stored in one field name records of one
+/// kind. That is a claim about data, and the shipped database is full of the
+/// data it is about - so it is checked rather than asserted, the same way every
+/// other claim this schema layer makes is.
+/// </para>
+/// <para>
+/// It is also the check that shows the graph is worth having. An edge that
+/// survives it lets a later report say an identifier points at the wrong kind
+/// of record; an edge that fails it says the derivation is wrong about a field,
+/// which is worth knowing before anything is built on it.
+/// </para>
+/// </remarks>
+public sealed class ReferenceValidation
+{
+    /// <summary>
+    /// How many wrongly-typed references are kept as examples.
+    /// </summary>
+    /// <remarks>
+    /// Bounded because the count is the finding and the examples only say where
+    /// to start looking. An unbounded list would hold one entry per wrong
+    /// reference in a database holding over a million of them.
+    /// </remarks>
+    public const int ExampleLimit = 50;
+
+    private ReferenceValidation(
+        int typedEdgesChecked,
+        int untypedEdgesNotChecked,
+        int valuesRead,
+        int valuesUnreadable,
+        int referencesFollowed,
+        int referencesOfPermittedKind,
+        int referencesOfOtherKind,
+        int referencesToNothing,
+        IReadOnlyList<MistypedReference> examples)
+    {
+        TypedEdgesChecked = typedEdgesChecked;
+        UntypedEdgesNotChecked = untypedEdgesNotChecked;
+        ValuesRead = valuesRead;
+        ValuesUnreadable = valuesUnreadable;
+        ReferencesFollowed = referencesFollowed;
+        ReferencesOfPermittedKind = referencesOfPermittedKind;
+        ReferencesOfOtherKind = referencesOfOtherKind;
+        ReferencesToNothing = referencesToNothing;
+        Examples = examples;
+    }
+
+    /// <summary>
+    /// How many record-and-field pairs were checked, over every record of every
+    /// type carrying a typed edge.
+    /// </summary>
+    public int TypedEdgesChecked { get; }
+
+    /// <summary>
+    /// How many pairs went unchecked because their edge does not say what kind
+    /// of record it points at.
+    /// </summary>
+    /// <remarks>
+    /// The whole of a schema read from a compiled type model lands here. It is
+    /// counted rather than passed over so that a run against such a schema
+    /// reports having checked nothing, instead of reporting no failures.
+    /// </remarks>
+    public int UntypedEdgesNotChecked { get; }
+
+    /// <summary>How many stored values were found and read as references.</summary>
+    public int ValuesRead { get; }
+
+    /// <summary>
+    /// How many stored values were found under a typed edge and could not be
+    /// read as references.
+    /// </summary>
+    /// <remarks>
+    /// A value the schema calls a reference and the database stores as
+    /// something else. The same disagreement the validation manifest reports as
+    /// a contradiction, seen from the other side.
+    /// </remarks>
+    public int ValuesUnreadable { get; }
+
+    /// <summary>How many individual references were followed.</summary>
+    public int ReferencesFollowed { get; }
+
+    /// <summary>
+    /// How many pointed at a record of the kind the edge permits, or of a kind
+    /// deriving from it.
+    /// </summary>
+    public int ReferencesOfPermittedKind { get; }
+
+    /// <summary>How many pointed at a record of some other kind.</summary>
+    public int ReferencesOfOtherKind { get; }
+
+    /// <summary>
+    /// How many pointed at no record in this database at all.
+    /// </summary>
+    /// <remarks>
+    /// Not a failure of the edge. An identifier naming nothing is a fact about
+    /// the data - a reference into content that is not shipped - and it is
+    /// counted apart from a reference that points at the wrong kind of thing,
+    /// because only the second says the schema is wrong.
+    /// </remarks>
+    public int ReferencesToNothing { get; }
+
+    /// <summary>
+    /// Up to <see cref="ExampleLimit"/> references that pointed at a record of
+    /// some other kind.
+    /// </summary>
+    public IReadOnlyList<MistypedReference> Examples { get; }
+
+    /// <summary>
+    /// Whether every reference that was followed pointed at a permitted kind of
+    /// record.
+    /// </summary>
+    /// <remarks>
+    /// True of a run that followed nothing, which is why this is never read
+    /// without <see cref="ReferencesFollowed"/> beside it. A graph with no
+    /// typed edge at all cannot be contradicted, and reporting that as the
+    /// graph being right would be the failure this layer exists to prevent.
+    /// </remarks>
+    public bool NothingContradictsTheGraph => ReferencesOfOtherKind == 0;
+
+    /// <summary>
+    /// Follow every reference stored under a typed edge and check what kind of
+    /// record it names.
+    /// </summary>
+    /// <param name="graph">The graph whose edges are being checked.</param>
+    /// <param name="shipped">The records to check over.</param>
+    /// <param name="values">Where a stored value's references are read from.</param>
+    /// <returns>What the data said.</returns>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    public static ReferenceValidation Build(
+        ReferenceGraph graph,
+        IShippedRecordSource shipped,
+        IStoredReferenceSource values)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        ArgumentNullException.ThrowIfNull(shipped);
+        ArgumentNullException.ThrowIfNull(values);
+
+        // Built once, before anything is followed. Every reference needs the
+        // kind of the record it names, and asking the database that question
+        // per reference is the shape of call this engine has already measured
+        // as thousands of times the cost of a lookup.
+        var kindOf = new Dictionary<ulong, string>();
+        foreach (var record in shipped.Records)
+        {
+            kindOf[record.Identifier] = record.TypeName;
+        }
+
+        var typedChecked = 0;
+        var untypedSkipped = 0;
+        var read = 0;
+        var unreadable = 0;
+        var followed = 0;
+        var permitted = 0;
+        var other = 0;
+        var toNothing = 0;
+        var examples = new List<MistypedReference>();
+
+        foreach (var record in shipped.Records)
+        {
+            foreach (var edge in graph.From(record.TypeName))
+            {
+                if (edge.ReferentTypeName is null)
+                {
+                    untypedSkipped++;
+                    continue;
+                }
+
+                typedChecked++;
+
+                if (!TweakIdentifier.TryForField(record.Identifier, edge.FieldName, out var identifier, out _))
+                {
+                    continue;
+                }
+
+                if (!values.TryGetStoredIdentifiers(identifier, out var targets))
+                {
+                    // Absent and unreadable are told apart here rather than
+                    // together: a field a record simply does not carry is the
+                    // ordinary case, and a value that is there and is not a
+                    // reference is a disagreement worth counting.
+                    if (shipped.TryGetStoredValueType(identifier, out _))
+                    {
+                        unreadable++;
+                    }
+
+                    continue;
+                }
+
+                read++;
+
+                foreach (var target in targets)
+                {
+                    followed++;
+
+                    if (!kindOf.TryGetValue(target, out var actual))
+                    {
+                        toNothing++;
+                        continue;
+                    }
+
+                    if (graph.Permits(edge.ReferentTypeName, actual))
+                    {
+                        permitted++;
+                        continue;
+                    }
+
+                    other++;
+                    if (examples.Count < ExampleLimit)
+                    {
+                        examples.Add(new MistypedReference(
+                            record.TypeName,
+                            edge.FieldName,
+                            edge.ReferentTypeName,
+                            actual));
+                    }
+                }
+            }
+        }
+
+        return new ReferenceValidation(
+            typedChecked,
+            untypedSkipped,
+            read,
+            unreadable,
+            followed,
+            permitted,
+            other,
+            toNothing,
+            examples);
+    }
+}
+
+/// <summary>
+/// One stored reference that named a record of a kind its field does not
+/// permit.
+/// </summary>
+/// <param name="RecordTypeName">The record type the reference was stored on.</param>
+/// <param name="FieldName">The field holding it.</param>
+/// <param name="PermittedTypeName">The kind of record the schema permits there.</param>
+/// <param name="ActualTypeName">The kind of record it actually named.</param>
+/// <remarks>
+/// The records themselves are not named. What is wrong is the same for every
+/// record of the type, and naming one would put a shipped identifier into a
+/// result that has no need of it.
+/// </remarks>
+public sealed record MistypedReference(
+    string RecordTypeName,
+    string FieldName,
+    string PermittedTypeName,
+    string ActualTypeName);

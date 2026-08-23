@@ -65,7 +65,7 @@ public class SchemaIrTests
         var losses = SchemaIr.Create(Schema(), null, SchemaMode.InheritedTypeModel, When)
             .Provenance.NamedLosses;
 
-        Assert.Contains(losses, loss => loss.Contains("3 field slots store a record identifier", StringComparison.Ordinal));
+        Assert.Contains(losses, loss => loss.Contains("3 of 3 field slots storing a record identifier", StringComparison.Ordinal));
     }
 
     [Fact]
