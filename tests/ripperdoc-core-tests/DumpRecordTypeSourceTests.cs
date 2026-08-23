@@ -100,6 +100,33 @@ public class DumpRecordTypeSourceTests
     }
 
     [Fact]
+    public void AParentTheInformationNamesAndDoesNotDescribeIsStatedNotThrown()
+    {
+        // A record type whose chain leaves the information part way through.
+        // Reading it used to end on the framework's own complaint about a
+        // missing key, which says nothing about type information and reaches a
+        // caller holding a source that promised to state what it could not
+        // derive.
+        var source = new DumpRecordTypeSource(ModelOf(
+            new DumpClass("gamedataProbeThing_Record", "gamedataProbeMissing_Record", [], [])));
+
+        var reading = source.Read();
+
+        // The type itself is still read, with everything the information does
+        // describe about it. A chain that breaks above a type is not a reason
+        // to lose the type.
+        Assert.Equal(
+            new[] { "gamedataProbeThing_Record" },
+            reading.Types.Select(type => type.TypeName));
+
+        // And the break is stated, by the step that resolves chains and has a
+        // sentence for exactly this. Saying it here as well would be a second
+        // home for one fact about one dump.
+        var failure = Assert.Single(RecordSchemaDerivation.Derive(source).Failures);
+        Assert.Contains("gamedataProbeMissing_Record", failure.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AnAccessorTakingAValueToLookForIsNotAFieldWhateverItIsCalled()
     {
         // The other side of it. A membership test reads its parameter rather

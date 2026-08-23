@@ -56,11 +56,24 @@ public sealed class DumpRecordTypeSource : IRecordTypeSource
         // Ancestors are followed rather than filtered for, so a chain cannot end
         // early because an ancestor is not itself a record type. A field an
         // ancestor declares is a field the record carries.
+        //
+        // A parent the information names and does not describe stops the walk
+        // and is not collected. It cannot be: there is nothing to read a shape
+        // from. The chain that reaches it keeps naming it, so the derivation
+        // meets the break and states it in the sentence it has for exactly this
+        // - which is a better answer than the one collecting it gave, where the
+        // pass below asked for a description that was never there and the read
+        // ended on the framework's own out-of-range complaint.
         foreach (var name in _model.Classes.Keys.Where(RecordTypeNaming.IsRecordTypeName))
         {
-            for (var current = name; current is not null && wanted.Add(current);)
+            for (var current = name; current is not null;)
             {
-                current = _model.Classes.TryGetValue(current, out var walked) ? walked.ParentName : null;
+                if (!_model.Classes.TryGetValue(current, out var walked) || !wanted.Add(current))
+                {
+                    break;
+                }
+
+                current = walked.ParentName;
             }
         }
 
