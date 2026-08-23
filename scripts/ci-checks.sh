@@ -57,6 +57,17 @@ inheritance_variable="RIPPERDOC_INHERITANCE_PATH"
 # that.
 rtti_dump_variable="RIPPERDOC_RTTI_DUMP_PATH"
 
+# That tier decides one thing about itself this script cannot see from outside.
+# Reflecting the pinned type model does not give the same answer in every
+# process - a few properties come back with a foreign stored type, a different
+# one each time - and which answer a process got is settled for that process's
+# life. So a probe run from here would report on itself and not on the run that
+# matters, and the run has to say which it did. It writes that into this file,
+# beside its own binaries, and the block at the bottom reads it back and
+# announces a skip by name. The spelling is the one DriftReceipt declares; a
+# check holds the two together.
+audit_status_name="drift-audit-status.txt"
+
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 
@@ -186,7 +197,30 @@ elif [ ! -f "$tweakdb_path" ]; then
 elif [ "${actual_sha:-}" != "$measured_sha" ]; then
   skip "RTTI-dump checks" "the database at $tweakdb_variable could not be shown to be the build these counts were measured against, so the generated schema's coverage cannot be reproduced from it - see the shipped-database line above for which of the two it was"
 else
+  # Cleared first, so a file left behind by an earlier run cannot be read as
+  # this one's report.
+  rm -f tests/ripperdoc-core-tests/bin/*/net8.0/"$audit_status_name"
+
   run "RTTI-dump checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=RttiDump" -- RunConfiguration.TreatNoTestsAsError=true
+
+  audit_status_file="$(ls -1 tests/ripperdoc-core-tests/bin/*/net8.0/"$audit_status_name" 2>/dev/null | head -1)"
+  audit_status=""
+  if [ -n "$audit_status_file" ]; then audit_status="$(cat "$audit_status_file")"; fi
+
+  if [ "$audit_status" = "ran" ]; then
+    : # The comparison happened, and the tier's own result covers it.
+  elif [ -n "$audit_status" ]; then
+    skip "drift audit comparison" "$audit_status"
+  elif printf '%s\n' "${failed[@]}" | grep -qxF "RTTI-dump checks"; then
+    : # The tier is already red and never got far enough to report.
+  else
+    # The report is how a comparison that did not run is told from one that
+    # passed. Missing it after a green tier, the summary would say the drift
+    # audit was fine when nothing here knows whether it ran - so this is a red
+    # and not a shrug.
+    failed+=("drift audit comparison")
+    echo "--- FAILED: drift audit comparison - the RTTI-dump checks passed without leaving $audit_status_name, so nothing here can say whether the comparison ran"
+  fi
 fi
 
 echo ""
