@@ -62,6 +62,40 @@ public class DumpRecordTypeSourceTests
         Assert.Equal(new[] { "tags" }, fields.Keys);
     }
 
+    [Theory]
+    // A genuine field whose name happens to end the way one of the helper
+    // accessors does. Each of these writes into an output parameter, which is
+    // how the game states a field whose value does not come back as a return
+    // value - so each is a field, and a rule matching the name alone would drop
+    // it and the schema would never mention it again.
+    [InlineData("TagsContains", "array:CName", "tagsContains")]
+    [InlineData("GetLootCount", "Int32", "getLootCount")]
+    [InlineData("GetStarterItem", "whandle:gamedataProbeOther_Record", "getStarterItem")]
+    public void AFieldWhoseNameEndsLikeAHelperIsStillAField(
+        string accessorName,
+        string runtimeType,
+        string stored)
+    {
+        var fields = FieldsOf(Record("gamedataProbeThing_Record", OutputAccessor(accessorName, runtimeType)));
+
+        Assert.Contains(stored, fields.Keys);
+    }
+
+    [Fact]
+    public void AnAccessorTakingAValueToLookForIsNotAFieldWhateverItIsCalled()
+    {
+        // The other side of it. A membership test reads its parameter rather
+        // than writing into it, and an accessor that reads a parameter gives no
+        // value of its own - so it is not a field, and that holds for a name
+        // this reader has never heard of as much as for one it has.
+        var fields = FieldsOf(Record(
+            "gamedataProbeThing_Record",
+            OutputAccessor("Tags", "array:CName"),
+            new DumpFunction("TagsHoldsAnyOf", "Bool", [new DumpParameter("item", "CName", false)])));
+
+        Assert.Equal(new[] { "tags" }, fields.Keys);
+    }
+
     [Fact]
     public void TheSecondFormOfAReferenceAccessorIsNotItsOwnField()
     {

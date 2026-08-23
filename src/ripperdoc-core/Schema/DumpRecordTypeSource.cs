@@ -160,11 +160,17 @@ public sealed class DumpRecordTypeSource : IRecordTypeSource
     /// </summary>
     /// <remarks>
     /// A field with an array value gets a count accessor and an item accessor
-    /// beside the accessor for the array itself; a field holding a reference
-    /// gets a second accessor returning the same value in another form; and a
-    /// membership test appears beside array fields. Every one of those names a
-    /// field that another accessor already names, so treating them as fields
-    /// would invent field names the game does not key anything under.
+    /// beside the accessor for the array itself, and a field holding a reference
+    /// gets a second accessor returning the same value in another form. Each of
+    /// those names a field that another accessor already names, so treating them
+    /// as fields would invent field names the game does not key anything under.
+    /// </remarks>
+    /// <remarks>
+    /// Every rule here matches on shape as well as on name. A rule that matched
+    /// a name alone would eventually meet a genuine field whose name ends the
+    /// same way and drop it - and a field dropped here is one the schema never
+    /// mentions again, which is the quiet kind of wrong answer rather than the
+    /// loud one.
     /// </remarks>
     private static bool IsAccessorHelper(DumpFunction function, ILookup<string, DumpFunction> byName)
     {
@@ -188,10 +194,17 @@ public sealed class DumpRecordTypeSource : IRecordTypeSource
             }
         }
 
-        if (name.EndsWith(MembershipSuffix, StringComparison.Ordinal) && function.Parameters.Count == 1)
-        {
-            return true;
-        }
+        // A membership test is not named here. It takes the value to look for as
+        // an ordinary parameter, and an accessor that reads a parameter gives no
+        // value of its own - so it is already not a field, by the rule that
+        // decides what an accessor gives rather than by its name.
+        //
+        // Naming it here as well cost something. The only shape a name-and-count
+        // test could reach that the value rule does not is an accessor that
+        // writes into an output parameter, which is a genuine field: a field
+        // whose name ends this way would have been dropped, and the two arms
+        // above avoid that by matching on the parameter's type as well as the
+        // name.
 
         // The second form of a reference accessor, recognised by the accessor it
         // is a second form of actually being there. Recognising it by its name
@@ -328,6 +341,5 @@ public sealed class DumpRecordTypeSource : IRecordTypeSource
     private const string CountSuffix = "Count";
     private const string ItemSuffix = "Item";
     private const string ItemReferenceSuffix = "ItemHandle";
-    private const string MembershipSuffix = "Contains";
     private const string ReferenceSuffix = "Handle";
 }
