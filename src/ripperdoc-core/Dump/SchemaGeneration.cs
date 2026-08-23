@@ -254,7 +254,10 @@ public static class SchemaGeneration
             }
         }
 
-        var classes = Directory.EnumerateFiles(Path.Combine(jsonDirectory, "classes"), "*.json").Take(1).Count();
+        var classes = Directory
+            .EnumerateFiles(Path.Combine(jsonDirectory, DumpTypeModel.ClassesDirectoryName), "*.json")
+            .Take(1)
+            .Count();
         if (classes == 0)
         {
             return new DumpInspection(
@@ -292,7 +295,18 @@ public static class SchemaGeneration
         return string.IsNullOrWhiteSpace(version) ? null : version;
     }
 
-    private static readonly string[] RequiredDirectories = ["classes", "enums", "bitfields"];
+    /// <summary>
+    /// The directories this inspection looks for, which are the reader's own.
+    /// </summary>
+    /// <remarks>
+    /// Bound to the reader rather than listed again, because this inspection is
+    /// what tells a first run whether there is type information to generate
+    /// from. Looking for fewer directories than the reader requires answers
+    /// that a half-written capture is usable, and the read then fails on the
+    /// missing one - with an exception carrying a machine path, out of a call
+    /// the inspection had already said would work.
+    /// </remarks>
+    internal static IReadOnlyList<string> RequiredDirectories => DumpTypeModel.RequiredDirectoryNames;
 
     private enum DumpAvailability
     {
