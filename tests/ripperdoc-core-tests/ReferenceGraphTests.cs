@@ -83,6 +83,53 @@ public class ReferenceGraphTests
     }
 
     [Fact]
+    public void AKindNotInTheSchemaIsPermittedOnlyByBeingThePermittedKind()
+    {
+        // A chain resolved at construction has nothing for a name the schema
+        // never carried, and the answer for one is the same as walking from it
+        // would have given: it is where the walk starts and where it ends.
+        var graph = GraphOf(Type("gamedataProbeBase_Record", null));
+
+        Assert.True(graph.Permits("gamedataProbeStranger_Record", "gamedataProbeStranger_Record"));
+        Assert.False(graph.Permits("gamedataProbeBase_Record", "gamedataProbeStranger_Record"));
+    }
+
+    [Fact]
+    public void AskingWhetherAKindIsPermittedAllocatesNothing()
+    {
+        // The claim the resolved chains exist to make. This is asked once per
+        // stored reference - millions of times against a real database - and a
+        // set allocated per question is the shape of cost this engine has
+        // already published a measurement about. A counter of calls would not
+        // catch a regression here; what regresses is the work each call does,
+        // so that is what is measured.
+        var graph = GraphOf(
+            Type("gamedataProbeBase_Record", null),
+            Type("gamedataProbeMiddle_Record", "gamedataProbeBase_Record"),
+            Type("gamedataProbeDerived_Record", "gamedataProbeMiddle_Record"));
+
+        // Warmed first, so what is measured is the asking and not the
+        // just-in-time compilation of the code that asks.
+        for (var i = 0; i < 100; i++)
+        {
+            graph.Permits("gamedataProbeBase_Record", "gamedataProbeDerived_Record");
+            graph.Permits("gamedataProbeDerived_Record", "gamedataProbeBase_Record");
+            graph.Permits("gamedataProbeBase_Record", "gamedataProbeStranger_Record");
+        }
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+
+        for (var i = 0; i < 10_000; i++)
+        {
+            graph.Permits("gamedataProbeBase_Record", "gamedataProbeDerived_Record");
+            graph.Permits("gamedataProbeDerived_Record", "gamedataProbeBase_Record");
+            graph.Permits("gamedataProbeBase_Record", "gamedataProbeStranger_Record");
+        }
+
+        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+    }
+
+    [Fact]
     public void AReferentTheSchemaDoesNotKnowIsNamedRatherThanCounted()
     {
         var graph = GraphOf(Type(
