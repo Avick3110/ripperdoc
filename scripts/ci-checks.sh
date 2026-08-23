@@ -179,6 +179,12 @@ elif [ ! -d "$rtti_dump_path" ]; then
   skip "RTTI-dump checks" "$rtti_dump_variable names a path with no directory at it - tier (iii) has nothing to read"
 elif [ ! -d "$rtti_dump_path/classes" ]; then
   skip "RTTI-dump checks" "$rtti_dump_variable names a directory with no classes/ in it, so it is not a dump's json output - tier (iii) has nothing to read"
+elif [ -z "$tweakdb_path" ]; then
+  skip "RTTI-dump checks" "needs the shipped database as well, to arbitrate the generated schema against real values - set $tweakdb_variable to one to run this tier. A schema checked against nothing is not a schema anything confirmed"
+elif [ ! -f "$tweakdb_path" ]; then
+  skip "RTTI-dump checks" "$tweakdb_variable names a path with no file at it, and this tier needs the database's values to arbitrate the generated schema"
+elif [ "${actual_sha:-}" != "$measured_sha" ]; then
+  skip "RTTI-dump checks" "the database at $tweakdb_variable could not be shown to be the build these counts were measured against, so the generated schema's coverage cannot be reproduced from it - see the shipped-database line above for which of the two it was"
 else
   run "RTTI-dump checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=RttiDump" -- RunConfiguration.TreatNoTestsAsError=true
 fi

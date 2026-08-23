@@ -138,6 +138,51 @@ public sealed class ValidationManifest
     }
 
     /// <summary>
+    /// Rebuild a manifest from verdicts that were recorded earlier.
+    /// </summary>
+    /// <param name="fields">The per-field verdicts.</param>
+    /// <param name="sourceDescription">What arbitrated the schema.</param>
+    /// <param name="storedValuesExplained">How many stored values it accounted for.</param>
+    /// <param name="storedValueCount">How many the database held.</param>
+    /// <param name="recordsExamined">How many records were examined.</param>
+    /// <param name="recordTypesNotInSchema">Record types the schema did not have.</param>
+    /// <param name="unaddressableFieldProbesByReason">
+    /// How many pairs could not be addressed, per reason.
+    /// </param>
+    /// <returns>The manifest.</returns>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <remarks>
+    /// For reading back a manifest that was written out, and for nothing else.
+    /// It does no checking of its own - it restates verdicts a run of
+    /// <see cref="Build"/> already reached - which is why it takes them whole
+    /// rather than recomputing anything from them.
+    /// </remarks>
+    public static ValidationManifest FromRecorded(
+        IReadOnlyList<FieldValidation> fields,
+        string sourceDescription,
+        int storedValuesExplained,
+        int storedValueCount,
+        int recordsExamined,
+        IReadOnlyList<string> recordTypesNotInSchema,
+        IReadOnlyDictionary<UnaddressableReason, int> unaddressableFieldProbesByReason)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        ArgumentNullException.ThrowIfNull(sourceDescription);
+        ArgumentNullException.ThrowIfNull(recordTypesNotInSchema);
+        ArgumentNullException.ThrowIfNull(unaddressableFieldProbesByReason);
+
+        return new ValidationManifest(
+            fields,
+            sourceDescription,
+            storedValuesExplained,
+            storedValueCount,
+            recordsExamined,
+            recordTypesNotInSchema,
+            unaddressableFieldProbesByReason.Values.Sum(),
+            unaddressableFieldProbesByReason);
+    }
+
+    /// <summary>
     /// Check every field of every record type in <paramref name="schema"/>
     /// against <paramref name="shipped"/>.
     /// </summary>

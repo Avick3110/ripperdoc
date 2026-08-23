@@ -1,0 +1,319 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace Ripperdoc.Core.Schema;
+
+/// <summary>
+/// The schema artifact in the form it is kept in between runs.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Generating the schema from type information means reading tens of thousands
+/// of files, and there is no reason to do that more than once for one install.
+/// This is what the generation step leaves behind and what every later run
+/// picks up instead.
+/// </para>
+/// <para>
+/// What is persisted is what the source <em>said</em> - the type shapes as they
+/// were read, before inheritance is resolved - and not the resolved schema.
+/// Reading it back runs the same derivation over the same shapes, so a
+/// reloaded schema is the derivation's output rather than a copy of it that
+/// could drift from what the derivation would now produce. A resolved schema
+/// written out would also be several times the size, since a field declared
+/// once and inherited by fifty types is one shape and fifty-one slots.
+/// </para>
+/// <para>
+/// The provenance block is not persisted either, for the same reason: it is
+/// computed from the schema and the manifest, so writing it down would be a
+/// second home for a fact that can go stale against the first. What a reader
+/// gets back is recomputed, and therefore true of what was actually loaded.
+/// </para>
+/// <para>
+/// This file is derived from a game install and belongs on the machine that
+/// generated it. Nothing here goes into this project's repository.
+/// </para>
+/// </remarks>
+public sealed record SchemaIrDocument
+{
+    /// <summary>
+    /// Which version of this format the file is written in.
+    /// </summary>
+    /// <remarks>
+    /// Read before anything else and refused when it is not one this build
+    /// knows. A format that changed shape without saying so would be read as
+    /// though it had not, and the wrong answers would come out of the schema
+    /// rather than out of the reader.
+    /// </remarks>
+    [JsonPropertyName("formatVersion")]
+    public required int FormatVersion { get; init; }
+
+    /// <summary>Which mode produced the schema.</summary>
+    [JsonPropertyName("mode")]
+    public required string Mode { get; init; }
+
+    /// <summary>What the type information was read from.</summary>
+    [JsonPropertyName("typeInformationSource")]
+    public required string TypeInformationSource { get; init; }
+
+    /// <summary>When the artifact was generated.</summary>
+    [JsonPropertyName("generatedAt")]
+    public required DateTimeOffset GeneratedAt { get; init; }
+
+    /// <summary>
+    /// Which build of the game the type information behind this artifact
+    /// described, or null where nothing recorded it.
+    /// </summary>
+    /// <remarks>
+    /// Persisted rather than recomputed, unlike everything else here, because
+    /// it is the one fact about this artifact that cannot be recovered from
+    /// the artifact. It is also what makes staleness checkable: a later run
+    /// compares it against the build actually installed and can say the
+    /// artifact describes an older game, instead of assuming either way.
+    /// </remarks>
+    [JsonPropertyName("gameBuild")]
+    public string? GameBuild { get; init; }
+
+    /// <summary>The type shapes, as the source reported them.</summary>
+    [JsonPropertyName("types")]
+    public required IReadOnlyList<PersistedType> Types { get; init; }
+
+    /// <summary>What the source could not derive.</summary>
+    [JsonPropertyName("derivationFailures")]
+    public required IReadOnlyList<PersistedFailure> DerivationFailures { get; init; }
+
+    /// <summary>
+    /// What shipped data confirmed, or null where nothing arbitrated the
+    /// schema.
+    /// </summary>
+    [JsonPropertyName("validation")]
+    public PersistedValidation? Validation { get; init; }
+
+    /// <summary>The version of this format this build writes and reads.</summary>
+    public const int CurrentFormatVersion = 1;
+
+    /// <summary>
+    /// Put an artifact into the form it is kept in.
+    /// </summary>
+    /// <param name="artifact">The artifact.</param>
+    /// <param name="reading">
+    /// The reading the artifact's schema was derived from. Persisting the
+    /// shapes rather than the resolved schema is what lets a later run re-run
+    /// the derivation instead of trusting a copy of its output.
+    /// </param>
+    /// <returns>The document.</returns>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <param name="gameBuild">
+    /// Which build of the game the type information described, or null where
+    /// nothing recorded it.
+    /// </param>
+    public static SchemaIrDocument Of(
+        SchemaIr artifact,
+        RecordTypeSourceReading reading,
+        string? gameBuild = null)
+    {
+        ArgumentNullException.ThrowIfNull(artifact);
+        ArgumentNullException.ThrowIfNull(reading);
+
+        return new SchemaIrDocument
+        {
+            FormatVersion = CurrentFormatVersion,
+            Mode = artifact.Provenance.Mode.ToString(),
+            TypeInformationSource = artifact.Provenance.TypeInformationSource,
+            GeneratedAt = artifact.Provenance.GeneratedAt,
+            GameBuild = gameBuild,
+            Types = reading.Types
+                .OrderBy(type => type.TypeName, StringComparer.Ordinal)
+                .Select(type => new PersistedType
+                {
+                    Name = type.TypeName,
+                    BaseTypeName = type.BaseTypeName,
+                    IsRecordType = type.IsRecordType,
+                    Fields = type.DeclaredFields
+                        .OrderBy(field => field.FieldName, StringComparer.Ordinal)
+                        .Select(field => new PersistedField
+                        {
+                            Name = field.FieldName,
+                            StorageType = field.StorageType,
+                            AlternateNames = field.AlternateFieldNames,
+                            ReferentTypeName = field.ReferentTypeName,
+                        })
+                        .ToArray(),
+                })
+                .ToArray(),
+            DerivationFailures = reading.Failures
+                .Select(failure => new PersistedFailure
+                {
+                    TypeName = failure.TypeName,
+                    MemberName = failure.MemberName,
+                    Reason = failure.Reason,
+                })
+                .ToArray(),
+            Validation = artifact.Validation is null ? null : PersistedValidation.Of(artifact.Validation),
+        };
+    }
+
+    /// <summary>
+    /// The reading this document was written from.
+    /// </summary>
+    /// <returns>The type shapes and the failures.</returns>
+    public RecordTypeSourceReading ToReading() => new(
+        Types
+            .Select(type => new RecordTypeShape(
+                type.Name,
+                type.BaseTypeName,
+                type.IsRecordType,
+                type.Fields
+                    .Select(field => new RecordFieldShape(
+                        field.Name,
+                        field.StorageType,
+                        field.AlternateNames,
+                        field.ReferentTypeName))
+                    .ToArray()))
+            .ToArray(),
+        DerivationFailures
+            .Select(failure => new DerivationFailure(failure.TypeName, failure.MemberName, failure.Reason))
+            .ToArray());
+
+    /// <summary>
+    /// Rebuild the artifact this document was written from.
+    /// </summary>
+    /// <returns>The artifact, its schema derived afresh from the persisted shapes.</returns>
+    /// <exception cref="InvalidDataException">
+    /// The document names a mode this build does not know.
+    /// </exception>
+    public SchemaIr ToArtifact()
+    {
+        if (!Enum.TryParse<SchemaMode>(Mode, out var mode))
+        {
+            throw new InvalidDataException(
+                $"This artifact says it was produced in '{Mode}' mode, which this build does not know. What "
+                + "a schema can be trusted to do depends on which mode made it, so it is refused rather than "
+                + "read as though it came from a mode that happens to be familiar.");
+        }
+
+        var schema = RecordSchemaDerivation.Derive(ToReading(), TypeInformationSource);
+        return SchemaIr.Create(schema, Validation?.ToManifest(), mode, GeneratedAt);
+    }
+
+    /// <summary>Read an artifact from the file it is kept in.</summary>
+    /// <param name="path">The artifact's path.</param>
+    /// <returns>The document.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> is null.</exception>
+    /// <exception cref="FileNotFoundException">There is no artifact there.</exception>
+    /// <exception cref="InvalidDataException">The file is not one this build can read.</exception>
+    public static SchemaIrDocument Read(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+
+        if (!File.Exists(path))
+        {
+            throw new FileNotFoundException("There is no schema artifact at this path.", path);
+        }
+
+        SchemaIrDocument? document;
+        try
+        {
+            using var stream = File.OpenRead(path);
+            document = JsonSerializer.Deserialize<SchemaIrDocument>(stream, Format);
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException(
+                $"'{Path.GetFileName(path)}' is not a readable schema artifact: {exception.Message}",
+                exception);
+        }
+
+        if (document is null)
+        {
+            throw new InvalidDataException($"'{Path.GetFileName(path)}' holds no schema artifact.");
+        }
+
+        if (document.FormatVersion != CurrentFormatVersion)
+        {
+            throw new InvalidDataException(
+                $"'{Path.GetFileName(path)}' is written in artifact format {document.FormatVersion} and this "
+                + $"build reads format {CurrentFormatVersion}. Generate the artifact again rather than "
+                + "reading it as though the formats agreed.");
+        }
+
+        return document;
+    }
+
+    /// <summary>Write the artifact to a file.</summary>
+    /// <param name="path">Where to write it.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> is null.</exception>
+    public void Write(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        File.WriteAllText(path, JsonSerializer.Serialize(this, Format).ReplaceLineEndings("\n"));
+    }
+
+    private static readonly JsonSerializerOptions Format = new()
+    {
+        WriteIndented = false,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+}
+
+/// <summary>One type, as the source reported it.</summary>
+public sealed record PersistedType
+{
+    /// <summary>The type's name.</summary>
+    [JsonPropertyName("name")]
+    public required string Name { get; init; }
+
+    /// <summary>What it inherits from, or null where the chain ends.</summary>
+    [JsonPropertyName("base")]
+    public string? BaseTypeName { get; init; }
+
+    /// <summary>Whether it is itself a record type.</summary>
+    [JsonPropertyName("isRecordType")]
+    public required bool IsRecordType { get; init; }
+
+    /// <summary>The fields it declares itself.</summary>
+    [JsonPropertyName("fields")]
+    public required IReadOnlyList<PersistedField> Fields { get; init; }
+}
+
+/// <summary>One declared field.</summary>
+public sealed record PersistedField
+{
+    /// <summary>The field's name.</summary>
+    [JsonPropertyName("name")]
+    public required string Name { get; init; }
+
+    /// <summary>The type its value is stored as.</summary>
+    [JsonPropertyName("storageType")]
+    public required string StorageType { get; init; }
+
+    /// <summary>Other spellings its stored values might be keyed by.</summary>
+    [JsonPropertyName("alternateNames")]
+    public IReadOnlyList<string> AlternateNames { get; init; } = Array.Empty<string>();
+
+    /// <summary>The kind of record it may point at, or null.</summary>
+    [JsonPropertyName("referentType")]
+    public string? ReferentTypeName { get; init; }
+}
+
+/// <summary>One thing the source could not derive.</summary>
+public sealed record PersistedFailure
+{
+    /// <summary>The type it happened on.</summary>
+    [JsonPropertyName("type")]
+    public required string TypeName { get; init; }
+
+    /// <summary>The member it happened on, or null.</summary>
+    [JsonPropertyName("member")]
+    public string? MemberName { get; init; }
+
+    /// <summary>What could not be derived.</summary>
+    [JsonPropertyName("reason")]
+    public required string Reason { get; init; }
+}

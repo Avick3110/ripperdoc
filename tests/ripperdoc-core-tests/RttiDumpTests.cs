@@ -33,6 +33,9 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
     private const int DeclaredFields = 4_796;
     private const int FieldsCarryingAReferent = 1_234;
     private const int DistinctReferentTypes = 490;
+    private const int ValuesInTheDatabase = 3_306_462;
+    private const int ValuesTheGeneratedSchemaExplains = 3_150_040;
+    private const int SlotsTheDataContradicts = 100;
 
     private readonly RttiDumpFixture _fixture;
 
@@ -73,6 +76,89 @@ public class RttiDumpTests : IClassFixture<RttiDumpFixture>
             .Count(field => field.ReferentTypeName is not null);
 
         Assert.Equal(FieldsCarryingAReferent, carryingAReferent);
+    }
+
+    [Fact]
+    public void TheGeneratedSchemaExplainsWhatTheResearchMeasuredItExplaining()
+    {
+        // The number this whole mode exists to reproduce as product code. It is
+        // measured over the same shipped database the research used, and the
+        // arbiter reaches it by arithmetic over names rather than by any table,
+        // so a divergence here is a defect in the derivation and not a
+        // difference of opinion about what counts.
+        Assert.Equal(ValuesInTheDatabase, _fixture.Manifest.StoredValueCount);
+        Assert.Equal(ValuesTheGeneratedSchemaExplains, _fixture.Manifest.StoredValuesExplained);
+        Assert.Empty(_fixture.Manifest.RecordTypesNotInSchema);
+        Assert.Equal(0, _fixture.Manifest.UnaddressableFieldProbes);
+    }
+
+    [Fact]
+    public void TheSchemaSaysOutLoudThatShippedValuesContradictSomeOfIt()
+    {
+        // The generated mode is not strictly better than the inherited one, and
+        // the artifact is required to say so rather than let a reader assume a
+        // schema derived from the game is right about everything.
+        var contradicted = _fixture.Manifest.Fields()
+            .Count(field => field.State == ValidationState.Contradicted);
+
+        Assert.Equal(SlotsTheDataContradicts, contradicted);
+        Assert.Contains(
+            _fixture.Artifact.Provenance.NamedLosses,
+            loss => loss.Contains("contradicted by shipped values", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void EveryTypedEdgeSurvivesBeingCheckedAgainstTheReferencesReallyStored()
+    {
+        // The graph claims a kind of record for each reference. Followed over
+        // the whole database, almost every stored reference agrees; the few
+        // that do not are the game's own data putting an unrelated kind in a
+        // field, which is worth reporting and is not the graph being wrong.
+        var check = _fixture.ReferenceCheck;
+
+        Assert.Equal(0, check.UntypedEdgesNotChecked);
+        Assert.True(check.ReferencesFollowed > 1_000_000, $"only {check.ReferencesFollowed} were followed");
+
+        var resolvable = check.ReferencesOfPermittedKind + check.ReferencesOfOtherKind;
+        Assert.True(
+            check.ReferencesOfOtherKind * 10_000 < resolvable,
+            $"{check.ReferencesOfOtherKind} of {resolvable} resolvable references name a kind the schema "
+            + "does not permit there, which is more than the shipped data was measured to do");
+    }
+
+    [Fact]
+    public void TheFirstRunPathGeneratesAnArtifactThatReadsBackAsTheSameSchema()
+    {
+        // The generated mode end to end, on the real thing: produce the
+        // artifact through the path a first run takes, read it back, and check
+        // that what comes back is the schema that went in rather than a
+        // narrower copy of it.
+        var artifactPath = Path.Combine(Path.GetTempPath(), "ripperdoc-tier3-" + Guid.NewGuid().ToString("n") + ".json");
+
+        try
+        {
+            var written = SchemaGeneration.Generate(
+                new GenerationInputs(artifactPath, _fixture.DumpDirectory),
+                _fixture.Database,
+                DateTimeOffset.UnixEpoch);
+
+            var read = SchemaIrDocument.Read(artifactPath).ToArtifact();
+
+            Assert.Equal(SchemaMode.GeneratedTypeInformation, read.Provenance.Mode);
+            Assert.Equal(written.Records.RecordTypeNames, read.Records.RecordTypeNames);
+            Assert.Equal(written.Records.ResolvedFieldSlotCount, read.Records.ResolvedFieldSlotCount);
+            Assert.Equal(ValuesTheGeneratedSchemaExplains, read.Validation!.StoredValuesExplained);
+            Assert.Equal(written.References.TypedEdgeCount, read.References.TypedEdgeCount);
+            Assert.Equal(0, read.References.UntypedEdgeCount);
+            Assert.Equal(written.Provenance.NamedLosses, read.Provenance.NamedLosses);
+        }
+        finally
+        {
+            if (File.Exists(artifactPath))
+            {
+                File.Delete(artifactPath);
+            }
+        }
     }
 
     [Fact]
@@ -134,9 +220,39 @@ public sealed class RttiDumpFixture
                 + "skipped, by name, when it cannot run them - an absent dump is never reported as a pass.");
         }
 
+        var databasePath = Environment.GetEnvironmentVariable(ShippedDatabaseFixture.VariableName);
+        if (string.IsNullOrWhiteSpace(databasePath))
+        {
+            throw new InvalidOperationException(
+                $"These checks arbitrate the generated schema against a shipped database as well as reading "
+                + $"generated type information. Set {ShippedDatabaseFixture.VariableName} to one to run them. "
+                + "A schema checked against nothing is not a schema anything confirmed.");
+        }
+
+        DumpDirectory = path;
         Model = DumpTypeModel.Load(path, GeneratedDescription);
         Schema = RecordSchemaDerivation.Derive(new DumpRecordTypeSource(Model));
         Graph = ReferenceGraph.Of(Schema);
+
+        Database = TweakDatabaseSource.OpenReadOnly(databasePath);
+
+        // The counts below were measured against one build of the game. Another
+        // one is a different input rather than a defect here, and is announced
+        // as such instead of failing every count with a message blaming the
+        // engine for somebody else's file.
+        if (!string.Equals(Database.Fingerprint, ShippedDatabaseFixture.MeasuredDatabase, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"These checks reproduce counts measured against "
+                + $"{ShippedDatabaseFixture.MeasuredDatabaseDescription}, whose sha256 is "
+                + $"{ShippedDatabaseFixture.MeasuredDatabase}. {ShippedDatabaseFixture.VariableName} names "
+                + $"'{Database.Name}', whose sha256 is {Database.Fingerprint}. That is a different database, "
+                + "so the counts do not apply to it - this is not a defect in the engine.");
+        }
+
+        Manifest = ValidationManifest.Build(Schema, Database);
+        Artifact = SchemaIr.Create(Schema, Manifest, SchemaMode.GeneratedTypeInformation, DateTimeOffset.UnixEpoch);
+        ReferenceCheck = ReferenceValidation.Build(Graph, Database, Database);
 
         var compiled = TypeModelReading.FromPinnedTypeModel();
         Audit = TypeModelAudit.Run(TypeModelReading.From(Model), compiled.Reading);
@@ -158,11 +274,22 @@ public sealed class RttiDumpFixture
     /// </remarks>
     public const string GeneratedDescription = "RTTI dump of game 2.31 with Phantom Liberty";
 
+    /// <summary>Where the generated type information was read from.</summary>
+    public string DumpDirectory { get; }
+
     public DumpTypeModel Model { get; }
 
     public RecordSchema Schema { get; }
 
     public ReferenceGraph Graph { get; }
+
+    public TweakDatabaseSource Database { get; }
+
+    public ValidationManifest Manifest { get; }
+
+    public SchemaIr Artifact { get; }
+
+    public ReferenceValidation ReferenceCheck { get; }
 
     public TypeModelAudit Audit { get; }
 
