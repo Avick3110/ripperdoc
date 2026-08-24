@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ripperdoc-core", "src\rippe
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ripperdoc-core-tests", "tests\ripperdoc-core-tests\ripperdoc-core-tests.csproj", "{F5A5EF80-8505-4822-856C-4EF1DDD07FA7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ripperdoc-naming-dictionary", "src\ripperdoc-naming-dictionary\ripperdoc-naming-dictionary.csproj", "{BA62033E-D5C7-4A4D-A965-556C0EE2919D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -43,6 +45,18 @@ Global
 		{F5A5EF80-8505-4822-856C-4EF1DDD07FA7}.Release|x64.Build.0 = Release|Any CPU
 		{F5A5EF80-8505-4822-856C-4EF1DDD07FA7}.Release|x86.ActiveCfg = Release|Any CPU
 		{F5A5EF80-8505-4822-856C-4EF1DDD07FA7}.Release|x86.Build.0 = Release|Any CPU
+		{BA62033E-D5C7-4A4D-A965-556C0EE2919D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BA62033E-D5C7-4A4D-A965-556C0EE2919D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BA62033E-D5C7-4A4D-A965-556C0EE2919D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BA62033E-D5C7-4A4D-A965-556C0EE2919D}.Debug|x64.Build.0 = Debug|Any CPU
+		{BA62033E-D5C7-4A4D-A965-556C0EE2919D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BA62033E-D5C7-4A4D-A965-556C0EE2919D}.Debug|x86.Build.0 = Debug|Any CPU
+		{BA62033E-D5C7-4A4D-A965-556C0EE2919D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BA62033E-D5C7-4A4D-A965-556C0EE2919D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BA62033E-D5C7-4A4D-A965-556C0EE2919D}.Release|x64.ActiveCfg = Release|Any CPU
+		{BA62033E-D5C7-4A4D-A965-556C0EE2919D}.Release|x64.Build.0 = Release|Any CPU
+		{BA62033E-D5C7-4A4D-A965-556C0EE2919D}.Release|x86.ActiveCfg = Release|Any CPU
+		{BA62033E-D5C7-4A4D-A965-556C0EE2919D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -50,5 +64,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{5936731E-731E-45C6-AF2A-412F7F1F7D3B} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{F5A5EF80-8505-4822-856C-4EF1DDD07FA7} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{BA62033E-D5C7-4A4D-A965-556C0EE2919D} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

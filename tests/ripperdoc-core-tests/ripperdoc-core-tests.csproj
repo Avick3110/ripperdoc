@@ -17,6 +17,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ripperdoc-core\ripperdoc-core.csproj" />
+    <!-- The archive-lane tier reads one real directory under both naming
+         postures and asserts they disagree about names and agree about
+         contents, so it needs the opt-in source as well as the default one.
+         A reference here says nothing about the engine core's own closure -
+         that boundary is asserted by its own check. -->
+    <ProjectReference Include="..\..\src\ripperdoc-naming-dictionary\ripperdoc-naming-dictionary.csproj" />
   </ItemGroup>
 
   <ItemGroup>

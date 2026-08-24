@@ -11,6 +11,12 @@
   <ItemGroup>
     <PackageVersion Include="WolvenKit.RED4" Version="8.20.0" />
     <PackageVersion Include="WolvenKit.Core" Version="8.20.0" />
+    <!-- The resource-name dictionary. Referenced ONLY by the opt-in naming
+         assembly, never by the engine core: it carries a mod editor's whole
+         dependency tree (EF Core, SQLite, SharpDX, native texture tooling) and
+         the engine is a library that a CLI and an MCP server both load. Same
+         publisher, same version and same upstream commit as the two above. -->
+    <PackageVersion Include="WolvenKit.Common" Version="8.20.0" />
     <!-- The tweak layer is YAML with custom tags (the !append family) and anchors.
          A stock parser is used rather than a hand-rolled subset reader: the layer
          declares types as sequence items as well as mapping keys, so a line-anchored
