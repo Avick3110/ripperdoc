@@ -85,45 +85,112 @@ public class InstalledModArchivesTests
             inventory.DistinctNamedCount + inventory.DistinctHashOnlyCount);
     }
 
+    /// <summary>
+    /// The two postures disagree about names and agree about contents.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// If installing the dictionary ever changed how many entries exist, naming
+    /// would be deciding what the inventory contains, which it must never do.
+    /// </para>
+    /// <para>
+    /// <strong>Why this reads both postures inside one check, and fences the
+    /// order.</strong> A dictionary loads into a process-wide resolver that
+    /// cannot be unloaded, so the dictionary-less reading is only honest in a
+    /// process where no dictionary has yet loaded - there is exactly one such
+    /// moment per process, and it cannot be shared between two checks that the
+    /// runner may order either way. Taking both readings here puts them in a
+    /// fixed order, and the assertion below refuses to proceed unless the first
+    /// one really was taken clean. Without that assertion a reordering would
+    /// not fail: both readings would simply be dictionary readings, the counts
+    /// would match, and the comparison would pass while comparing nothing.
+    /// </para>
+    /// </remarks>
     [Fact]
     public void TheDictionaryNamesMoreWithoutChangingWhatIsThere()
     {
-        // The two postures disagree about how many entries have names and agree
-        // about how many entries exist. If installing the dictionary ever
-        // changed the second number, naming would be deciding what the
-        // inventory contains, which it must never do.
-        var directory = ModDirectory;
+        var withoutDictionary = DictionaryLessReading.Value;
 
-        var withoutDictionary = new ArchiveInventoryReader(new ArchiveOnlyResourceNames()).Read(directory);
         var archiveOnlyNamed = withoutDictionary.DistinctNamedCount;
         var entryCount = withoutDictionary.DistinctEntryCount;
         var archiveCount = withoutDictionary.ArchiveCount;
 
-        var withDictionary = new ArchiveInventoryReader(new DictionaryResourceNames()).Read(directory);
+        var withDictionary = new ArchiveInventoryReader(new DictionaryResourceNames()).Read(ModDirectory);
 
         _output.WriteLine(Report(withoutDictionary));
         _output.WriteLine(Report(withDictionary));
 
+        Assert.True(withDictionary.Provenance.DictionaryLoaded);
         Assert.Equal(archiveCount, withDictionary.ArchiveCount);
         Assert.Equal(entryCount, withDictionary.DistinctEntryCount);
         Assert.True(
-            withDictionary.DistinctNamedCount >= archiveOnlyNamed,
+            withDictionary.DistinctNamedCount > archiveOnlyNamed,
             $"the dictionary posture named {withDictionary.DistinctNamedCount} of {entryCount} where the "
-            + $"archive-only posture named {archiveOnlyNamed}; installing a naming source must never "
-            + "reduce coverage");
+            + $"archive-only posture named {archiveOnlyNamed}. On a lane carrying entries the archives do "
+            + "not name, the dictionary must name strictly more - equal counts mean the dictionary "
+            + "reached nothing, which is the failure its own load check cannot see");
     }
 
     [Fact]
-    public void TheProvenanceSaysWhichPostureProducedTheInventory()
+    public void TheProvenanceRecordsBothWhatWasAskedForAndWhatWasInForce()
     {
-        var directory = ModDirectory;
+        // Touched first, so this check cannot be the one that loads a
+        // dictionary before the dictionary-less reading is taken.
+        var clean = DictionaryLessReading.Value;
 
-        var withoutDictionary = new ArchiveInventoryReader(new ArchiveOnlyResourceNames()).Read(directory);
-        var withDictionary = new ArchiveInventoryReader(new DictionaryResourceNames()).Read(directory);
+        Assert.Equal(new ArchiveOnlyResourceNames().Description, clean.Provenance.NameSource);
+        Assert.False(clean.Provenance.DictionaryLoaded);
 
-        Assert.NotEqual(withoutDictionary.Provenance.NameSource, withDictionary.Provenance.NameSource);
+        var withDictionary = new ArchiveInventoryReader(new DictionaryResourceNames()).Read(ModDirectory);
+
         Assert.Contains("WolvenKit.Common", withDictionary.Provenance.NameSource, StringComparison.Ordinal);
+        Assert.True(withDictionary.Provenance.DictionaryLoaded);
+
+        // Asked for and in force are separate fields because they can differ.
+        // After the load above, a source that installs no dictionary still sees
+        // one - and the provenance has to say so rather than repeat the
+        // source's intent.
+        var afterTheLoad = new ArchiveInventoryReader(new ArchiveOnlyResourceNames()).Read(ModDirectory);
+
+        Assert.Equal(new ArchiveOnlyResourceNames().Description, afterTheLoad.Provenance.NameSource);
+        Assert.True(
+            afterTheLoad.Provenance.DictionaryLoaded,
+            "a dictionary was loaded earlier in this process, so a read installing none still sees it; "
+            + "reporting otherwise would state that no dictionary was in force while the run enjoyed "
+            + "one");
+        Assert.True(afterTheLoad.DistinctNamedCount > clean.DistinctNamedCount);
     }
+
+    /// <summary>
+    /// The one dictionary-less reading this process can honestly take.
+    /// </summary>
+    /// <remarks>
+    /// A dictionary loads into a process-wide resolver that cannot be unloaded,
+    /// so "before any dictionary" happens exactly once per process and cannot
+    /// be re-entered by a later check. Taken once here and shared, with the
+    /// fence inside it, so that no ordering of the checks below can produce a
+    /// comparison of a posture against itself: every check that loads a
+    /// dictionary touches this first, and whichever runs first is the one that
+    /// captures the clean reading.
+    /// <para>
+    /// The fence fails rather than adapting. Were it to accept a contaminated
+    /// reading, the counts either side of the comparison would simply match and
+    /// the check would pass having compared nothing - a check that stops
+    /// discriminating without saying so.
+    /// </para>
+    /// </remarks>
+    private static readonly Lazy<ArchiveInventory> DictionaryLessReading = new(() =>
+    {
+        var inventory = new ArchiveInventoryReader(new ArchiveOnlyResourceNames()).Read(ModDirectory);
+
+        Assert.False(
+            inventory.Provenance.DictionaryLoaded,
+            "a dictionary was already loaded in this process before the dictionary-less reading was "
+            + "taken, so that reading is not a dictionary-less one. These checks fail rather than "
+            + "reporting a comparison they did not make.");
+
+        return inventory;
+    });
 
     private static string Report(ArchiveInventory inventory)
     {
@@ -135,6 +202,7 @@ public class InstalledModArchivesTests
 
         return $"""
                 naming posture ....... {inventory.Provenance.NameSource}
+                dictionary in force .. {(inventory.Provenance.DictionaryLoaded ? "yes" : "no")}
                 pinned library ....... {inventory.Provenance.ResourceLibraryVersion}
                 archives ............. {inventory.ArchiveCount} (unreadable {inventory.UnreadableCount})
                 entries .............. {inventory.AllEntries.Count()}

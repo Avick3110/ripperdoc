@@ -39,6 +39,16 @@ public sealed class DictionaryResourceNames : IResourceNameSource
     /// invisible: a run whose provenance claims dictionary coverage while every
     /// entry comes back by hash. So the load is verified against the resolver
     /// the names actually have to reach.
+    /// <para>
+    /// <strong>What this confirms, and what it leaves to another check.</strong>
+    /// It confirms the dictionary <em>loaded</em> - the resolver holds names it
+    /// did not hold before. It does not confirm that naming a resource through
+    /// it works end to end. That second half is carried by the archive-lane
+    /// tier's cross-posture comparison, which reads one real directory under
+    /// both postures and holds them to disagreeing about names while agreeing
+    /// about contents. Neither check stands in for the other, and this one does
+    /// not claim the coverage the other measures.
+    /// </para>
     /// </remarks>
     /// <exception cref="ResourceNameSourceException">
     /// The dictionary did not load, or the pinned library's resolver could not
@@ -67,7 +77,7 @@ public sealed class DictionaryResourceNames : IResourceNameSource
                     exception);
             }
 
-            if (!DictionaryPopulation.AnyNames())
+            if (!LoadedNameDictionary.IsLoaded())
             {
                 throw new ResourceNameSourceException(
                     "The resource-name dictionary reported no failure but left the pinned " +

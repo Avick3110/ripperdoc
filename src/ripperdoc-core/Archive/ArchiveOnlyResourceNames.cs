@@ -19,7 +19,14 @@ namespace Ripperdoc.Core.Archive;
 public sealed class ArchiveOnlyResourceNames : IResourceNameSource
 {
     /// <inheritdoc />
-    public string Description => "archive-declared paths only; no name dictionary installed";
+    /// <remarks>
+    /// Says what this source does, not what is in force. It cannot claim that
+    /// no dictionary is installed, because the resolver a dictionary loads into
+    /// is process-wide and something else may already have installed one -
+    /// what actually held at the moment of a read is recorded separately, by
+    /// observation, in <see cref="InventoryProvenance.DictionaryLoaded" />.
+    /// </remarks>
+    public string Description => "archive-declared paths; this source installs no name dictionary";
 
     /// <inheritdoc />
     public void Prepare()

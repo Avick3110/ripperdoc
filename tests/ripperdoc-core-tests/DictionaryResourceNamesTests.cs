@@ -19,18 +19,18 @@ public class DictionaryResourceNamesTests
     public void PreparingTheSourceTakesTheResolverFromNoNamesToSome()
     {
         Assert.False(
-            DictionaryPopulation.AnyNames(),
+            LoadedNameDictionary.IsLoaded(),
             "the resolver already held names before this check ran, so the load it is about to "
             + "verify cannot be told from one that had already happened");
 
         new DictionaryResourceNames().Prepare();
 
-        Assert.True(DictionaryPopulation.AnyNames());
+        Assert.True(LoadedNameDictionary.IsLoaded());
 
         // Idempotent: the source guards its own repeat, and a second call is
         // neither an error nor a second load.
         new DictionaryResourceNames().Prepare();
-        Assert.True(DictionaryPopulation.AnyNames());
+        Assert.True(LoadedNameDictionary.IsLoaded());
     }
 
     [Fact]
