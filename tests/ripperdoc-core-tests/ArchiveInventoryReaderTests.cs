@@ -209,15 +209,29 @@ public sealed class ArchiveInventoryReaderTests : IDisposable
     }
 
     [Fact]
-    public void ANameSourceThatCannotLoadStopsTheReadBeforeAnyArchiveIsEnumerated()
+    public void ANameSourceThatCannotLoadStopsTheReadBeforeAnyEntryIsNamed()
     {
         // The failure this ordering prevents: an inventory whose every entry is
-        // reported by hash while its provenance claims dictionary coverage.
+        // reported by hash while its provenance claims dictionary coverage. So
+        // the ordering itself is what is observed - a check that only asserted
+        // the throw stayed green with the load moved after the read loop, which
+        // is the arrangement that produces exactly that inventory.
         SyntheticArchive.Write(_directory, "rdp_one.archive", @"base\rdp\a.json");
 
-        var reader = new ArchiveInventoryReader(new FailingNameSource());
+        var namingWasReached = false;
+        var reader = new ArchiveInventoryReader(
+            new FailingNameSource(),
+            hash =>
+            {
+                namingWasReached = true;
+                return null;
+            });
 
         Assert.Throws<ResourceNameSourceException>(() => reader.Read(_directory));
+        Assert.False(
+            namingWasReached,
+            "the naming source failed to load, and an entry was named anyway - so the load is not "
+            + "happening before the entries it is supposed to name");
     }
 
     [Fact]
