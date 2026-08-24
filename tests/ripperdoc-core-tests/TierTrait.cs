@@ -21,6 +21,18 @@ public static class TierTrait
     public const string InstalledTweakLayer = "InstalledTweakLayer";
 
     /// <summary>
+    /// Checks that read a real install's archive lane - the mod directory and
+    /// the archives in it.
+    /// </summary>
+    /// <remarks>
+    /// Its own tier rather than a second use of the tweak-layer one: a machine
+    /// can have mods that ship archives and no tweak files, or the reverse, and
+    /// a tier whose name covered both would be half true whenever only one of
+    /// them was there.
+    /// </remarks>
+    public const string InstalledModArchives = "InstalledModArchives";
+
+    /// <summary>
     /// Checks that read type information generated from a game install.
     /// </summary>
     public const string RttiDump = "RttiDump";

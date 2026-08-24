@@ -47,6 +47,15 @@ extra_flats_variable="RIPPERDOC_EXTRA_FLATS_PATH"
 # needs that too.
 inheritance_variable="RIPPERDOC_INHERITANCE_PATH"
 
+# The archive-lane tier reads a real install's mod directory. That is a third
+# distinct input rather than a second use of the one above: a machine can have
+# mods that ship archives and no tweak files, or the reverse, so a tier covering
+# both under one name would be half true whenever only one of them was present.
+# Its subject is a directory whose contents change whenever its owner installs a
+# mod, so its checks assert what holds of any lane and report the numbers rather
+# than asserting them.
+mod_archives_variable="RIPPERDOC_MOD_ARCHIVES_PATH"
+
 # Tier (iii) reads type information generated from the user's own game install.
 # It is the input the dependency-drift audit needs, and no runner has one - the
 # dump is derived from the publisher's binary and is no more this project's to
@@ -105,7 +114,7 @@ run "build"                  dotnet build ripperdoc.sln --nologo -v minimal
 # A filter that matches nothing exits 0, so without the last flag a mistyped
 # filter would print PASS having run no checks at all - the failure mode where
 # verification machinery fails toward green.
-run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase&Tier!=InstalledTweakLayer&Tier!=RttiDump" -- RunConfiguration.TreatNoTestsAsError=true
+run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase&Tier!=InstalledTweakLayer&Tier!=InstalledModArchives&Tier!=RttiDump" -- RunConfiguration.TreatNoTestsAsError=true
 
 # Tiers (ii) and (iii): see tests/fixtures/README.md. Named here rather than
 # left silent, so the gate's coverage is legible from its own output.
@@ -180,6 +189,19 @@ elif [ ! -f "$tweakdb_path" ]; then
   skip "installed-tweak-layer checks" "$tweakdb_variable names a path with no file at it, and this tier needs the database's values to decide whether a copy still follows what it was copied from"
 else
   run "installed-tweak-layer checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=InstalledTweakLayer" -- RunConfiguration.TreatNoTestsAsError=true
+fi
+
+# The archive lane. Only a directory is needed - the archives carry their own
+# index, and the naming posture that reads more of them is a package this
+# solution already restores rather than anything the machine has to supply.
+mod_archives_path="$(printenv "$mod_archives_variable" || true)"
+
+if [ -z "$mod_archives_path" ]; then
+  skip "installed-mod-archive checks" "needs a real install's mod directory - tier (ii), local only; set $mod_archives_variable to one to run it"
+elif [ ! -d "$mod_archives_path" ]; then
+  skip "installed-mod-archive checks" "$mod_archives_variable names a path with no directory at it - tier (ii) has nothing to read"
+else
+  run "installed-mod-archive checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=InstalledModArchives" -- RunConfiguration.TreatNoTestsAsError=true
 fi
 
 rtti_dump_path="$(printenv "$rtti_dump_variable" || true)"
