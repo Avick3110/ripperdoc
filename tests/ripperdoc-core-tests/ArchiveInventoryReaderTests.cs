@@ -37,6 +37,34 @@ public sealed class ArchiveInventoryReaderTests : IDisposable
         Assert.All(inventory.Archives, archive => Assert.True(archive.WasRead));
     }
 
+    /// <summary>
+    /// An archive that declares its own paths has its entries named, with no
+    /// dictionary anywhere.
+    /// </summary>
+    /// <remarks>
+    /// The behaviour the default posture is named for, and the reason its
+    /// coverage is not zero. Asserted against a real container rather than
+    /// against the posture's description, because a description is a sentence
+    /// and this is a claim about what the reader returns.
+    /// </remarks>
+    [Fact]
+    public void AnArchiveDeclaringItsOwnPathsHasItsEntriesNamed()
+    {
+        SyntheticArchive.Write(_directory, "rdp_named.archive", @"base\rdp\alpha.json", @"base\rdp\beta.json");
+
+        var entries = Reader().Read(_directory).AllEntries.ToList();
+
+        Assert.Equal(2, entries.Count);
+        Assert.All(entries, entry => Assert.True(entry.IsNamed));
+        Assert.Equal(
+            [@"base\rdp\alpha.json", @"base\rdp\beta.json"],
+            entries.Select(entry => entry.Name).OrderBy(name => name, StringComparer.Ordinal));
+
+        // Display is the name when there is one - the same property that falls
+        // back to the hash when there is not.
+        Assert.All(entries, entry => Assert.Equal(entry.Name, entry.Display));
+    }
+
     [Fact]
     public void ArchivesAreOrderedByFileNameSoTwoRunsAgree()
     {
@@ -54,21 +82,97 @@ public sealed class ArchiveInventoryReaderTests : IDisposable
             second.Archives.Select(archive => archive.FileName));
     }
 
-    [Fact]
-    public void AnArchiveThatCannotBeReadIsReportedWithAReasonRatherThanSkipped()
+    /// <summary>
+    /// Every shape of unreadable archive becomes a row, and never ends the
+    /// enumeration.
+    /// </summary>
+    /// <remarks>
+    /// The four shapes are the ordinary ways a real mod directory holds a file
+    /// that is not a readable archive: something that was never one, a
+    /// placeholder, an interrupted download, and a damaged header. The library
+    /// fails differently on each - two by returning, two by throwing, and the
+    /// throwing pair name causes of their own that have nothing to do with the
+    /// real one. What this holds is that all four end the same way: a row, a
+    /// reason, and every other archive's entries still there.
+    /// </remarks>
+    [Theory]
+    [InlineData("never-an-archive")]
+    [InlineData("empty")]
+    [InlineData("truncated")]
+    [InlineData("damaged-header")]
+    public void AnArchiveThatCannotBeReadBecomesARowAndLosesNothingElse(string shape)
     {
         SyntheticArchive.Write(_directory, "rdp_good.archive", @"base\rdp\a.json");
-        File.WriteAllText(Path.Combine(_directory, "rdp_broken.archive"), "not an archive at all");
+        var good = File.ReadAllBytes(Path.Combine(_directory, "rdp_good.archive"));
+        var broken = Path.Combine(_directory, "rdp_broken.archive");
+
+        switch (shape)
+        {
+            case "never-an-archive":
+                File.WriteAllText(broken, "not an archive at all");
+                break;
+            case "empty":
+                File.WriteAllBytes(broken, []);
+                break;
+            case "truncated":
+                File.WriteAllBytes(broken, good[..Math.Min(64, good.Length)]);
+                break;
+            case "damaged-header":
+                var damaged = (byte[])good.Clone();
+                damaged[0] ^= 0xFF;
+                damaged[1] ^= 0xFF;
+                damaged[2] ^= 0xFF;
+                damaged[3] ^= 0xFF;
+                File.WriteAllBytes(broken, damaged);
+                break;
+        }
 
         var inventory = Reader().Read(_directory);
 
         Assert.Equal(2, inventory.ArchiveCount);
         Assert.Equal(1, inventory.UnreadableCount);
 
-        var broken = inventory.Archives.Single(archive => archive.FileName == "rdp_broken.archive");
-        Assert.False(broken.WasRead);
-        Assert.False(string.IsNullOrWhiteSpace(broken.UnreadableReason));
-        Assert.Empty(broken.Entries);
+        // The good archive is still there with its entry. This is the half that
+        // one bad file used to take down with it.
+        var kept = inventory.Archives.Single(archive => archive.FileName == "rdp_good.archive");
+        Assert.True(kept.WasRead);
+        Assert.Single(kept.Entries);
+
+        var row = inventory.Archives.Single(archive => archive.FileName == "rdp_broken.archive");
+        Assert.False(row.WasRead);
+        Assert.Empty(row.Entries);
+        Assert.Contains("could not read this archive's index", row.UnreadableReason!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The reason given for an unreadable archive does not tell the reader to
+    /// go and check the wrong thing.
+    /// </summary>
+    /// <remarks>
+    /// A sentence that directs an action is measured rather than reworded. The
+    /// library surfaces a malformed container as a denied path, so a reason
+    /// that repeated the underlying exception as its explanation would send
+    /// someone to inspect permissions and antivirus for a file that is merely
+    /// truncated. The underlying text is still carried - it is evidence - but
+    /// it must not be the sentence's claim.
+    /// </remarks>
+    [Fact]
+    public void TheReasonForAnUnreadableArchiveDoesNotDiagnoseACauseItCannotKnow()
+    {
+        SyntheticArchive.Write(_directory, "rdp_good.archive", @"base\rdp\a.json");
+        var good = File.ReadAllBytes(Path.Combine(_directory, "rdp_good.archive"));
+        File.WriteAllBytes(Path.Combine(_directory, "rdp_broken.archive"), good[..Math.Min(64, good.Length)]);
+
+        var reason = Reader().Read(_directory)
+            .Archives.Single(archive => archive.FileName == "rdp_broken.archive")
+            .UnreadableReason!;
+
+        // What the sentence leads with is the fact, not the library's guess.
+        Assert.StartsWith("the pinned library could not read this archive's index", reason, StringComparison.Ordinal);
+
+        // And it says the underlying error is evidence, so the access-denied
+        // text it carries is not read as the diagnosis.
+        Assert.Contains("evidence rather than a diagnosis", reason, StringComparison.Ordinal);
     }
 
     [Fact]
