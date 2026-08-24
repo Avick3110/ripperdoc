@@ -81,9 +81,16 @@ public class InstalledModArchivesTests
         Assert.NotEmpty(entries);
         Assert.All(entries, entry => Assert.False(string.IsNullOrWhiteSpace(entry.Display)));
 
-        Assert.Equal(
-            inventory.DistinctEntryCount,
-            inventory.DistinctNamedCount + inventory.DistinctHashOnlyCount);
+        // Counted from the entries, not subtracted from the other counter. The
+        // hash-only figure is defined as the difference, so holding it against
+        // that difference is an identity that no arrangement of the entries can
+        // break - it would agree with a resolver that had dropped every
+        // nameless entry on the floor.
+        var namelessInEveryArchiveCarryingIt = entries
+            .GroupBy(entry => entry.Hash)
+            .Count(group => group.All(entry => !entry.IsNamed));
+
+        Assert.Equal(namelessInEveryArchiveCarryingIt, inventory.DistinctHashOnlyCount);
     }
 
     /// <summary>
