@@ -22,6 +22,24 @@ shipped database. That is what makes the largest part of the engine testable on
 a bare runner - replay ordering, collision detection, provenance, contributor
 chains, budget arithmetic - with nothing of CDPR's anywhere near it.
 
+The same holds one layer over. The pinned library will **write** an archive as
+well as read one, so a check that needs a real container gets one this project
+authored: invented paths carrying invented content, packed at test runtime. The
+container format is not game-derived bytes, and no shipped archive is copied,
+excerpted or read to produce one.
+
+**Two things about authored archives are worth knowing before writing a check
+against one.** The writer packs only the extensions the format recognises and
+**reports success having packed nothing** when handed anything else - so a
+fixture that silently held no entries would make a check pass by giving it
+nothing to disagree with, and the helper that writes them verifies that what
+was asked for is what landed. And an archive this project writes carries its
+own paths, so every entry in one is **named**; a check about entries that
+nothing can name cannot get them from an authored archive, and gets them from
+values built directly instead. What the nameless case actually looks like at
+scale is a tier (ii) fact, and it is measured against a real lane rather than
+asserted from a fixture.
+
 ## The three tiers, and which one a check belongs to
 
 | Tier | Needs | Runs |
@@ -29,6 +47,7 @@ chains, budget arithmetic - with nothing of CDPR's anywhere near it.
 | **(i) synthetic** | nothing but this repository | CI, and locally |
 | **(ii) local, shipped database** | the user's own installed game data | the developer's machine only |
 | **(ii) local, installed tweak layer** | a real install's tweak lane — the tweak directory, the framework's own metadata, and the shipped database | the developer's machine only |
+| **(ii) local, installed mod archives** | a real install's mod directory | the developer's machine only |
 | **(iii) local, RTTI dump** | a dump generated from the user's own install | the developer's machine only |
 
 The tier (ii) inputs are named separately because a machine can have one and not
