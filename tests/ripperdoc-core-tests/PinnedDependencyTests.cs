@@ -53,10 +53,16 @@ public class PinnedDependencyTests
     public void TheWholeInheritedFamilyIsPinnedToOneVersion()
     {
         var pinFile = PinnedPackages.FilePath();
-        var declared = Regex.Matches(
-                File.ReadAllText(pinFile),
-                """<PackageVersion\s+Include="(?<id>WolvenKit\.[^"]+)"\s+Version="(?<version>[^"]+)"\s*/>""")
-            .Select(match => (Id: match.Groups["id"].Value, Version: match.Groups["version"].Value))
+
+        // The element first, then each attribute out of it independently. A
+        // single pattern spelling the attributes in one order stops matching
+        // when they are written in the other, and a pin guard that quietly
+        // matches nothing is the shape of guard this project refuses.
+        var declared = Regex.Matches(File.ReadAllText(pinFile), """<PackageVersion\s[^>]*/>""")
+            .Select(element => (
+                Id: Attribute(element.Value, "Include"),
+                Version: Attribute(element.Value, "Version")))
+            .Where(package => package.Id.StartsWith("WolvenKit.", StringComparison.Ordinal))
             .ToList();
 
         // A source-reading check fails toward green: no matches would satisfy
@@ -66,5 +72,11 @@ public class PinnedDependencyTests
             $"Expected the pin file to declare at least three WolvenKit packages, found {declared.Count} in {pinFile}.");
 
         Assert.All(declared, package => Assert.Equal(PinnedVersion, package.Version));
+    }
+
+    private static string Attribute(string element, string name)
+    {
+        var match = Regex.Match(element, name + "=\"(?<value>[^\"]*)\"");
+        return match.Success ? match.Groups["value"].Value : string.Empty;
     }
 }

@@ -20,8 +20,17 @@ namespace Ripperdoc.Core.Archive;
 /// Naming coverage is a property of the run, not of the archive layer, so the
 /// artifact says which posture produced it. Two inventories of one directory
 /// under different naming sources disagree about how many entries have names
-/// and agree about how many entries exist - and a reader who cannot see the
-/// posture has no way to tell that apart from the directory having changed.
+/// and agree about how many entries exist.
+/// <para>
+/// <strong>What this block does not capture.</strong> The resolver names
+/// accumulate in is process-wide and additive, and archives contribute their
+/// own declared paths to it as they are read. So a process that has already
+/// read other directories can name entries in this one that a fresh process
+/// could not, and nothing recorded here distinguishes that from the directory
+/// itself having changed. The fields below are what was asked for and what was
+/// in force; how much the process had already read is a third influence on the
+/// coverage figure and is not recorded.
+/// </para>
 /// <para>
 /// <strong>Asked for and in force are separate fields because they can
 /// differ.</strong> The resolver a dictionary loads into is process-wide and

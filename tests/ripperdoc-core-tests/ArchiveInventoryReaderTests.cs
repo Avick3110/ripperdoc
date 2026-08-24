@@ -3,6 +3,7 @@ using Xunit;
 
 namespace Ripperdoc.Core.Tests;
 
+[Collection(ResolverCollection.Name)]
 public sealed class ArchiveInventoryReaderTests : IDisposable
 {
     private readonly string _directory =

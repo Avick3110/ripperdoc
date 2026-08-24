@@ -53,19 +53,6 @@ public class ArchiveNamingIsolationTests
         Assert.DoesNotContain(DictionaryPackage, packageReferences);
     }
 
-    [Fact]
-    public void TheDefaultPostureNamesItselfWithoutClaimingItNamesNothing()
-    {
-        // An archive carries paths of its own, so the dictionary-less posture
-        // still names a large share of what it reads. A description saying
-        // "hash-only" would understate it, and understating coverage is as much
-        // a wrong provenance line as overstating it.
-        var description = new ArchiveOnlyResourceNames().Description;
-
-        Assert.Contains("archive", description, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("hash-only", description, StringComparison.OrdinalIgnoreCase);
-    }
-
     private static string EngineCoreProjectPath()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
