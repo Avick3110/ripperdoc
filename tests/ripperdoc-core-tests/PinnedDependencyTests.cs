@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace Ripperdoc.Core.Tests;
@@ -30,5 +31,40 @@ public class PinnedDependencyTests
         Assert.Equal(
             PinnedVersion,
             $"{version!.Major}.{version.Minor}.{version.Build}");
+    }
+
+    /// <summary>
+    /// Every package of the inherited family is pinned to one version, and that
+    /// version is the pinned one.
+    /// </summary>
+    /// <remarks>
+    /// Read from the central pin file rather than from loaded assemblies,
+    /// because the family is deliberately not all loaded into one process: the
+    /// dictionary package is referenced only by the opt-in naming assembly, so
+    /// a check that inspected what this test process happens to have loaded
+    /// would pass while saying nothing about the member it could not see.
+    /// <para>
+    /// The family has to agree because these assemblies share types across
+    /// package boundaries. A version split there does not fail to build - it
+    /// resolves to one of the two and changes behaviour quietly.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheWholeInheritedFamilyIsPinnedToOneVersion()
+    {
+        var pinFile = PinnedPackages.FilePath();
+        var declared = Regex.Matches(
+                File.ReadAllText(pinFile),
+                """<PackageVersion\s+Include="(?<id>WolvenKit\.[^"]+)"\s+Version="(?<version>[^"]+)"\s*/>""")
+            .Select(match => (Id: match.Groups["id"].Value, Version: match.Groups["version"].Value))
+            .ToList();
+
+        // A source-reading check fails toward green: no matches would satisfy
+        // every assertion below while having inspected nothing.
+        Assert.True(
+            declared.Count >= 3,
+            $"Expected the pin file to declare at least three WolvenKit packages, found {declared.Count} in {pinFile}.");
+
+        Assert.All(declared, package => Assert.Equal(PinnedVersion, package.Version));
     }
 }

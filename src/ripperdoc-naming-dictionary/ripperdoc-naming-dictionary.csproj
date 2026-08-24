@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>ripperdoc-naming-dictionary</AssemblyName>
+    <RootNamespace>Ripperdoc.Naming</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The check reaches the one internal this assembly has: the reflection
+         path it uses to confirm the dictionary actually populated the pinned
+         library's pool. That path is the whole substance of the self-check, and
+         a self-check nothing checks is the failure it exists to prevent. -->
+    <InternalsVisibleTo Include="ripperdoc-core-tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ripperdoc-core\ripperdoc-core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- This reference is the entire reason this assembly is separate from the
+         engine core. It carries the resource-name dictionary, and with it a mod
+         editor's dependency tree - Entity Framework, SQLite, SharpDX, a native
+         texture toolchain. A client that wants the wider naming coverage pays
+         for it here, on purpose, and a client that does not never loads it. -->
+    <PackageReference Include="WolvenKit.Common" />
+  </ItemGroup>
+
+</Project>
