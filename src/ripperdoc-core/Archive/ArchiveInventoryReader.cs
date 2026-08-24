@@ -87,8 +87,7 @@ public sealed class ArchiveInventoryReader
 
         // Before any archive is read: a source that cannot load then fails the
         // run instead of an under-named inventory being produced and reported
-        // as a complete one. The ordering is not enforced by anything here -
-        // see the deferred check in the build plan.
+        // as a complete one.
         _nameSource.Prepare();
 
         // Sampled here rather than after the loop, because it describes the
