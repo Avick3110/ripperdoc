@@ -25,6 +25,7 @@ namespace Ripperdoc.Core.Tests;
 /// </para>
 /// </remarks>
 [Trait(TierTrait.Name, TierTrait.InstalledModArchives)]
+[Collection(ResolverCollection.Name)]
 public class InstalledModArchivesTests
 {
     private readonly ITestOutputHelper _output;

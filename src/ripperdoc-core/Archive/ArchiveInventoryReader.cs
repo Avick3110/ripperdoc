@@ -56,9 +56,15 @@ public sealed class ArchiveInventoryReader
                 "This is not an install with no mods - it is a path that does not resolve.");
         }
 
-        // Before any archive is read, so that a source which cannot load fails
-        // the run rather than quietly producing an under-named inventory.
+        // Before any archive is read: a source that cannot load then fails the
+        // run instead of an under-named inventory being produced and reported
+        // as a complete one. The ordering is not enforced by anything here -
+        // see the deferred check in the build plan.
         _nameSource.Prepare();
+
+        // Sampled here rather than after the loop, because it describes the
+        // naming the entries below actually got.
+        var dictionaryLoaded = LoadedNameDictionary.IsLoaded();
 
         var reader = new ArchiveReader();
         var archives = new List<ArchiveContents>();
@@ -78,7 +84,7 @@ public sealed class ArchiveInventoryReader
                 // loads into a process-wide resolver that cannot be unloaded,
                 // so a read that installed none still sees one installed
                 // earlier by anything else.
-                LoadedNameDictionary.IsLoaded(),
+                dictionaryLoaded,
                 ResourceLibraryVersion()));
     }
 
@@ -122,6 +128,10 @@ public sealed class ArchiveInventoryReader
         try
         {
             var outcome = reader.ReadArchive(path, NoDictionaryHashService.Instance, out archive);
+            // No input found so far reaches this arm - every malformed shape
+            // tried either throws or parses clean - so it is written to say the
+            // same thing as the catch below rather than to carry a claim of its
+            // own that nothing exercises.
             if (outcome != EFileReadErrorCodes.NoError || archive is null)
             {
                 return ArchiveContents.Unreadable(fileName, Unreadable($"it reported '{outcome}'"));

@@ -64,26 +64,37 @@ public static class LoadedNameDictionary
     /// The resolver's internals are not shaped the way this observation
     /// expects.
     /// </exception>
-    public static bool IsLoaded()
+    public static bool IsLoaded() => IsLoaded(PoolField, NativeField);
+
+    /// <summary>
+    /// The same observation, against named fields.
+    /// </summary>
+    /// <remarks>
+    /// Internal so that a check can drive it at a field this library does not
+    /// have, and hold the refusal to its message. The refusal tells a reader to
+    /// confirm the pinned version, and a sentence that directs an action is
+    /// worth more than an assertion that it exists.
+    /// </remarks>
+    internal static bool IsLoaded(string poolFieldName, string nativeFieldName)
     {
         var poolField = typeof(ResourcePathPool)
-            .GetField(PoolField, BindingFlags.NonPublic | BindingFlags.Static);
+            .GetField(poolFieldName, BindingFlags.NonPublic | BindingFlags.Static);
         var pool = poolField?.GetValue(null)
-            ?? throw Unexpected($"{nameof(ResourcePathPool)} has no static '{PoolField}' to read");
+            ?? throw Unexpected($"{nameof(ResourcePathPool)} has no static '{poolFieldName}' to read");
 
         var nativeField = pool.GetType()
-            .GetField(NativeField, BindingFlags.NonPublic | BindingFlags.Instance);
+            .GetField(nativeFieldName, BindingFlags.NonPublic | BindingFlags.Instance);
         var native = nativeField?.GetValue(pool);
 
         if (native is null)
         {
-            throw Unexpected($"the resolver's '{NativeField}' is absent or null");
+            throw Unexpected($"the resolver's '{nativeFieldName}' is absent or null");
         }
 
         if (native is not LookupTable table)
         {
             throw Unexpected(
-                $"the resolver's '{NativeField}' is a {native.GetType().Name}, not a {nameof(LookupTable)}");
+                $"the resolver's '{nativeFieldName}' is a {native.GetType().Name}, not a {nameof(LookupTable)}");
         }
 
         foreach (var _ in table)

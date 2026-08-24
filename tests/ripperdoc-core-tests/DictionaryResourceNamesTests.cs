@@ -13,6 +13,7 @@ namespace Ripperdoc.Core.Tests;
 /// transition is therefore asserted inside one fact rather than split across
 /// several that would race each other for the only unloaded state there is.
 /// </remarks>
+[Collection(ResolverCollection.Name)]
 public class DictionaryResourceNamesTests
 {
     [Fact]
