@@ -12,11 +12,16 @@ namespace Ripperdoc.Core.Archive;
 /// </remarks>
 public sealed class ArchiveContents
 {
-    private ArchiveContents(string fileName, IReadOnlyList<ArchiveEntry> entries, string? unreadableReason)
+    private ArchiveContents(
+        string fileName,
+        IReadOnlyList<ArchiveEntry> entries,
+        string? unreadableReason,
+        ArchiveFailureKind? failureKind)
     {
         FileName = fileName;
         Entries = entries;
         UnreadableReason = unreadableReason;
+        FailureKind = failureKind;
     }
 
     /// <summary>The archive's file name, without its directory.</summary>
@@ -35,6 +40,16 @@ public sealed class ArchiveContents
     /// </summary>
     public string? UnreadableReason { get; }
 
+    /// <summary>
+    /// Which kind of failure kept the archive from being read, or
+    /// <see langword="null" /> when it was read.
+    /// </summary>
+    /// <remarks>
+    /// Carried beside the sentence so that a caller acts on the kind rather
+    /// than on the wording.
+    /// </remarks>
+    public ArchiveFailureKind? FailureKind { get; }
+
     /// <summary>Whether the archive's entries were actually read.</summary>
     public bool WasRead => UnreadableReason is null;
 
@@ -48,9 +63,19 @@ public sealed class ArchiveContents
 
     /// <summary>Records an archive that was read, with its entries.</summary>
     public static ArchiveContents Read(string fileName, IReadOnlyList<ArchiveEntry> entries) =>
-        new(fileName, entries, unreadableReason: null);
+        new(fileName, entries, unreadableReason: null, failureKind: null);
 
-    /// <summary>Records an archive that was found but could not be read.</summary>
-    public static ArchiveContents Unreadable(string fileName, string reason) =>
-        new(fileName, [], reason);
+    /// <summary>
+    /// Records an archive that was found but could not be read, under the kind
+    /// of failure that stopped it.
+    /// </summary>
+    /// <remarks>
+    /// The sentence is derived from the kind rather than supplied, so a row
+    /// cannot be given a reason that says more than its kind knows.
+    /// </remarks>
+    internal static ArchiveContents Unreadable(
+        string fileName,
+        ArchiveFailureKind kind,
+        string? evidence) =>
+        new(fileName, [], ArchiveFailure.Describe(kind, fileName, evidence), kind);
 }
