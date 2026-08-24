@@ -1,4 +1,3 @@
-using System.Reflection;
 using WolvenKit.RED4.Archive.IO;
 using WolvenKit.RED4.Types.Pools;
 
@@ -22,6 +21,7 @@ public sealed class ArchiveInventoryReader
     private const string ArchivePattern = "*.archive";
 
     private readonly IResourceNameSource _nameSource;
+    private readonly Func<ulong, string?> _resolveName;
 
     /// <summary>
     /// Creates a reader that names resources with the given source.
@@ -31,16 +31,38 @@ public sealed class ArchiveInventoryReader
     /// posture that adds no dependency; a caller wanting the wider coverage
     /// passes the dictionary-backed source from the opt-in naming assembly.
     /// </param>
-    public ArchiveInventoryReader(IResourceNameSource nameSource) =>
+    public ArchiveInventoryReader(IResourceNameSource nameSource)
+        : this(nameSource, ResolveName)
+    {
+    }
+
+    /// <summary>
+    /// The same reader, against a given name resolution.
+    /// </summary>
+    /// <remarks>
+    /// Internal because resolution runs against a process-wide resolver that a
+    /// check cannot make fail from outside, and the claim that a naming failure
+    /// surfaces as this engine's rather than as an unreadable archive is one
+    /// that has to be exercised rather than asserted. A seam that exists only
+    /// for a check is worth naming as such.
+    /// </remarks>
+    internal ArchiveInventoryReader(IResourceNameSource nameSource, Func<ulong, string?> resolveName)
+    {
         _nameSource = nameSource ?? throw new ArgumentNullException(nameof(nameSource));
+        _resolveName = resolveName;
+    }
 
     /// <summary>
     /// Reads every archive in <paramref name="modDirectory" />.
     /// </summary>
     /// <exception cref="DirectoryNotFoundException">
-    /// The directory does not exist. Announced rather than treated as an empty
+    /// Nothing is at the path. Announced rather than treated as an empty
     /// install, because "no archives" and "nowhere to look" are different
     /// answers and only one of them is about the mods.
+    /// </exception>
+    /// <exception cref="ArchiveReadException">
+    /// The read could not be completed. <see cref="ArchiveReadException.Kind" />
+    /// says which failure it was.
     /// </exception>
     /// <exception cref="ResourceNameSourceException">
     /// The naming source could not make its names available.
@@ -51,6 +73,13 @@ public sealed class ArchiveInventoryReader
 
         if (!Directory.Exists(modDirectory))
         {
+            // A path that is a file resolves, so it gets its own arm rather
+            // than the message for a path that does not.
+            if (File.Exists(modDirectory))
+            {
+                throw ArchiveFailure.Failure(ArchiveFailureKind.NotADirectory, modDirectory, inner: null);
+            }
+
             throw new DirectoryNotFoundException(
                 $"No directory at '{modDirectory}', so there is nothing to enumerate. " +
                 "This is not an install with no mods - it is a path that does not resolve.");
@@ -88,89 +117,116 @@ public sealed class ArchiveInventoryReader
                 ResourceLibraryVersion()));
     }
 
-    private static List<string> EnumerateArchives(string modDirectory) =>
-        Directory.EnumerateFiles(modDirectory, ArchivePattern, SearchOption.TopDirectoryOnly)
-            .OrderBy(Path.GetFileName, StringComparer.Ordinal)
-            .ToList();
+    /// <summary>
+    /// The archives directly in the mod directory, in a fixed order.
+    /// </summary>
+    /// <remarks>
+    /// Internal so that the failure route below can be exercised: a directory
+    /// the caller cannot list is reachable on a real machine and not on a
+    /// runner, and an announced failure that no check ever produces is the
+    /// shape this project's proof discipline refuses.
+    /// </remarks>
+    internal static List<string> EnumerateArchives(string modDirectory) =>
+        Listed(
+            modDirectory,
+            () => Directory.EnumerateFiles(modDirectory, ArchivePattern, SearchOption.TopDirectoryOnly)
+                .OrderBy(Path.GetFileName, StringComparer.Ordinal)
+                .ToList());
 
-    private static List<string> EnumerateNestedArchives(string modDirectory) =>
-        Directory.EnumerateDirectories(modDirectory)
-            .SelectMany(directory =>
-                Directory.EnumerateFiles(directory, ArchivePattern, SearchOption.AllDirectories))
-            .Select(path => Path.GetRelativePath(modDirectory, path))
-            .OrderBy(path => path, StringComparer.Ordinal)
-            .ToList();
+    /// <summary>
+    /// The archives in subdirectories of the mod directory, relative to it.
+    /// </summary>
+    /// <inheritdoc cref="EnumerateArchives" path="/remarks" />
+    internal static List<string> EnumerateNestedArchives(string modDirectory) =>
+        Listed(
+            modDirectory,
+            () => Directory.EnumerateDirectories(modDirectory)
+                .SelectMany(directory =>
+                    Directory.EnumerateFiles(directory, ArchivePattern, SearchOption.AllDirectories))
+                .Select(path => Path.GetRelativePath(modDirectory, path))
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToList());
+
+    /// <summary>
+    /// Runs a listing, announcing a failure by kind instead of letting the
+    /// file system's own exception escape unclassified.
+    /// </summary>
+    private static List<string> Listed(string modDirectory, Func<List<string>> listing)
+    {
+        try
+        {
+            return listing();
+        }
+        catch (Exception exception)
+        {
+            throw ArchiveFailure.Failure(ArchiveFailure.Classify(exception), modDirectory, exception);
+        }
+    }
 
     /// <summary>
     /// Reads one archive, or records why it could not be.
     /// </summary>
     /// <remarks>
-    /// A failure here is contained to this archive. A mod directory is other
-    /// people's files, and a single truncated, empty or misnamed one is an
-    /// ordinary condition rather than an exceptional one - letting it end the
-    /// enumeration would lose every other archive's entries to one bad
-    /// download.
+    /// A failure to read the container is contained to this archive. A mod
+    /// directory is other people's files, and a single truncated, empty or
+    /// misnamed one is an ordinary condition rather than an exceptional one -
+    /// letting it end the enumeration would lose every other archive's entries
+    /// to one bad download.
     /// <para>
-    /// So every failure becomes a row, and the row says what happened without
-    /// saying why. The underlying error is carried as evidence rather than as
-    /// an explanation: the library reports a malformed container through
-    /// whichever exception its own reading path happens to raise, and those
-    /// exceptions name causes - a denied path, a bad argument - that are not
-    /// the cause here. Repeating one as the reason would send a reader to
-    /// check permissions for a file that is merely truncated.
+    /// The two things that can fail here are kept apart on purpose. Only the
+    /// library's own call is caught into a row; what this engine does with a
+    /// successfully read index is its own responsibility, and a fault there
+    /// wearing the library's label would blame a file that is intact.
     /// </para>
     /// </remarks>
-    private static ArchiveContents ReadOne(ArchiveReader reader, string path)
+    private ArchiveContents ReadOne(ArchiveReader reader, string path)
     {
         var fileName = Path.GetFileName(path);
 
         WolvenKit.RED4.Archive.Archive? archive = null;
         try
         {
-            var outcome = reader.ReadArchive(path, NoDictionaryHashService.Instance, out archive);
+            EFileReadErrorCodes outcome;
+            try
+            {
+                outcome = reader.ReadArchive(path, NoDictionaryHashService.Instance, out archive);
+            }
+            catch (Exception exception)
+            {
+                return ArchiveContents.Unreadable(
+                    fileName, ArchiveFailureKind.MalformedContainer, ArchiveFailure.Evidence(exception));
+            }
+
             // No input found so far reaches this arm - every malformed shape
-            // tried either throws or parses clean - so it is written to say the
-            // same thing as the catch below rather than to carry a claim of its
-            // own that nothing exercises.
+            // tried throws instead - so it is written to say the same thing as
+            // the arm above rather than to carry a claim of its own that
+            // nothing exercises.
             if (outcome != EFileReadErrorCodes.NoError || archive is null)
             {
-                return ArchiveContents.Unreadable(fileName, Unreadable($"it reported '{outcome}'"));
+                return ArchiveContents.Unreadable(
+                    fileName, ArchiveFailureKind.MalformedContainer, $"it reported '{outcome}'");
             }
 
             var entries = new List<ArchiveEntry>(archive.Files.Count);
-            foreach (var (hash, file) in archive.Files)
+            try
             {
-                entries.Add(new ArchiveEntry(hash, ResolveName(hash), file.Size, file.ZSize));
+                foreach (var (hash, file) in archive.Files)
+                {
+                    entries.Add(new ArchiveEntry(hash, _resolveName(hash), file.Size, file.ZSize));
+                }
+            }
+            catch (Exception exception)
+            {
+                throw ArchiveFailure.Failure(ArchiveFailureKind.NamingFailed, fileName, exception);
             }
 
             return ArchiveContents.Read(fileName, entries);
-        }
-        catch (Exception exception)
-        {
-            return ArchiveContents.Unreadable(
-                fileName,
-                Unreadable($"it raised {exception.GetType().Name}: {exception.Message}"));
         }
         finally
         {
             archive?.Dispose();
         }
     }
-
-    /// <summary>
-    /// How an archive that could not be read is described.
-    /// </summary>
-    /// <remarks>
-    /// One sentence for both ways the read can fail, because they are the same
-    /// fact to whoever is reading the report: this file is present and its
-    /// index did not come back. What differs is only the evidence, which is
-    /// appended rather than promoted into the claim.
-    /// </remarks>
-    private static string Unreadable(string evidence) =>
-        $"the pinned library could not read this archive's index - {evidence.TrimEnd('.')}. "
-        + "The underlying error names a cause of its own, which is evidence rather than a diagnosis; "
-        + "a file that is present but unreadable here is most often truncated, still downloading, or "
-        + "not an archive despite its name.";
 
     /// <summary>
     /// The path for a hash, or null when nothing available can name it.

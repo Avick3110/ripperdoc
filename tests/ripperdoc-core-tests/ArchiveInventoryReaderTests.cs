@@ -142,6 +142,7 @@ public sealed class ArchiveInventoryReaderTests : IDisposable
         var row = inventory.Archives.Single(archive => archive.FileName == "rdp_broken.archive");
         Assert.False(row.WasRead);
         Assert.Empty(row.Entries);
+        Assert.Equal(ArchiveFailureKind.MalformedContainer, row.FailureKind);
         Assert.Contains("could not read this archive's index", row.UnreadableReason!, StringComparison.Ordinal);
     }
 
