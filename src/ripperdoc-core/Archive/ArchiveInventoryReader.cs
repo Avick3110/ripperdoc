@@ -95,6 +95,25 @@ public sealed class ArchiveInventoryReader
             .OrderBy(path => path, StringComparer.Ordinal)
             .ToList();
 
+    /// <summary>
+    /// Reads one archive, or records why it could not be.
+    /// </summary>
+    /// <remarks>
+    /// A failure here is contained to this archive. A mod directory is other
+    /// people's files, and a single truncated, empty or misnamed one is an
+    /// ordinary condition rather than an exceptional one - letting it end the
+    /// enumeration would lose every other archive's entries to one bad
+    /// download.
+    /// <para>
+    /// So every failure becomes a row, and the row says what happened without
+    /// saying why. The underlying error is carried as evidence rather than as
+    /// an explanation: the library reports a malformed container through
+    /// whichever exception its own reading path happens to raise, and those
+    /// exceptions name causes - a denied path, a bad argument - that are not
+    /// the cause here. Repeating one as the reason would send a reader to
+    /// check permissions for a file that is merely truncated.
+    /// </para>
+    /// </remarks>
     private static ArchiveContents ReadOne(ArchiveReader reader, string path)
     {
         var fileName = Path.GetFileName(path);
@@ -105,9 +124,7 @@ public sealed class ArchiveInventoryReader
             var outcome = reader.ReadArchive(path, NoDictionaryHashService.Instance, out archive);
             if (outcome != EFileReadErrorCodes.NoError || archive is null)
             {
-                return ArchiveContents.Unreadable(
-                    fileName,
-                    $"the pinned library reported '{outcome}' reading this archive's index");
+                return ArchiveContents.Unreadable(fileName, Unreadable($"it reported '{outcome}'"));
             }
 
             var entries = new List<ArchiveEntry>(archive.Files.Count);
@@ -118,15 +135,32 @@ public sealed class ArchiveInventoryReader
 
             return ArchiveContents.Read(fileName, entries);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception)
         {
-            return ArchiveContents.Unreadable(fileName, $"{exception.GetType().Name}: {exception.Message}");
+            return ArchiveContents.Unreadable(
+                fileName,
+                Unreadable($"it raised {exception.GetType().Name}: {exception.Message}"));
         }
         finally
         {
             archive?.Dispose();
         }
     }
+
+    /// <summary>
+    /// How an archive that could not be read is described.
+    /// </summary>
+    /// <remarks>
+    /// One sentence for both ways the read can fail, because they are the same
+    /// fact to whoever is reading the report: this file is present and its
+    /// index did not come back. What differs is only the evidence, which is
+    /// appended rather than promoted into the claim.
+    /// </remarks>
+    private static string Unreadable(string evidence) =>
+        $"the pinned library could not read this archive's index - {evidence.TrimEnd('.')}. "
+        + "The underlying error names a cause of its own, which is evidence rather than a diagnosis; "
+        + "a file that is present but unreadable here is most often truncated, still downloading, or "
+        + "not an archive despite its name.";
 
     /// <summary>
     /// The path for a hash, or null when nothing available can name it.
