@@ -71,7 +71,15 @@ public sealed class ArchiveInventoryReader
         return new ArchiveInventory(
             archives,
             EnumerateNestedArchives(modDirectory),
-            new InventoryProvenance(modDirectory, _nameSource.Description, ResourceLibraryVersion()));
+            new InventoryProvenance(
+                modDirectory,
+                _nameSource.Description,
+                // Observed rather than inferred from the source. A dictionary
+                // loads into a process-wide resolver that cannot be unloaded,
+                // so a read that installed none still sees one installed
+                // earlier by anything else.
+                LoadedNameDictionary.IsLoaded(),
+                ResourceLibraryVersion()));
     }
 
     private static List<string> EnumerateArchives(string modDirectory) =>

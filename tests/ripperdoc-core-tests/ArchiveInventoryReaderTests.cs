@@ -124,6 +124,13 @@ public sealed class ArchiveInventoryReaderTests : IDisposable
         Assert.Equal(_directory, provenance.ModDirectory);
         Assert.Equal(new ArchiveOnlyResourceNames().Description, provenance.NameSource);
         Assert.Matches(@"^\d+\.\d+\.\d+$", provenance.ResourceLibraryVersion);
+
+        // The pairing, not the flag's value. Whether a dictionary is loaded
+        // depends on what else has run in this process, and a check asserting
+        // either value outright would pass or fail on the order the runner
+        // happened to pick. What must hold in every order is that the recorded
+        // flag is the observed one.
+        Assert.Equal(LoadedNameDictionary.IsLoaded(), provenance.DictionaryLoaded);
     }
 
     [Fact]
