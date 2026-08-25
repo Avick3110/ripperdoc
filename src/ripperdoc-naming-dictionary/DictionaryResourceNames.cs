@@ -41,16 +41,16 @@ public sealed class DictionaryResourceNames : IResourceNameSource
     /// the names actually have to reach.
     /// <para>
     /// <strong>What this confirms, and what it leaves to another check.</strong>
-    /// It confirms that a dictionary is loaded once this returns - the resolver
-    /// holds at least one name. It does not confirm that <em>this</em> call is
-    /// what put it there, because the resolver is process-wide and the state
-    /// before the load is not sampled; where something else loaded one first,
-    /// the coverage is present either way, which is what the caller needs. And
-    /// it does not confirm that naming a resource through it works end to end -
-    /// that is carried by the archive-lane tier's cross-posture comparison,
-    /// which reads one real directory under both postures and holds them to
-    /// disagreeing about names while agreeing about contents. Neither check
-    /// stands in for the other.
+    /// It confirms that a dictionary is loaded once this returns - the
+    /// resolver's <em>native</em> table holds at least one name. It does not
+    /// confirm that <em>this</em> call is what put it there, because the
+    /// resolver is process-wide and the state before the load is not sampled;
+    /// where something else loaded one first, the coverage is present either
+    /// way, which is what the caller needs. And it does not confirm that naming
+    /// a resource through it works end to end - that is carried by the
+    /// archive-lane tier's cross-posture comparison, which reads one real
+    /// directory under both postures and holds them to disagreeing about names
+    /// while agreeing about contents. Neither check stands in for the other.
     /// </para>
     /// </remarks>
     /// <exception cref="ResourceNameSourceException">
