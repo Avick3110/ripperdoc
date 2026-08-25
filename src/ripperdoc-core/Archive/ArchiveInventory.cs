@@ -15,11 +15,15 @@ public sealed class ArchiveInventory
     internal ArchiveInventory(
         IReadOnlyList<ArchiveContents> archives,
         IReadOnlyList<string> nestedArchivePaths,
-        InventoryProvenance provenance)
+        InventoryProvenance provenance,
+        ArchiveFailureKind? nestedListingFailureKind = null,
+        string? nestedListingFailure = null)
     {
         Archives = archives;
         NestedArchivePaths = nestedArchivePaths;
         Provenance = provenance;
+        NestedListingFailureKind = nestedListingFailureKind;
+        NestedListingFailure = nestedListingFailure;
     }
 
     /// <summary>
@@ -45,6 +49,25 @@ public sealed class ArchiveInventory
     /// that reports them says the precedence is unmeasured.
     /// </remarks>
     public IReadOnlyList<string> NestedArchivePaths { get; }
+
+    /// <summary>
+    /// Why the subdirectories could not be listed, or <see langword="null" />
+    /// when they were.
+    /// </summary>
+    /// <remarks>
+    /// Recorded rather than thrown, the way <see cref="ArchiveContents" />
+    /// records an archive it could not read. <see cref="Archives" /> is what the
+    /// mod directory loads and this list is not, so a directory that cannot be
+    /// listed says so beside a complete <see cref="Archives" /> instead of
+    /// taking it down.
+    /// </remarks>
+    public string? NestedListingFailure { get; }
+
+    /// <summary>
+    /// Which kind of failure stopped the subdirectory listing, or
+    /// <see langword="null" /> when it completed.
+    /// </summary>
+    public ArchiveFailureKind? NestedListingFailureKind { get; }
 
     /// <summary>What produced this inventory, and under which naming posture.</summary>
     public InventoryProvenance Provenance { get; }

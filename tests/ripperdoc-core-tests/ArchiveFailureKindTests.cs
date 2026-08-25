@@ -128,7 +128,7 @@ public sealed class ArchiveFailureKindTests : IDisposable
     }
 
     [Fact]
-    public void AnInaccessibleSubdirectorySaysTheEnumerationStoppedRatherThanOmitting()
+    public void AnInaccessibleSubdirectorySaysWhichHalfOfTheReadSurvived()
     {
         var message = ArchiveFailure.Describe(
             ArchiveFailureKind.InaccessibleSubdirectory,
@@ -136,8 +136,10 @@ public sealed class ArchiveFailureKindTests : IDisposable
             "it raised UnauthorizedAccessException: denied");
 
         // The sentence directs what happens next, so what it directs is
-        // measured: a caller must not read this as a completed enumeration.
-        Assert.Contains("stops here", message, StringComparison.Ordinal);
-        Assert.Contains("silently omits", message, StringComparison.Ordinal);
+        // measured: a caller must not read this as a read that returned
+        // nothing. What it says survived is measured by the denied-listing
+        // tier, against a real denial.
+        Assert.Contains("still reported", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("stops here", message, StringComparison.Ordinal);
     }
 }

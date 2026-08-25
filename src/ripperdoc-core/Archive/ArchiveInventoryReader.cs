@@ -62,7 +62,8 @@ public sealed class ArchiveInventoryReader
     /// </exception>
     /// <exception cref="ArchiveReadException">
     /// The read could not be completed. <see cref="ArchiveReadException.Kind" />
-    /// says which failure it was.
+    /// says which failure it was. A subdirectory that cannot be listed is not
+    /// one of them - see <see cref="ArchiveInventory.NestedListingFailure" />.
     /// </exception>
     /// <exception cref="ResourceNameSourceException">
     /// The naming source could not make its names available.
@@ -100,9 +101,26 @@ public sealed class ArchiveInventoryReader
             archives.Add(ReadOne(reader, path));
         }
 
+        var nestedPaths = new List<string>();
+        string? nestedFailure = null;
+        ArchiveFailureKind? nestedFailureKind = null;
+        try
+        {
+            nestedPaths = EnumerateNestedArchives(modDirectory);
+        }
+        catch (ArchiveReadException exception)
+        {
+            // Recorded, not raised. The archives above are the mod directory's
+            // loaded set and these are an advisory list whose precedence this
+            // project does not claim to know, so one directory the caller
+            // cannot list does not take the read down with it.
+            nestedFailure = exception.Message;
+            nestedFailureKind = exception.Kind;
+        }
+
         return new ArchiveInventory(
             archives,
-            EnumerateNestedArchives(modDirectory),
+            nestedPaths,
             new InventoryProvenance(
                 modDirectory,
                 _nameSource.Description,
@@ -111,7 +129,9 @@ public sealed class ArchiveInventoryReader
                 // so a read that installed none still sees one installed
                 // earlier by anything else.
                 dictionaryLoaded,
-                ResourceLibraryVersion()));
+                ResourceLibraryVersion()),
+            nestedFailureKind,
+            nestedFailure);
     }
 
     /// <summary>

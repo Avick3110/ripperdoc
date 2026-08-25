@@ -66,8 +66,8 @@ internal static class ArchiveFailure
             + "enumerated: what is refused is that path itself, not anything beneath it.",
 
         ArchiveFailureKind.InaccessibleSubdirectory =>
-            $"A directory under '{subject}' could not be listed - {Trimmed(evidence)}. The enumeration "
-            + "stops here rather than returning a mod set that silently omits whatever is beneath it.",
+            $"A directory under '{subject}' could not be listed - {Trimmed(evidence)}. The archives in "
+            + "the mod directory itself are still reported; the archives under that directory are not.",
 
         ArchiveFailureKind.NotADirectory =>
             $"There is a file at '{subject}', not a directory. The path resolves, so this is not a "
