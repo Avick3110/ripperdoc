@@ -90,8 +90,6 @@ public sealed class ArchiveInventoryReader
         // as a complete one.
         _nameSource.Prepare();
 
-        // Sampled here rather than after the loop, because it describes the
-        // naming the entries below actually got.
         var dictionaryLoaded = LoadedNameDictionary.IsLoaded();
 
         var reader = new ArchiveReader();

@@ -7,8 +7,8 @@ namespace Ripperdoc.Core.Archive;
 /// A kind exists here only where the failure has been observed and its message
 /// can say something the kind actually knows. The alternative - one message on
 /// one channel covering every cause - has to guess which cause it is looking
-/// at, and the pinned library gives it nothing to guess from: a truncated file
-/// and a genuinely denied one both arrive as the same access-denied exception.
+/// at, and the pinned library gives it nothing to guess from: a merely
+/// truncated file arrives as an access-denied exception.
 /// <para>
 /// <see cref="Unclassified" /> is the arm for everything else. It carries the
 /// underlying error and asserts no cause at all, which is the only honest thing
