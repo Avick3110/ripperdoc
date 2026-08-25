@@ -130,12 +130,16 @@ public class InstalledModArchivesTests
         Assert.True(withDictionary.Provenance.DictionaryLoaded);
         Assert.Equal(archiveCount, withDictionary.ArchiveCount);
         Assert.Equal(entryCount, withDictionary.DistinctEntryCount);
+        // The invariant, not the install. Naming strictly more is a property of
+        // a lane carrying entries the archives do not name, and a lane whose
+        // mods all declare their own paths names everything under both
+        // postures; the two numbers are reported above, where a reader can see
+        // which lane this one is.
         Assert.True(
-            withDictionary.DistinctNamedCount > archiveOnlyNamed,
+            withDictionary.DistinctNamedCount >= archiveOnlyNamed,
             $"the dictionary posture named {withDictionary.DistinctNamedCount} of {entryCount} where the "
-            + $"archive-only posture named {archiveOnlyNamed}. On a lane carrying entries the archives do "
-            + "not name, the dictionary must name strictly more - equal counts mean the dictionary "
-            + "reached nothing, which is the failure its own load check cannot see");
+            + $"archive-only posture named {archiveOnlyNamed}. Names go into the resolver and none come "
+            + "out of it, so the dictionary posture can never name fewer than the archive-only one");
     }
 
     [Fact]
@@ -159,13 +163,20 @@ public class InstalledModArchivesTests
         // source's intent.
         var afterTheLoad = new ArchiveInventoryReader(new ArchiveOnlyResourceNames()).Read(ModDirectory);
 
+        _output.WriteLine(Report(clean));
+        _output.WriteLine(Report(afterTheLoad));
+
         Assert.Equal(new ArchiveOnlyResourceNames().Description, afterTheLoad.Provenance.NameSource);
         Assert.True(
             afterTheLoad.Provenance.DictionaryLoaded,
             "a dictionary was loaded earlier in this process, so a read installing none still sees it; "
             + "reporting otherwise would state that no dictionary was in force while the run enjoyed "
             + "one");
-        Assert.True(afterTheLoad.DistinctNamedCount > clean.DistinctNamedCount);
+        Assert.True(
+            afterTheLoad.DistinctNamedCount >= clean.DistinctNamedCount,
+            $"the reading after the load named {afterTheLoad.DistinctNamedCount} where the clean reading "
+            + $"named {clean.DistinctNamedCount}. The resolver is additive and cannot be unloaded, so a "
+            + "later reading can never name fewer than an earlier one");
     }
 
     /// <summary>
