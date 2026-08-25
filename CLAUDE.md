@@ -147,6 +147,15 @@ How a session behaves.
     project — not because it was one somewhere else. This is the principle that
     makes everything else in this file safe to adopt, and it is why an
     inherited lock-down is not imported wholesale.
+11. **Context weight is measured, never estimated.** At every commit point the
+    session checks its real context mechanically — a usage line over its own
+    transcript, or the statusline; with no mechanical source it asks Aaron
+    rather than guessing. **Fold work never runs in a session at or above
+    ~500k tokens.** Triage, escalation-writing, and handoffs are fine at any
+    weight, but a fold executed by a heavy session is where fold-introduced
+    defects breed. At the threshold: commit at a green point, write the
+    handoff, and the fold goes to a fresh session with the directive carried
+    verbatim.
 
 ## 6. Worktree and landing discipline
 
@@ -188,7 +197,17 @@ the rules you are operating under.
 ## 7. Review rounds
 
 Before a **code** branch is pushed, it is reviewed by agents that did not write
-it — and that review is bounded, because an unbounded one makes the code worse.
+it — and **the rounds are conducted by a fresh session, not the branch's
+author.** A build engagement runs as two sessions by default: the build session
+ends at branch-green plus a decision record and the settled-decisions list (the
+reviewer-seed block), and does not conduct review rounds or open the PR; a fresh
+session boots from that record, conducts the rounds, triages, folds, and opens
+the PR. This applies to small PRs too — size exemptions are how the rule would
+die. Watch condition: if writing the decision record well enough for a stranger
+costs more than ~80k on either of the first two engagements run under it, the
+economics invert — revisit, never quietly exempt. Every round-conduct rule below
+binds whoever runs the rounds, unchanged. And the review is bounded, because an
+unbounded one makes the code worse.
 
 **Where the bounds come from.** The reference implementation ran this unbounded
 once: a three-fix branch spent **ten rounds, roughly four million tokens and
@@ -283,6 +302,13 @@ The other side of §7: what makes a check a check.
   lines — so an all-green sweep proves the harness ran only if something in it
   was expected to fail. A sweep with no cell expected to fail is a broken
   sweep, not a passing one.
+- **Verification I/O prints a verdict, not a dump.** Every check — suite, sweep,
+  or ad-hoc shell — prints one line per cell plus a summary, with full output
+  only on an unexpected result. Greps carry head limits; a compound check is
+  written to a script file once and invoked by name, never re-pasted per call;
+  fewer, bigger, scripted steps beat many small ones. Summarize-by-default never
+  hides a real RED — the known-RED canary and full-output-on-unexpected are the
+  guards that make the summary safe.
 - **A check that cannot run self-skips and says so, by name.** No game, no dump
   and no install on a CI runner is a fact to announce, never an absence to
   leave quiet.
