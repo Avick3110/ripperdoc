@@ -11,12 +11,6 @@ namespace Ripperdoc.Core.Tests;
 /// other. Test classes run in parallel by default, which lets one class load a
 /// dictionary in the gap between another class's read and its assertion about
 /// that same read. Naming them into one collection serialises them.
-/// <para>
-/// This is not a substitute for the fences inside the checks themselves. It
-/// removes the interleaving; the fences are what refuse a reading taken in the
-/// wrong order, and they are what fails loudly if this collection is ever
-/// dropped.
-/// </para>
 /// </remarks>
 [CollectionDefinition(Name)]
 public sealed class ResolverCollection
