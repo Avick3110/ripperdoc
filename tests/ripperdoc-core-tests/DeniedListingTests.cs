@@ -59,7 +59,7 @@ public sealed class DeniedListingTests : IDisposable
     }
 
     [Fact]
-    public void ASubdirectoryThatCannotBeListedIsReportedAsASubdirectory()
+    public void ASubdirectoryThatCannotBeListedIsRecordedAndTheArchivesAreStillReported()
     {
         SyntheticArchive.Write(_directory, "rdp_top.archive", @"base\rdp\a.json");
 
@@ -67,13 +67,18 @@ public sealed class DeniedListingTests : IDisposable
         Directory.CreateDirectory(nested);
         Deny(nested);
 
-        var thrown = Assert.Throws<ArchiveReadException>(
-            () => new ArchiveInventoryReader(new ArchiveOnlyResourceNames()).Read(_directory));
+        var inventory = new ArchiveInventoryReader(new ArchiveOnlyResourceNames()).Read(_directory);
 
-        Assert.Equal(ArchiveFailureKind.InaccessibleSubdirectory, thrown.Kind);
+        // The half a throw used to take down: the mod directory's own archives,
+        // read and complete, beside the list that could not be taken.
+        Assert.Equal(1, inventory.ArchiveCount);
+        Assert.Single(Assert.Single(inventory.Archives).Entries);
+        Assert.Empty(inventory.NestedArchivePaths);
+
+        Assert.Equal(ArchiveFailureKind.InaccessibleSubdirectory, inventory.NestedListingFailureKind);
         Assert.Contains(
             $"A directory under '{_directory}' could not be listed",
-            thrown.Message,
+            inventory.NestedListingFailure!,
             StringComparison.Ordinal);
     }
 

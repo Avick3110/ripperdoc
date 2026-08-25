@@ -194,6 +194,12 @@ public sealed class ArchiveInventoryReaderTests : IDisposable
         Assert.Equal(
             Path.Combine("nested", "rdp_nested.archive"),
             Assert.Single(inventory.NestedArchivePaths));
+
+        // The other arm of the recorded failure: a listing that completed
+        // records nothing, so a caller reading the failure as present cannot be
+        // reading a listing that worked.
+        Assert.Null(inventory.NestedListingFailure);
+        Assert.Null(inventory.NestedListingFailureKind);
     }
 
     [Fact]
