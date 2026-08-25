@@ -53,8 +53,8 @@ internal static class ArchiveFailure
         ArchiveFailureKind.MalformedContainer =>
             $"the pinned library could not read this archive's index - {Trimmed(evidence)}. "
             + "The underlying error names a cause of its own, which is evidence rather than a diagnosis; "
-            + "a file that is present but unreadable here is most often truncated, still downloading, or "
-            + "not an archive despite its name.",
+            + "a file that is present but unreadable here can be truncated, still downloading, or not "
+            + "an archive despite its name.",
 
         ArchiveFailureKind.NamingFailed =>
             $"The index of '{subject}' was read, and naming its entries failed - {Trimmed(evidence)}. "
