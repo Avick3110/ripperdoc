@@ -198,7 +198,9 @@ mediums that actually mattered. The numbers below are that measurement, not a
 preference — a future revision should argue against that baseline rather than
 against a bare constant.
 
-**The loop.** Spawn independent review agents over the branch diff, fold what
+**The loop.** Spawn **two** independent review agents over the branch diff —
+two per round is the measured baseline's own density (ten rounds, twenty
+agents), and coverage splits between the two rather than shrinking — fold what
 survives triage, then spawn a **new** round. Stop on the first of:
 
 - **A round returns only low findings.**
@@ -256,10 +258,26 @@ The other side of §7: what makes a check a check.
 - **A carried claim keeps its measured scope.** A measurement restated in
   another document says no more than the measurement showed; widening it is a
   new claim, and a new claim needs its own measurement.
+- **A computed fact shown to a reader is a claim, and a check reads it.** An
+  instrumented figure, a member named by its count, or a message carrying a
+  computed fact ships with a check that reads the same fact —
+  printed-but-unchecked is how a figure drifts from what it reports.
+- **A binding is checked by identity, not by behaviour.** Where the defect is
+  two sites that must not drift apart, the check asserts they are the same
+  thing. Behavioural arms comparing equal contents stay green under a
+  private-copy sabotage — they pass on the day it matters.
 - **Sabotage RED-checks run from a committed state.** Commit the fold, then
   sabotage, then restore, and **verify the restore** by looking for something
   the fold introduced rather than assuming it worked. Never sabotage a dirty
   tree; stashing first is the same trap wearing a different hat.
+- **A verification is shown able to fail before it is trusted — on the defect
+  it claims to catch.** Proving a check *can* red proves the harness runs;
+  only a discriminating sabotage — one the claimed defect reds and a
+  neighbouring non-defect does not — proves the check tells the difference.
+- **Before appending to a fingerprinted list, measure the pin.** Where a
+  list's fingerprint is pinned, an append can silently move the pinned value.
+  Measure that it does not — or expect the move and ship the new pin
+  deliberately.
 - **A scripted sweep carries a known-RED canary.** Verification machinery fails
   toward green — a build swallowed by a pipe, a grep that eats its own FAIL
   lines — so an all-green sweep proves the harness ran only if something in it
@@ -294,6 +312,11 @@ actually stopping.
 
 The advisor lane is advisory: it renders judgement, Aaron decides, and worker
 sessions reach it **only through Aaron**.
+
+**Text meant to be relayed between sessions** — directives, reply prompts,
+worker briefs — **is delivered in a single fenced code block, one directive
+per block**, so a relay is one copy action and half a message cannot be
+forwarded.
 
 ## 10. Naming
 
@@ -340,6 +363,12 @@ not worth having.** Written afterwards, it is a justification exercise.
   never as a bulk scrub. This rule is also here early on measured grounds: the
   reference implementation adopted it only after roughly five hundred such
   citations had accumulated across its source tree.
+- **Don't state behaviour in a comment.** A comment states a constraint or
+  the reasoning — never what the code observably does. A behaviour claim
+  lives in a check or not at all, and a comment comparing two checks is a
+  measurement claim that needs the measurement. Prose was one branch's
+  least-verified surface while looking like its most rigorous one; deletion
+  is the primary fix, because narrowing adds surface while improving wording.
 - **Don't silently work around a block.** §4.
 - **Don't edit an ARCHIVE document.** Supersede it.
 - **Don't touch Aaron's live game install destructively.** It is the test
