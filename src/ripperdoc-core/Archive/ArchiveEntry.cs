@@ -24,7 +24,7 @@ namespace Ripperdoc.Core.Archive;
 public readonly record struct ArchiveEntry(ulong Hash, string? Name, uint Size, uint PackedSize)
 {
     /// <summary>Whether a naming source supplied a path for this entry.</summary>
-    public bool IsNamed => Name is not null;
+    public bool IsNamed => !string.IsNullOrEmpty(Name);
 
     /// <summary>
     /// How this entry is written when it is reported.
@@ -33,5 +33,6 @@ public readonly record struct ArchiveEntry(ulong Hash, string? Name, uint Size, 
     /// This is the property that makes "report by hash, never omit" true at
     /// the point a caller prints a row.
     /// </remarks>
-    public string Display => Name ?? Hash.ToString(CultureInfo.InvariantCulture);
+    public string Display =>
+        string.IsNullOrEmpty(Name) ? Hash.ToString(CultureInfo.InvariantCulture) : Name;
 }

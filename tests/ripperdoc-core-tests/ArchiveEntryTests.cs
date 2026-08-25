@@ -24,6 +24,19 @@ public class ArchiveEntryTests
     }
 
     [Fact]
+    public void AnEmptyNameIsNoNameToBothPropertiesRatherThanToOne()
+    {
+        // Reachable through a constructor this type makes public, and every
+        // count downstream is built on IsNamed - so an entry that read as named
+        // and printed a blank cell was counted among the named ones while going
+        // missing from the report.
+        var entry = new ArchiveEntry(42, string.Empty, 1, 1);
+
+        Assert.False(entry.IsNamed);
+        Assert.Equal("42", entry.Display);
+    }
+
+    [Fact]
     public void AnEntryWithNoNameNeverDisplaysAsEmpty()
     {
         // The property that makes "report by hash, never omit" true where a
