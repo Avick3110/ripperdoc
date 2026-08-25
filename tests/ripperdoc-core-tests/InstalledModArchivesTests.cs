@@ -82,9 +82,12 @@ public class InstalledModArchivesTests
         Assert.All(entries, entry => Assert.False(string.IsNullOrWhiteSpace(entry.Display)));
 
         // Counted from the entries rather than subtracted from the counter
-        // under test, which is defined as that difference. Entries dropped
-        // before they reach the count are caught by
-        // TheDictionaryNamesMoreWithoutChangingWhatIsThere, not by this.
+        // under test, which is defined as that difference. Nameless entries
+        // dropped before they reach the count are caught by
+        // TheDictionaryNamesMoreWithoutChangingWhatIsThere, which stops
+        // matching once the two postures drop different numbers; a drop that is
+        // uniform across postures is invisible to it and is caught at tier (i),
+        // by EveryEntryOfEveryArchiveIsReported. Neither is caught by this.
         var namelessInEveryArchiveCarryingIt = entries
             .GroupBy(entry => entry.Hash)
             .Count(group => group.All(entry => !entry.IsNamed));
