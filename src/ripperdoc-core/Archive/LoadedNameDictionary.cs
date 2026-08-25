@@ -47,12 +47,12 @@ public static class LoadedNameDictionary
     /// </summary>
     /// <remarks>
     /// <strong>What this does and does not establish.</strong> It establishes
-    /// that a dictionary was <em>loaded</em> - the resolver holds at least one
-    /// name. It does <em>not</em> establish that naming a resource through it
-    /// works end to end; that is a different claim and it is carried by the
-    /// archive-lane tier's cross-posture comparison, which reads one real
-    /// directory under both postures and holds them to disagreeing about names
-    /// while agreeing about contents.
+    /// that a dictionary was <em>loaded</em> - the resolver's <em>native</em>
+    /// table holds at least one name. It does <em>not</em> establish that naming
+    /// a resource through it works end to end; that is a different claim and it
+    /// is carried by the archive-lane tier's cross-posture comparison, which
+    /// reads one real directory under both postures and holds them to
+    /// disagreeing about names while agreeing about contents.
     /// <para>
     /// Asked as a yes-or-no rather than as a count: the question is whether a
     /// dictionary is there, a loaded one runs to millions of entries, and
