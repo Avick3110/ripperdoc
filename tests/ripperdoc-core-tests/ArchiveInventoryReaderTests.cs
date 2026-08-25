@@ -90,11 +90,9 @@ public sealed class ArchiveInventoryReaderTests : IDisposable
     /// <remarks>
     /// The four shapes are the ordinary ways a real mod directory holds a file
     /// that is not a readable archive: something that was never one, a
-    /// placeholder, an interrupted download, and a damaged header. The library
-    /// fails differently on each - two by returning, two by throwing, and the
-    /// throwing pair name causes of their own that have nothing to do with the
-    /// real one. What this holds is that all four end the same way: a row, a
-    /// reason, and every other archive's entries still there.
+    /// placeholder, an interrupted download, and a damaged header. What this
+    /// holds is that all four end the same way: a row, a reason, and every
+    /// other archive's entries still there.
     /// </remarks>
     [Theory]
     [InlineData("never-an-archive")]

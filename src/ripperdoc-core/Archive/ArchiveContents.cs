@@ -5,10 +5,7 @@ namespace Ripperdoc.Core.Archive;
 /// </summary>
 /// <remarks>
 /// Either the archive was read and <see cref="Entries" /> is its full entry
-/// set, or it was not and <see cref="UnreadableReason" /> says so. There is no
-/// third state where an archive is present in the inventory with a silently
-/// empty entry list, because that would read as "this mod contributes nothing"
-/// when the truth is "this was not looked at".
+/// set, or it was not and <see cref="UnreadableReason" /> says so.
 /// </remarks>
 public sealed class ArchiveContents
 {

@@ -17,10 +17,9 @@ namespace Ripperdoc.Core.Archive;
 /// <param name="PackedSize">The resource's size in bytes as stored.</param>
 /// <remarks>
 /// A null <see cref="Name" /> is a reportable state, never a reason to drop the
-/// entry. On a real install a large share of mod-archive entries have no name
-/// available, and a reader that reports only the named ones silently omits
-/// them - which would make an archive look smaller than it is and a contest
-/// look absent when it is not.
+/// entry. A reader that reports only the named ones silently omits the rest -
+/// which would make an archive look smaller than it is and a contest look
+/// absent when it is not.
 /// </remarks>
 public readonly record struct ArchiveEntry(ulong Hash, string? Name, uint Size, uint PackedSize)
 {
@@ -31,9 +30,8 @@ public readonly record struct ArchiveEntry(ulong Hash, string? Name, uint Size, 
     /// How this entry is written when it is reported.
     /// </summary>
     /// <remarks>
-    /// The name when there is one, and the hash when there is not - never an
-    /// empty string and never nothing at all. This is the property that makes
-    /// "report by hash, never omit" true at the point a caller prints a row.
+    /// This is the property that makes "report by hash, never omit" true at
+    /// the point a caller prints a row.
     /// </remarks>
     public string Display => Name ?? Hash.ToString(CultureInfo.InvariantCulture);
 }
