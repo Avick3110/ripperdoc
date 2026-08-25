@@ -85,16 +85,36 @@ public sealed class ArchiveFailureKindTests : IDisposable
     }
 
     [Fact]
-    public void OnlyADeniedListingIsClassifiedAsAnInaccessibleSubdirectory()
+    public void OnlyADeniedListingIsClassifiedAsADenialAndItKeepsTheListingsApart()
     {
         // Both arms, because the second is what stops every unrecognised
         // failure from being reported as a permissions problem - the exact
         // misdirection this model replaced.
         Assert.Equal(
-            ArchiveFailureKind.InaccessibleSubdirectory,
-            ArchiveFailure.Classify(new UnauthorizedAccessException()));
+            ArchiveFailureKind.InaccessibleModDirectory,
+            ArchiveFailure.Classify(
+                new UnauthorizedAccessException(), ArchiveFailureKind.InaccessibleModDirectory));
 
-        Assert.Equal(ArchiveFailureKind.Unclassified, ArchiveFailure.Classify(new IOException()));
+        Assert.Equal(
+            ArchiveFailureKind.InaccessibleSubdirectory,
+            ArchiveFailure.Classify(
+                new UnauthorizedAccessException(), ArchiveFailureKind.InaccessibleSubdirectory));
+
+        Assert.Equal(
+            ArchiveFailureKind.Unclassified,
+            ArchiveFailure.Classify(new IOException(), ArchiveFailureKind.InaccessibleSubdirectory));
+    }
+
+    [Fact]
+    public void AnInaccessibleModDirectorySaysThePathItselfWasRefused()
+    {
+        var message = ArchiveFailure.Describe(
+            ArchiveFailureKind.InaccessibleModDirectory,
+            "somewhere",
+            "it raised UnauthorizedAccessException: denied");
+
+        Assert.Contains("The mod directory 'somewhere' could not be listed", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("A directory under", message, StringComparison.Ordinal);
     }
 
     [Fact]

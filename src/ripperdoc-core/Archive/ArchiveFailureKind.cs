@@ -42,4 +42,9 @@ public enum ArchiveFailureKind
     /// The path given resolves to a file rather than to a directory.
     /// </summary>
     NotADirectory,
+
+    /// <summary>
+    /// The mod directory itself could not be listed.
+    /// </summary>
+    InaccessibleModDirectory,
 }

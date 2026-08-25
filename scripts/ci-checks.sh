@@ -114,7 +114,16 @@ run "build"                  dotnet build ripperdoc.sln --nologo -v minimal
 # A filter that matches nothing exits 0, so without the last flag a mistyped
 # filter would print PASS having run no checks at all - the failure mode where
 # verification machinery fails toward green.
-run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase&Tier!=InstalledTweakLayer&Tier!=InstalledModArchives&Tier!=RttiDump" -- RunConfiguration.TreatNoTestsAsError=true
+run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase&Tier!=InstalledTweakLayer&Tier!=InstalledModArchives&Tier!=RttiDump&Tier!=DeniedDirectory" -- RunConfiguration.TreatNoTestsAsError=true
+
+# A denied listing is a real condition on a real machine and the only way to
+# build one here is icacls, so this tier runs on Windows and is announced by
+# name everywhere else. CI is ubuntu, which is where the announcement is read.
+if [ "${OS:-}" = "Windows_NT" ]; then
+  run "denied-listing checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=DeniedDirectory" -- RunConfiguration.TreatNoTestsAsError=true
+else
+  skip "denied-listing checks" "needs a directory the running user is refused, and the only mechanism here builds one with icacls - Windows only, so this runner cannot produce the denial these checks are about"
+fi
 
 # Tiers (ii) and (iii): see tests/fixtures/README.md. Named here rather than
 # left silent, so the gate's coverage is legible from its own output.
