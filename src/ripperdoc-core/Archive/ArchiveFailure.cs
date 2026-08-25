@@ -20,15 +20,20 @@ internal static class ArchiveFailure
     /// <summary>
     /// Which kind an enumeration failure is.
     /// </summary>
+    /// <param name="exception">The error the listing raised.</param>
+    /// <param name="denied">
+    /// The kind a denial belongs to. Which listing was refused is known by the
+    /// caller and not by the exception, which names neither.
+    /// </param>
     /// <remarks>
     /// Only one exception type is classified, because only one has a cause this
     /// engine can name from the type alone. Everything else falls to
     /// <see cref="ArchiveFailureKind.Unclassified" /> rather than being sorted
     /// into a kind whose message would then assert more than was observed.
     /// </remarks>
-    internal static ArchiveFailureKind Classify(Exception exception) =>
+    internal static ArchiveFailureKind Classify(Exception exception, ArchiveFailureKind denied) =>
         exception is UnauthorizedAccessException
-            ? ArchiveFailureKind.InaccessibleSubdirectory
+            ? denied
             : ArchiveFailureKind.Unclassified;
 
     /// <summary>
@@ -55,6 +60,10 @@ internal static class ArchiveFailure
             $"The index of '{subject}' was read, and naming its entries failed - {Trimmed(evidence)}. "
             + "The container is not implicated: what failed is this engine's own name resolution, and "
             + "reporting it as an unreadable archive would send a reader to inspect the wrong file.",
+
+        ArchiveFailureKind.InaccessibleModDirectory =>
+            $"The mod directory '{subject}' could not be listed - {Trimmed(evidence)}. No archive was "
+            + "enumerated: what is refused is that path itself, not anything beneath it.",
 
         ArchiveFailureKind.InaccessibleSubdirectory =>
             $"A directory under '{subject}' could not be listed - {Trimmed(evidence)}. The enumeration "

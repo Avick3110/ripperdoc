@@ -36,4 +36,14 @@ public static class TierTrait
     /// Checks that read type information generated from a game install.
     /// </summary>
     public const string RttiDump = "RttiDump";
+
+    /// <summary>
+    /// Checks that need a directory the running user is refused.
+    /// </summary>
+    /// <remarks>
+    /// Its own tier because the refusal is built with <c>icacls</c> and exists
+    /// only on Windows, and the gate is the one place that can announce a tier
+    /// it cannot run.
+    /// </remarks>
+    public const string DeniedDirectory = "DeniedDirectory";
 }

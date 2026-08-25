@@ -126,6 +126,7 @@ public sealed class ArchiveInventoryReader
     internal static List<string> EnumerateArchives(string modDirectory) =>
         Listed(
             modDirectory,
+            ArchiveFailureKind.InaccessibleModDirectory,
             () => Directory.EnumerateFiles(modDirectory, ArchivePattern, SearchOption.TopDirectoryOnly)
                 .OrderBy(Path.GetFileName, StringComparer.Ordinal)
                 .ToList());
@@ -137,6 +138,7 @@ public sealed class ArchiveInventoryReader
     internal static List<string> EnumerateNestedArchives(string modDirectory) =>
         Listed(
             modDirectory,
+            ArchiveFailureKind.InaccessibleSubdirectory,
             () => Directory.EnumerateDirectories(modDirectory)
                 .SelectMany(directory =>
                     Directory.EnumerateFiles(directory, ArchivePattern, SearchOption.AllDirectories))
@@ -148,7 +150,16 @@ public sealed class ArchiveInventoryReader
     /// Runs a listing, announcing a failure by kind instead of letting the
     /// file system's own exception escape unclassified.
     /// </summary>
-    private static List<string> Listed(string modDirectory, Func<List<string>> listing)
+    /// <param name="modDirectory">The directory the read was asked for.</param>
+    /// <param name="denied">
+    /// The kind to report a denial as. The two listings below are refused the
+    /// same way and are different facts, so each names its own.
+    /// </param>
+    /// <param name="listing">The listing to run.</param>
+    private static List<string> Listed(
+        string modDirectory,
+        ArchiveFailureKind denied,
+        Func<List<string>> listing)
     {
         try
         {
@@ -156,7 +167,8 @@ public sealed class ArchiveInventoryReader
         }
         catch (Exception exception)
         {
-            throw ArchiveFailure.Failure(ArchiveFailure.Classify(exception), modDirectory, exception);
+            throw ArchiveFailure.Failure(
+                ArchiveFailure.Classify(exception, denied), modDirectory, exception);
         }
     }
 
