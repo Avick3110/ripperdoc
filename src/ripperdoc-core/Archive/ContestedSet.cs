@@ -142,18 +142,30 @@ public sealed class ContestedSet
                 ArchiveFailureKind.MismatchedLoadOrder, order.DisagreementWith(inventory), inner: null);
         }
 
-        var carriedBy = new Dictionary<ulong, List<Carrier>>();
+        var carriedBy = new Dictionary<ulong, CarrierGroup>();
         foreach (var archive in inventory.Archives)
         {
             foreach (var entry in archive.Entries)
             {
-                if (!carriedBy.TryGetValue(entry.Hash, out var carriers))
+                var carrier = new Carrier(archive.FileName, entry.Name);
+                if (!carriedBy.TryGetValue(entry.Hash, out var carried))
                 {
-                    carriers = [];
-                    carriedBy[entry.Hash] = carriers;
+                    carriedBy[entry.Hash] = new CarrierGroup(carrier);
+                    continue;
                 }
 
-                carriers.Add(new Carrier(archive.FileName, entry.Name));
+                // The group is a struct, so this is a copy: a list it already
+                // has is the same list, but one created here has to be written
+                // back or it is written to the copy and lost.
+                if (carried.Rest is null)
+                {
+                    carried.Rest = [carrier];
+                    carriedBy[entry.Hash] = carried;
+                }
+                else
+                {
+                    carried.Rest.Add(carrier);
+                }
             }
         }
 
@@ -182,9 +194,17 @@ public sealed class ContestedSet
             Demoted(contests, order));
     }
 
-    private static ContestedResource? Resolve(ulong hash, List<Carrier> carriers, ArchiveLoadOrder order)
+    private static ContestedResource? Resolve(ulong hash, in CarrierGroup carried, ArchiveLoadOrder order)
     {
-        var ranked = carriers
+        // A resource one entry claimed has no second archive for a contest to
+        // be between. Deciding that here rather than in the caller is what
+        // keeps the gate and the resolution one computation.
+        if (carried.Rest is null)
+        {
+            return null;
+        }
+
+        var ranked = carried.Carriers()
             .Select(carrier => order.PositionOf(carrier.FileName)!.Value)
             // A contest is between archives, not between index rows. One
             // archive can hold a hash more than once, and two spellings of one
@@ -212,7 +232,7 @@ public sealed class ContestedSet
             hash,
             // The same resource can be named by one archive and nameless in
             // another, so a name from any carrier names the resource.
-            carriers.Select(carrier => carrier.Name).FirstOrDefault(name => !string.IsNullOrEmpty(name)),
+            carried.Carriers().Select(carrier => carrier.Name).FirstOrDefault(name => !string.IsNullOrEmpty(name)),
             ranked,
             leading.Count == 1 ? leading[0].FileName : null,
             leading.Count == 1 ? [] : leading.Select(carrier => carrier.FileName).ToList(),
@@ -254,6 +274,32 @@ public sealed class ContestedSet
     }
 
     private readonly record struct Carrier(string FileName, string? Name);
+
+    /// <summary>
+    /// The archives that claimed one resource, with the first held inline.
+    /// </summary>
+    /// <remarks>
+    /// Nearly every resource in a mod directory is carried once and is never a
+    /// contest, so a list per resource would size the working set to the
+    /// directory rather than to the answer. The list arrives with the second
+    /// carrier, which is also the first point at which a contest is possible.
+    /// </remarks>
+    private struct CarrierGroup(Carrier first)
+    {
+        internal List<Carrier>? Rest = null;
+
+        private readonly Carrier _first = first;
+
+        internal readonly IEnumerable<Carrier> Carriers()
+        {
+            yield return _first;
+
+            foreach (var carrier in Rest ?? Enumerable.Empty<Carrier>())
+            {
+                yield return carrier;
+            }
+        }
+    }
 
     private readonly record struct Tally(int Carried, int LostToListed, int Undetermined);
 }
