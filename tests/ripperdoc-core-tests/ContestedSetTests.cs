@@ -1,3 +1,4 @@
+using System.Reflection;
 using Ripperdoc.Core.Archive;
 using Xunit;
 
@@ -277,13 +278,75 @@ public sealed class ContestedSetTests
     }
 
     /// <summary>
-    /// A resource is written the same way wherever it is reported.
+    /// Both sites that write a resource call the one home of that rule.
     /// </summary>
     /// <remarks>
-    /// Two artifacts print resources and both have to mean the same thing by
-    /// "report by hash, never omit". Each is held against the one home of that
-    /// rule rather than against the other, so a site that grew a private copy
-    /// of it fails here the moment the shared one changes.
+    /// Identity, not equal output. The defect this guards is a site that grew
+    /// a private copy of "report by hash, never omit", and a copy producing
+    /// the same string today is invisible to any comparison of what the two
+    /// produce - it diverges on the day the shared rule changes and not
+    /// before. What is asserted is that the shared method is the one each site
+    /// calls.
+    /// </remarks>
+    [Theory]
+    [InlineData(typeof(ArchiveEntry))]
+    [InlineData(typeof(ContestedResource))]
+    public void EachSiteThatWritesAResourceCallsTheOneHomeOfTheRule(Type site)
+    {
+        var callees = CalleesOf(site.GetProperty(nameof(ArchiveEntry.Display))!.GetGetMethod()!);
+
+        Assert.Contains(
+            callees,
+            callee => callee.DeclaringType == typeof(ResourceDisplay)
+                && callee.Name == nameof(ResourceDisplay.Of));
+    }
+
+    /// <summary>
+    /// Every method a method calls, as its own body names them.
+    /// </summary>
+    /// <remarks>
+    /// A scan for call opcodes rather than a decode of every instruction, so
+    /// four bytes of another instruction's operand can look like a token. That
+    /// direction is harmless here: a stray one resolves to nothing or to
+    /// something irrelevant, while a call that is really made always leaves a
+    /// token that resolves.
+    /// </remarks>
+    private static IReadOnlyList<MethodBase> CalleesOf(MethodInfo method)
+    {
+        var body = method.GetMethodBody()!.GetILAsByteArray()!;
+        var callees = new List<MethodBase>();
+
+        for (var index = 0; index + 4 < body.Length; index++)
+        {
+            // call and callvirt, each carrying a four-byte method token.
+            if (body[index] is not (0x28 or 0x6F))
+            {
+                continue;
+            }
+
+            try
+            {
+                if (method.Module.ResolveMethod(BitConverter.ToInt32(body, index + 1)) is { } callee)
+                {
+                    callees.Add(callee);
+                }
+            }
+            catch (ArgumentException)
+            {
+                // Not a method token.
+            }
+        }
+
+        return callees;
+    }
+
+    /// <summary>
+    /// The rule itself, at both sites.
+    /// </summary>
+    /// <remarks>
+    /// What each site produces for a hash with a name, without one, and for
+    /// the empty name. The binding between them is asserted separately,
+    /// because equal output cannot establish it.
     /// </remarks>
     [Theory]
     [InlineData(7UL, null)]
