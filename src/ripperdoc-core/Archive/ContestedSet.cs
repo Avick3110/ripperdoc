@@ -118,6 +118,12 @@ public sealed class ContestedSet
         ArgumentNullException.ThrowIfNull(inventory);
         ArgumentNullException.ThrowIfNull(order);
 
+        if (!order.Orders(inventory))
+        {
+            throw ArchiveFailure.Failure(
+                ArchiveFailureKind.MismatchedLoadOrder, order.DisagreementWith(inventory), inner: null);
+        }
+
         var carriedBy = new Dictionary<ulong, List<Carrier>>();
         foreach (var archive in inventory.Archives)
         {

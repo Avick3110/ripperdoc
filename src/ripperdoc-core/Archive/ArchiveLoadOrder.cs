@@ -29,15 +29,18 @@ namespace Ripperdoc.Core.Archive;
 public sealed class ArchiveLoadOrder
 {
     private readonly Dictionary<string, ArchiveLoadPosition> _byName;
+    private readonly ArchiveInventory _inventory;
 
     private ArchiveLoadOrder(
         IReadOnlyList<ArchiveLoadPosition> positions,
         Modlist modlist,
-        IReadOnlyList<string> listedButNotPresent)
+        IReadOnlyList<string> listedButNotPresent,
+        ArchiveInventory inventory)
     {
         Positions = positions;
         Modlist = modlist;
         ListedButNotPresent = listedButNotPresent;
+        _inventory = inventory;
 
         _byName = new Dictionary<string, ArchiveLoadPosition>(ArchiveFileNames.Comparer);
         foreach (var position in positions)
@@ -93,6 +96,49 @@ public sealed class ArchiveLoadOrder
         fileName is not null && _byName.TryGetValue(fileName, out var position) ? position : null;
 
     /// <summary>
+    /// Whether this order was computed over <paramref name="inventory" />.
+    /// </summary>
+    /// <remarks>
+    /// Identity, not equal contents. Two readings of one directory can hold the
+    /// same archive names and still rank them differently - a list file
+    /// rewritten between the two is enough - so a comparison of what they
+    /// contain would accept the pairing that decides contests by the wrong
+    /// ranks.
+    /// </remarks>
+    internal bool Orders(ArchiveInventory inventory) => ReferenceEquals(_inventory, inventory);
+
+    /// <summary>
+    /// How <paramref name="inventory" /> differs from what this order covers.
+    /// </summary>
+    internal string DisagreementWith(ArchiveInventory inventory)
+    {
+        var mine = _inventory.Archives.Select(archive => archive.FileName).ToList();
+        var theirs = inventory.Archives.Select(archive => archive.FileName).ToList();
+
+        var onlyTheirs = theirs.Except(mine, ArchiveFileNames.Comparer).Order(StringComparer.Ordinal).ToList();
+        var onlyMine = mine.Except(theirs, ArchiveFileNames.Comparer).Order(StringComparer.Ordinal).ToList();
+
+        if (onlyTheirs.Count == 0 && onlyMine.Count == 0)
+        {
+            return $"both cover the same {mine.Count} archive name(s), so they are two readings rather "
+                + "than one";
+        }
+
+        var parts = new List<string>();
+        if (onlyTheirs.Count > 0)
+        {
+            parts.Add($"it does not cover {string.Join(", ", onlyTheirs)}");
+        }
+
+        if (onlyMine.Count > 0)
+        {
+            parts.Add($"it ranks {string.Join(", ", onlyMine)}, which is not among them");
+        }
+
+        return string.Join("; ", parts);
+    }
+
+    /// <summary>
     /// Computes the load order for an inventory under a list file.
     /// </summary>
     /// <param name="inventory">The archives the mod directory holds.</param>
@@ -117,7 +163,7 @@ public sealed class ArchiveLoadOrder
                 .Select((name, index) => new ArchiveLoadPosition(name, index, IsListed: false))
                 .ToList();
 
-            return new ArchiveLoadOrder(byName, modlist, []);
+            return new ArchiveLoadOrder(byName, modlist, [], inventory);
         }
 
         var listedRanks = new Dictionary<string, int>(ArchiveFileNames.Comparer);
@@ -141,6 +187,6 @@ public sealed class ArchiveLoadOrder
         var present = new HashSet<string>(fileNames, ArchiveFileNames.Comparer);
         var absent = modlist.ListedNames.Where(name => !present.Contains(name)).ToList();
 
-        return new ArchiveLoadOrder(positions, modlist, absent);
+        return new ArchiveLoadOrder(positions, modlist, absent, inventory);
     }
 }

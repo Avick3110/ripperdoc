@@ -58,4 +58,17 @@ public enum ArchiveFailureKind
     /// is wrong wherever the list disagreed.
     /// </remarks>
     UnreadableModlist,
+
+    /// <summary>
+    /// The load order offered was computed over a different reading than the
+    /// archives being resolved against it.
+    /// </summary>
+    /// <remarks>
+    /// Its own kind because the damaging case is the one where nothing is
+    /// missing. A contest is decided by the rank its carriers hold, so an order
+    /// from another reading can supply a rank for every carrier and decide the
+    /// contest by positions never measured for these archives - a complete,
+    /// confident answer with no signal that it is the wrong one.
+    /// </remarks>
+    MismatchedLoadOrder,
 }
