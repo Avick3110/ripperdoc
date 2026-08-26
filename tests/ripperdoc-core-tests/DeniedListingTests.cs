@@ -83,6 +83,45 @@ public sealed class DeniedListingTests : IDisposable
     }
 
     /// <summary>
+    /// A list file the caller cannot read stops the order rather than becoming
+    /// a directory without one.
+    /// </summary>
+    /// <remarks>
+    /// The two states differ by a whole branch of the precedence law. Read as
+    /// absent, this directory would order every archive by file name and hand
+    /// back a confident winner for every contest, wrong wherever the list
+    /// disagreed - which is the failure this layer exists to remove, arrived at
+    /// by the layer itself.
+    /// </remarks>
+    [Fact]
+    public void AListFileThatCannotBeReadIsRefusedRatherThanTakenForAbsent()
+    {
+        SyntheticArchive.Write(_directory, "rdp_one.archive", @"base\rdp\a.json");
+
+        var list = Path.Combine(_directory, Modlist.FileName);
+        File.WriteAllLines(list, ["rdp_one.archive"]);
+        DenyFile(list);
+
+        var thrown = Assert.Throws<ArchiveReadException>(() => Modlist.Read(_directory));
+
+        Assert.Equal(ArchiveFailureKind.UnreadableModlist, thrown.Kind);
+        Assert.Contains("no order is reported", thrown.Message, StringComparison.Ordinal);
+        Assert.False(Modlist.Absent.IsPresent);
+    }
+
+    /// <summary>
+    /// Refuses the running user this file, and confirms the refusal took.
+    /// </summary>
+    /// <inheritdoc cref="Deny" path="/remarks" />
+    private void DenyFile(string path)
+    {
+        Icacls(path, "/deny", $"{Environment.UserName}:(R)");
+        _denied.Add(path);
+
+        Assert.Throws<UnauthorizedAccessException>(() => File.ReadAllLines(path));
+    }
+
+    /// <summary>
     /// Refuses the running user this directory, and confirms the refusal took.
     /// </summary>
     /// <remarks>

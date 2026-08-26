@@ -69,6 +69,12 @@ internal static class ArchiveFailure
             $"A directory under '{subject}' could not be listed - {Trimmed(evidence)}. The archives in "
             + "the mod directory itself are still reported; the archives under that directory are not.",
 
+        ArchiveFailureKind.UnreadableModlist =>
+            $"The list file at '{subject}' could not be read - {Trimmed(evidence)}. Its order is what "
+            + "decides which archive wins, so no order is reported: reading the directory as one "
+            + "without a list would order every archive by file name and name a winner for every "
+            + "contest, and those winners would be wrong wherever this file disagreed.",
+
         ArchiveFailureKind.NotADirectory =>
             $"There is a file at '{subject}', not a directory. The path resolves, so this is not a "
             + "missing install - it is a path that names the wrong kind of thing to enumerate archives "
