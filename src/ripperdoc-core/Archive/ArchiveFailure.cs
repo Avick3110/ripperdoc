@@ -18,23 +18,31 @@ internal static class ArchiveFailure
         $"it raised {exception.GetType().Name}: {exception.Message}";
 
     /// <summary>
-    /// Which kind an enumeration failure is.
+    /// Which kind a failed read is.
     /// </summary>
-    /// <param name="exception">The error the listing raised.</param>
-    /// <param name="denied">
-    /// The kind a denial belongs to. Which listing was refused is known by the
+    /// <param name="exception">The error the read raised.</param>
+    /// <param name="kind">
+    /// The kind this failure belongs to. What was being read is known by the
     /// caller and not by the exception, which names neither.
     /// </param>
+    /// <param name="operation">What the caller was doing.</param>
     /// <remarks>
-    /// Only one exception type is classified, because only one has a cause this
-    /// engine can name from the type alone. Everything else falls to
+    /// A directory listing can fail for causes this engine cannot name from the
+    /// exception type, so anything but a denial falls to
     /// <see cref="ArchiveFailureKind.Unclassified" /> rather than being sorted
-    /// into a kind whose message would then assert more than was observed.
+    /// into a kind whose message would assert more than was observed. A file
+    /// read is not open the same way: it is reached only after the file was
+    /// seen to exist, so every way it can fail is the one state
+    /// <paramref name="kind" /> names, and the exception travels as evidence
+    /// rather than as a diagnosis.
     /// </remarks>
-    internal static ArchiveFailureKind Classify(Exception exception, ArchiveFailureKind denied) =>
-        exception is UnauthorizedAccessException
-            ? denied
-            : ArchiveFailureKind.Unclassified;
+    internal static ArchiveFailureKind Classify(
+        Exception exception, ArchiveFailureKind kind, ArchiveOperation operation) =>
+        operation switch
+        {
+            ArchiveOperation.FileRead => kind,
+            _ => exception is UnauthorizedAccessException ? kind : ArchiveFailureKind.Unclassified,
+        };
 
     /// <summary>
     /// Builds the exception for a failure that ends the read.

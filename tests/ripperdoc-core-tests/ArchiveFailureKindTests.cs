@@ -93,16 +93,23 @@ public sealed class ArchiveFailureKindTests : IDisposable
         Assert.Equal(
             ArchiveFailureKind.InaccessibleModDirectory,
             ArchiveFailure.Classify(
-                new UnauthorizedAccessException(), ArchiveFailureKind.InaccessibleModDirectory));
+                new UnauthorizedAccessException(),
+                ArchiveFailureKind.InaccessibleModDirectory,
+                ArchiveOperation.DirectoryListing));
 
         Assert.Equal(
             ArchiveFailureKind.InaccessibleSubdirectory,
             ArchiveFailure.Classify(
-                new UnauthorizedAccessException(), ArchiveFailureKind.InaccessibleSubdirectory));
+                new UnauthorizedAccessException(),
+                ArchiveFailureKind.InaccessibleSubdirectory,
+                ArchiveOperation.DirectoryListing));
 
         Assert.Equal(
             ArchiveFailureKind.Unclassified,
-            ArchiveFailure.Classify(new IOException(), ArchiveFailureKind.InaccessibleSubdirectory));
+            ArchiveFailure.Classify(
+                new IOException(),
+                ArchiveFailureKind.InaccessibleSubdirectory,
+                ArchiveOperation.DirectoryListing));
     }
 
     [Fact]
