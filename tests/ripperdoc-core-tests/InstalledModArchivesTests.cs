@@ -32,28 +32,7 @@ public class InstalledModArchivesTests
 
     public InstalledModArchivesTests(ITestOutputHelper output) => _output = output;
 
-    /// <summary>
-    /// The environment variable naming the mod directory, derived from the
-    /// brand rather than spelled out, so a rebrand does not leave a stale name
-    /// here.
-    /// </summary>
-    public static string VariableName => Branding.Name.ToUpperInvariant() + "_MOD_ARCHIVES_PATH";
-
-    private static string ModDirectory
-    {
-        get
-        {
-            var path = Environment.GetEnvironmentVariable(VariableName);
-
-            return string.IsNullOrWhiteSpace(path)
-                ? throw new InvalidOperationException(
-                    $"These checks read a real install's archive lane, which no runner has. Set "
-                    + $"{VariableName} to a mod directory to run them. The gate script announces them as "
-                    + "skipped, by name, when it cannot run them - an absent input is never reported as "
-                    + "a pass.")
-                : path;
-        }
-    }
+    private static string ModDirectory => InstalledModArchivesFixture.ModDirectory;
 
     [Fact]
     public void EveryArchiveIsEitherReadOrReportedUnreadableWithAReason()
@@ -119,7 +98,7 @@ public class InstalledModArchivesTests
     [Fact]
     public void TheDictionaryNamesMoreWithoutChangingWhatIsThere()
     {
-        var withoutDictionary = DictionaryLessReading.Value;
+        var withoutDictionary = InstalledModArchivesFixture.DictionaryLessReading;
 
         var archiveOnlyNamed = withoutDictionary.DistinctNamedCount;
         var entryCount = withoutDictionary.DistinctEntryCount;
@@ -150,7 +129,7 @@ public class InstalledModArchivesTests
     {
         // Touched first, so this check cannot be the one that loads a
         // dictionary before the dictionary-less reading is taken.
-        var clean = DictionaryLessReading.Value;
+        var clean = InstalledModArchivesFixture.DictionaryLessReading;
 
         Assert.Equal(new ArchiveOnlyResourceNames().Description, clean.Provenance.NameSource);
         Assert.False(clean.Provenance.DictionaryLoaded);
@@ -181,37 +160,6 @@ public class InstalledModArchivesTests
             + $"named {clean.DistinctNamedCount}. The resolver is additive and cannot be unloaded, so a "
             + "later reading can never name fewer than an earlier one");
     }
-
-    /// <summary>
-    /// The one dictionary-less reading this process can honestly take.
-    /// </summary>
-    /// <remarks>
-    /// A dictionary loads into a process-wide resolver that cannot be unloaded,
-    /// so "before any dictionary" happens exactly once per process and cannot
-    /// be re-entered by a later check. Taken once here and shared, with the
-    /// fence inside it, so that no ordering of the checks below can produce a
-    /// comparison of a posture against itself: every check that loads a
-    /// dictionary touches this first, and whichever runs first is the one that
-    /// captures the clean reading.
-    /// <para>
-    /// The fence fails rather than adapting. Were it to accept a contaminated
-    /// reading, the counts either side of the comparison would simply match and
-    /// the check would pass having compared nothing - a check that stops
-    /// discriminating without saying so.
-    /// </para>
-    /// </remarks>
-    private static readonly Lazy<ArchiveInventory> DictionaryLessReading = new(() =>
-    {
-        var inventory = new ArchiveInventoryReader(new ArchiveOnlyResourceNames()).Read(ModDirectory);
-
-        Assert.False(
-            inventory.Provenance.DictionaryLoaded,
-            "a dictionary was already loaded in this process before the dictionary-less reading was "
-            + "taken, so that reading is not a dictionary-less one. These checks fail rather than "
-            + "reporting a comparison they did not make.");
-
-        return inventory;
-    });
 
     private static string Report(ArchiveInventory inventory)
     {
