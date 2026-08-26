@@ -75,6 +75,12 @@ internal static class ArchiveFailure
             + "without a list would order every archive by file name and name a winner for every "
             + "contest, and those winners would be wrong wherever this file disagreed.",
 
+        ArchiveFailureKind.MismatchedLoadOrder =>
+            $"The load order offered was computed over a different reading than the archives being "
+            + $"resolved - {subject}. Resolve against the order built from this same reading: an order "
+            + "from another one supplies ranks that were never measured for these archives, and where it "
+            + "supplies one for every carrier the winner reported is wrong with nothing said.",
+
         ArchiveFailureKind.NotADirectory =>
             $"There is a file at '{subject}', not a directory. The path resolves, so this is not a "
             + "missing install - it is a path that names the wrong kind of thing to enumerate archives "

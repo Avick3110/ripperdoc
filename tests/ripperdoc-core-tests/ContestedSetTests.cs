@@ -365,6 +365,67 @@ public sealed class ContestedSetTests
         Assert.Empty(contested.Contests);
     }
 
+    /// <summary>
+    /// An order computed over another reading is refused by kind.
+    /// </summary>
+    /// <remarks>
+    /// The dangerous arm is the one where nothing is missing: every carrier
+    /// still finds a position, so the contest is decided by ranks measured for
+    /// a different set of archives and the winner reported is simply wrong.
+    /// </remarks>
+    [Fact]
+    public void AnOrderFromAnotherReadingIsRefusedRatherThanDecidingContestsByIt()
+    {
+        var here = Inventory(
+            Carrying("rdp_b.archive", (1, ContestedPath)),
+            Carrying("rdp_c.archive", (1, ContestedPath)));
+        var elsewhere = Inventory(
+            Carrying("rdp_b.archive", (1, ContestedPath)),
+            Carrying("rdp_c.archive", (1, ContestedPath)),
+            Carrying("rdp_a.archive", (9, @"base\rdp\other.json")));
+
+        var failure = Assert.Throws<ArchiveReadException>(
+            () => ContestedSet.Of(here, ArchiveLoadOrder.Of(elsewhere, Modlist.Absent)));
+
+        Assert.Equal(ArchiveFailureKind.MismatchedLoadOrder, failure.Kind);
+        Assert.Contains("rdp_a.archive", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An order that does not cover these archives is refused, not crashed on.
+    /// </summary>
+    [Fact]
+    public void AnOrderThatCoversNoneOfTheseArchivesIsRefusedByKind()
+    {
+        var here = Inventory(Carrying("rdp_b.archive", (1, ContestedPath)));
+        var elsewhere = Inventory(Carrying("rdp_z.archive", (1, ContestedPath)));
+
+        var failure = Assert.Throws<ArchiveReadException>(
+            () => ContestedSet.Of(here, ArchiveLoadOrder.Of(elsewhere, Modlist.Absent)));
+
+        Assert.Equal(ArchiveFailureKind.MismatchedLoadOrder, failure.Kind);
+        Assert.Contains("rdp_b.archive", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The order built from this reading is the one that resolves it.
+    /// </summary>
+    /// <remarks>
+    /// The accepting arm of the same conditional. Without it a refusal that
+    /// fired on everything would satisfy the two arms above.
+    /// </remarks>
+    [Fact]
+    public void TheOrderBuiltFromThisReadingResolvesIt()
+    {
+        var inventory = Inventory(
+            Carrying("rdp_a.archive", (1, ContestedPath)),
+            Carrying("rdp_b.archive", (1, ContestedPath)));
+
+        var contested = ContestedSet.Of(inventory, ArchiveLoadOrder.Of(inventory, Modlist.Absent));
+
+        Assert.Equal("rdp_a.archive", Assert.Single(contested.Contests).Winner);
+    }
+
     [Fact]
     public void TheBasisIsStatedAndTheResourcesItDidNotExamineAreCounted()
     {
@@ -397,6 +458,9 @@ public sealed class ContestedSetTests
         ArchiveContents.Read(
             fileName,
             entries.Select(entry => new ArchiveEntry(entry.Hash, entry.Name, 1, 1)).ToList());
+
+    private static ArchiveInventory Inventory(params ArchiveContents[] archives) =>
+        new(archives, [], default);
 
     private static ContestedSet Resolve(string[]? modlist, params ArchiveContents[] archives)
     {
