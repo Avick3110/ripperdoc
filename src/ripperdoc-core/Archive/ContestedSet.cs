@@ -136,12 +136,13 @@ public sealed class ContestedSet
         var contests = new List<ContestedResource>();
         foreach (var pair in carriedBy.OrderBy(pair => pair.Key))
         {
-            if (pair.Value.Select(carrier => carrier.FileName).Distinct(StringComparer.Ordinal).Count() < 2)
+            // Whether this is a contest at all is decided by the same
+            // computation that resolves one, so the two cannot disagree about
+            // how many archives carry the resource.
+            if (Resolve(pair.Key, pair.Value, order) is { } contest)
             {
-                continue;
+                contests.Add(contest);
             }
-
-            contests.Add(Resolve(pair.Key, pair.Value, order));
         }
 
         var unread = inventory.Archives
@@ -157,18 +158,24 @@ public sealed class ContestedSet
             Demoted(contests, order));
     }
 
-    private static ContestedResource Resolve(ulong hash, List<Carrier> carriers, ArchiveLoadOrder order)
+    private static ContestedResource? Resolve(ulong hash, List<Carrier> carriers, ArchiveLoadOrder order)
     {
         var ranked = carriers
-            // Every carrier came from the inventory this order was built over,
-            // so an archive with no position is impossible rather than handled.
-            // Were it handled, the handling would have to invent a load
-            // position, and a contest would then be decided by it.
             .Select(carrier => order.PositionOf(carrier.FileName)!.Value)
+            // A contest is between archives, not between index rows. One
+            // archive can hold a hash more than once, and two spellings of one
+            // name answer to one position; either would otherwise let an
+            // archive tie itself and unmake a winner the law names.
+            .DistinctBy(position => position.FileName, ArchiveFileNames.Comparer)
             .Select(position => new ContestCarrier(position.FileName, position.Rank, position.IsListed))
             .OrderBy(carrier => carrier.Rank)
             .ThenBy(carrier => carrier.FileName, StringComparer.Ordinal)
             .ToList();
+
+        if (ranked.Count < 2)
+        {
+            return null;
+        }
 
         var leadingRank = ranked[0].Rank;
         var leading = ranked.Where(carrier => carrier.Rank == leadingRank).ToList();

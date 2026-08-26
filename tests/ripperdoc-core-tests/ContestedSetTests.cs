@@ -300,6 +300,71 @@ public sealed class ContestedSetTests
         Assert.Equal(ResourceDisplay.Of(hash, name), Assert.Single(contested.Contests).Display);
     }
 
+    /// <summary>
+    /// An archive carrying one resource twice carries it once for precedence.
+    /// </summary>
+    /// <remarks>
+    /// A contest is between archives, not between the rows an index happens to
+    /// hold. Deriving the leading set from rows lets one archive tie itself and
+    /// report no winner for a contest the law decides outright.
+    /// </remarks>
+    [Fact]
+    public void OneArchiveCarryingAResourceTwiceStillWinsItOutright()
+    {
+        var contested = Resolve(
+            modlist: null,
+            Carrying("rdp_a.archive", (1, ContestedPath), (1, ContestedPath)),
+            Carrying("rdp_b.archive", (1, ContestedPath)));
+
+        var contest = Assert.Single(contested.Contests);
+        Assert.Equal("rdp_a.archive", contest.Winner);
+        Assert.True(contest.HasDeterminedWinner);
+        Assert.Empty(contest.UndeterminedAmong);
+        Assert.Equal(
+            new[] { "rdp_a.archive", "rdp_b.archive" },
+            contest.Carriers.Select(carrier => carrier.FileName));
+    }
+
+    /// <summary>
+    /// Two spellings of one archive name are one carrier.
+    /// </summary>
+    /// <remarks>
+    /// Names are matched case-insensitively, so the two spellings answer to one
+    /// load position. Counting them as two carriers would tie that position
+    /// with itself and report no winner for a contest a third archive loses
+    /// outright.
+    /// </remarks>
+    [Fact]
+    public void TwoSpellingsOfOneArchiveNameAreOneCarrier()
+    {
+        var contested = Resolve(
+            modlist: null,
+            Carrying("Foo.archive", (1, ContestedPath)),
+            Carrying("foo.archive", (1, ContestedPath)),
+            Carrying("rdp_z.archive", (1, ContestedPath)));
+
+        var contest = Assert.Single(contested.Contests);
+        Assert.Equal("Foo.archive", contest.Winner);
+        Assert.True(contest.HasDeterminedWinner);
+        Assert.Empty(contest.UndeterminedAmong);
+        Assert.Equal(
+            new[] { "Foo.archive", "rdp_z.archive" },
+            contest.Carriers.Select(carrier => carrier.FileName));
+    }
+
+    /// <summary>
+    /// One archive carrying a resource twice is not a contest with itself.
+    /// </summary>
+    [Fact]
+    public void AResourceOneArchiveCarriesTwiceIsNoContest()
+    {
+        var contested = Resolve(
+            modlist: null,
+            Carrying("rdp_a.archive", (1, ContestedPath), (1, ContestedPath)));
+
+        Assert.Empty(contested.Contests);
+    }
+
     [Fact]
     public void TheBasisIsStatedAndTheResourcesItDidNotExamineAreCounted()
     {
