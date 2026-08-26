@@ -242,6 +242,33 @@ public sealed class ArchiveLoadOrderTests : IDisposable
             name => Assert.Contains(name, modlist.ListedNames, StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// Archives sharing a rank are presented in file-name order.
+    /// </summary>
+    /// <remarks>
+    /// Presentational only - within one rank this project does not know which
+    /// loads first. What it does have to be is the same on every run, so the
+    /// archive whose name sorts last is written to the directory first here:
+    /// an order handing back the sequence it enumerated would fail.
+    /// </remarks>
+    [Fact]
+    public void ArchivesSharingARankArePresentedInFileNameOrder()
+    {
+        SyntheticArchive.Write(_directory, "rdp_zulu.archive", @"base\rdp\z.json");
+        SyntheticArchive.Write(_directory, "rdp_alpha.archive", @"base\rdp\a.json");
+        SyntheticArchive.Write(_directory, "rdp_listed.archive", @"base\rdp\l.json");
+        WriteModlist("rdp_listed.archive");
+
+        var order = Order();
+        var shared = order.Positions.Where(position => !position.IsListed).ToList();
+
+        Assert.Equal(
+            new[] { "rdp_alpha.archive", "rdp_zulu.archive" },
+            shared.Select(position => position.FileName));
+        Assert.Single(shared.Select(position => position.Rank).Distinct());
+        Assert.False(order.IsFullyOrdered);
+    }
+
     [Fact]
     public void AListEntryMatchesAnArchiveWhoseNameDiffersOnlyInCase()
     {

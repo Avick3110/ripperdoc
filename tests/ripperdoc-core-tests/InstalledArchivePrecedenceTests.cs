@@ -220,16 +220,15 @@ public class InstalledArchivePrecedenceTests
     }
 
     /// <summary>
-    /// Each archive's index is read once, and the resolution reads none.
+    /// Two resolutions over one reading of the real lane agree.
     /// </summary>
     /// <remarks>
-    /// Resolving is arithmetic over a model already in memory. A per-query open
-    /// is the cost shape that makes a whole-install answer impossible at real
-    /// scale, so what is held here is that a second resolution over one reading
-    /// costs no read at all.
+    /// What this reads is agreement, over a lane whose scale is what makes it
+    /// worth reading at all. It does not observe archive opens and is not
+    /// evidence about them.
     /// </remarks>
     [Fact]
-    public void ResolvingAgainOverOneReadingTouchesNoArchive()
+    public void ResolvingAgainOverOneReadingAgreesWithTheFirstResolution()
     {
         var inventory = InstalledModArchivesFixture.DictionaryLessReading;
         var modlist = Modlist.Read(InstalledModArchivesFixture.ModDirectory);

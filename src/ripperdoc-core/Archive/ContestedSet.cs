@@ -5,9 +5,9 @@ namespace Ripperdoc.Core.Archive;
 /// the measured law names.
 /// </summary>
 /// <remarks>
-/// Computed from the indices already in the inventory. No archive is reopened,
-/// because a per-query open is the cost shape that makes a whole-install answer
-/// impossible at real scale.
+/// Resolution is given a reading rather than a path, because a per-query open
+/// is the cost shape that makes a whole-install answer impossible at real
+/// scale.
 /// <para>
 /// Three things this artifact says about itself, because each of them is a way
 /// its numbers could otherwise be read as more than they are: what the contests
