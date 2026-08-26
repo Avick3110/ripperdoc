@@ -571,18 +571,26 @@ public sealed class ContestedSetTests
         Assert.Equal(2, contested.ResourcesUncontestedAtThisBasis);
     }
 
+    /// <summary>
+    /// Contests come back ordered by hash, whatever order they were met in.
+    /// </summary>
+    /// <remarks>
+    /// The hashes here are carried in descending order, so a set that handed
+    /// back the order it accumulated them in would fail. Two resolutions in one
+    /// process agree whether or not anything sorts, which is why agreement is
+    /// not what is asserted.
+    /// </remarks>
     [Fact]
-    public void TwoRunsOverTheSameInventoryProduceTheSameList()
+    public void ContestsComeBackOrderedByHashRatherThanInTheOrderTheyWereMet()
     {
-        var archives = new[]
-        {
-            Carrying("rdp_z.archive", (3, @"base\rdp\c.json"), (1, ContestedPath)),
-            Carrying("rdp_a.archive", (1, ContestedPath), (3, @"base\rdp\c.json")),
-        };
+        var contested = Resolve(
+            modlist: null,
+            Carrying("rdp_a.archive", (9, @"base\rdp\c.json"), (5, @"base\rdp\b.json"), (1, ContestedPath)),
+            Carrying("rdp_b.archive", (9, @"base\rdp\c.json"), (5, @"base\rdp\b.json"), (1, ContestedPath)));
 
         Assert.Equal(
-            Resolve(null, archives).Contests.Select(contest => contest.Display),
-            Resolve(null, archives).Contests.Select(contest => contest.Display));
+            new ulong[] { 1, 5, 9 },
+            contested.Contests.Select(contest => contest.Hash));
     }
 
     private static ArchiveContents Carrying(string fileName, params (ulong Hash, string? Name)[] entries) =>

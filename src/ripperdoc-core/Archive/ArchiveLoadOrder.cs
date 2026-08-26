@@ -45,11 +45,9 @@ public sealed class ArchiveLoadOrder
         _byName = new Dictionary<string, ArchiveLoadPosition>(ArchiveFileNames.Comparer);
         foreach (var position in positions)
         {
-            // First spelling wins rather than throwing. Two files whose names
-            // differ only in case cannot exist in one Windows directory, and a
-            // tree copied to a file system where they can is not a reason to
-            // end a read - both answer to the one thing the list said about
-            // that name.
+            // Two files whose names differ only in case cannot exist in one
+            // Windows directory, and a tree copied to a file system where they
+            // can is not a reason to end a read.
             _byName.TryAdd(position.FileName, position);
         }
     }
