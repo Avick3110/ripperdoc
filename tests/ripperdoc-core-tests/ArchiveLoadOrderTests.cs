@@ -214,14 +214,6 @@ public sealed class ArchiveLoadOrderTests : IDisposable
     }
 
     /// <summary>
-    /// A list entry spelled in another case names the archive it names.
-    /// </summary>
-    /// <remarks>
-    /// The directory is a Windows path, so the two spellings are one file. A
-    /// case-sensitive match would order this archive as unlisted and report a
-    /// winner the game does not agree with, without saying anything was wrong.
-    /// </remarks>
-    /// <summary>
     /// A repeat spelled differently is reported at the spelling that was kept.
     /// </summary>
     /// <remarks>
@@ -269,6 +261,14 @@ public sealed class ArchiveLoadOrderTests : IDisposable
         Assert.False(order.IsFullyOrdered);
     }
 
+    /// <summary>
+    /// A list entry spelled in another case names the archive it names.
+    /// </summary>
+    /// <remarks>
+    /// The directory is a Windows path, so the two spellings are one file. A
+    /// case-sensitive match would order this archive as unlisted and report a
+    /// winner the game does not agree with, without saying anything was wrong.
+    /// </remarks>
     [Fact]
     public void AListEntryMatchesAnArchiveWhoseNameDiffersOnlyInCase()
     {
