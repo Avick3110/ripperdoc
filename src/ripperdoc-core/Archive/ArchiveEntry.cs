@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace Ripperdoc.Core.Archive;
 
 /// <summary>
@@ -33,6 +31,5 @@ public readonly record struct ArchiveEntry(ulong Hash, string? Name, uint Size, 
     /// This is the property that makes "report by hash, never omit" true at
     /// the point a caller prints a row.
     /// </remarks>
-    public string Display =>
-        string.IsNullOrEmpty(Name) ? Hash.ToString(CultureInfo.InvariantCulture) : Name;
+    public string Display => ResourceDisplay.Of(Hash, Name);
 }

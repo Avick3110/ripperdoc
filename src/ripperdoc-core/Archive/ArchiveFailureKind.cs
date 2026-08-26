@@ -47,4 +47,15 @@ public enum ArchiveFailureKind
     /// The mod directory itself could not be listed.
     /// </summary>
     InaccessibleModDirectory,
+
+    /// <summary>
+    /// The mod directory has a list file and it could not be read.
+    /// </summary>
+    /// <remarks>
+    /// Its own kind because of what the alternative costs. A list that cannot
+    /// be read is not a directory without one, and treating it as one orders
+    /// every archive by file name - a complete, confident set of winners that
+    /// is wrong wherever the list disagreed.
+    /// </remarks>
+    UnreadableModlist,
 }

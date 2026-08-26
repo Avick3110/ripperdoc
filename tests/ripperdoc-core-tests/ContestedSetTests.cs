@@ -1,0 +1,312 @@
+using Ripperdoc.Core.Archive;
+using Xunit;
+
+namespace Ripperdoc.Core.Tests;
+
+/// <summary>
+/// Which archive wins a contested resource, and what the answer says about
+/// itself.
+/// </summary>
+/// <remarks>
+/// Built from inventories rather than from written archives. An archive this
+/// project authors carries its own paths, so it cannot express a contested
+/// resource nothing can name - and a real lane is full of them. The law's own
+/// decision tables are reproduced over real containers, in
+/// <see cref="ArchiveLoadOrderTests" />.
+/// </remarks>
+public sealed class ContestedSetTests
+{
+    private const string ContestedPath = @"base\rdp\contested.json";
+
+    [Fact]
+    public void AResourceOnlyOneArchiveCarriesIsNoContest()
+    {
+        var contested = Resolve(
+            modlist: null,
+            Carrying("rdp_a.archive", (1, ContestedPath)),
+            Carrying("rdp_b.archive", (2, @"base\rdp\other.json")));
+
+        Assert.Empty(contested.Contests);
+        Assert.Equal(2, contested.DistinctResourceCount);
+        Assert.Equal(2, contested.ResourcesUncontestedAtThisBasis);
+    }
+
+    [Fact]
+    public void TheCarrierThatLoadsFirstWinsAndTheRestAreShadowed()
+    {
+        var contested = Resolve(
+            modlist: null,
+            Carrying("rdp_a.archive", (1, ContestedPath)),
+            Carrying("rdp_b.archive", (1, ContestedPath)),
+            Carrying("rdp_c.archive", (1, ContestedPath)));
+
+        var contest = Assert.Single(contested.Contests);
+
+        Assert.Equal("rdp_a.archive", contest.Winner);
+        Assert.Equal(new[] { "rdp_b.archive", "rdp_c.archive" }, contest.Shadowed);
+        Assert.Empty(contest.UndeterminedAmong);
+        Assert.Equal(
+            new[] { "rdp_a.archive", "rdp_b.archive", "rdp_c.archive" },
+            contest.Carriers.Select(carrier => carrier.FileName));
+    }
+
+    /// <summary>
+    /// A contest the law does not decide gets no winner.
+    /// </summary>
+    /// <remarks>
+    /// The order among archives a present list does not name was never
+    /// measured, so a contest whose leading carriers are all unlisted has a
+    /// winner this project cannot name. Naming one anyway would be a confident
+    /// answer to a question nothing has answered - and it would be right half
+    /// the time, which is the worst rate for a claim nobody re-checks.
+    /// </remarks>
+    [Fact]
+    public void AContestBetweenTwoUnlistedArchivesHasNoWinnerAndSaysWhichTheyAre()
+    {
+        var contested = Resolve(
+            modlist: ["rdp_listed.archive"],
+            Carrying("rdp_listed.archive", (9, @"base\rdp\listed.json")),
+            Carrying("rdp_a.archive", (1, ContestedPath)),
+            Carrying("rdp_b.archive", (1, ContestedPath)));
+
+        var contest = Assert.Single(contested.Contests);
+
+        Assert.Null(contest.Winner);
+        Assert.False(contest.HasDeterminedWinner);
+        Assert.Equal(new[] { "rdp_a.archive", "rdp_b.archive" }, contest.UndeterminedAmong);
+        Assert.Empty(contest.Shadowed);
+        Assert.Equal(1, contested.UndeterminedCount);
+    }
+
+    /// <summary>
+    /// An archive below an unresolved pair has still lost.
+    /// </summary>
+    /// <remarks>
+    /// Not knowing which of two archives wins is a different thing from not
+    /// knowing whether a third one does. The third is ranked below both, so its
+    /// version is out either way, and reporting it as undetermined would spend
+    /// a caller's attention on a question that is settled.
+    /// </remarks>
+    [Fact]
+    public void ACarrierRankedBelowAnUnresolvedPairIsShadowedRatherThanUndetermined()
+    {
+        // The listed archive carries a different resource here, so the contest
+        // is between the two unlisted ones only; below, it carries the
+        // contested one and outranks them both.
+        var contested = Resolve(
+            modlist: ["rdp_listed.archive"],
+            Carrying("rdp_listed.archive", (9, @"base\rdp\listed.json")),
+            Carrying("rdp_a.archive", (1, ContestedPath)),
+            Carrying("rdp_b.archive", (1, ContestedPath)));
+
+        var withListedCarrier = Resolve(
+            modlist: ["rdp_listed.archive"],
+            Carrying("rdp_listed.archive", (1, ContestedPath)),
+            Carrying("rdp_a.archive", (1, ContestedPath)),
+            Carrying("rdp_b.archive", (1, ContestedPath)));
+
+        Assert.Empty(Assert.Single(contested.Contests).Shadowed);
+
+        var contest = Assert.Single(withListedCarrier.Contests);
+        Assert.Equal("rdp_listed.archive", contest.Winner);
+        Assert.Equal(new[] { "rdp_a.archive", "rdp_b.archive" }, contest.Shadowed);
+        Assert.Empty(contest.UndeterminedAmong);
+    }
+
+    /// <summary>
+    /// An archive losing every contest to the list is reported as such.
+    /// </summary>
+    /// <remarks>
+    /// The state the measurement calls out as invisible: the archive loads, it
+    /// works, and it contributes nothing to anything it shares, because it is
+    /// not on a list. Resolving the winners correctly still leaves that
+    /// unsaid, so it is computed and named.
+    /// </remarks>
+    [Fact]
+    public void AnUnlistedArchiveThatLosesEveryContestToTheListIsNamed()
+    {
+        var contested = Resolve(
+            modlist: ["rdp_listed.archive"],
+            Carrying("rdp_listed.archive", (1, ContestedPath), (2, @"base\rdp\second.json")),
+            Carrying("rdp_newcomer.archive", (1, ContestedPath), (2, @"base\rdp\second.json")));
+
+        var demotion = Assert.Single(contested.Demotions);
+
+        Assert.Equal("rdp_newcomer.archive", demotion.FileName);
+        Assert.Equal(2, demotion.ContestsCarried);
+        Assert.Equal(2, demotion.ContestsLostToListedArchives);
+        Assert.Equal(0, demotion.ContestsUndetermined);
+        Assert.True(demotion.LosesEveryContestToTheList);
+    }
+
+    [Fact]
+    public void AnUnlistedArchiveThatLosesOneContestAndTiesAnotherIsNotLosingEveryContest()
+    {
+        var contested = Resolve(
+            modlist: ["rdp_listed.archive"],
+            Carrying("rdp_listed.archive", (1, ContestedPath)),
+            Carrying("rdp_newcomer.archive", (1, ContestedPath), (2, @"base\rdp\second.json")),
+            Carrying("rdp_other.archive", (2, @"base\rdp\second.json")));
+
+        var demotion = Assert.Single(
+            contested.Demotions, entry => entry.FileName == "rdp_newcomer.archive");
+
+        Assert.Equal(2, demotion.ContestsCarried);
+        Assert.Equal(1, demotion.ContestsLostToListedArchives);
+        Assert.Equal(1, demotion.ContestsUndetermined);
+        Assert.False(demotion.LosesEveryContestToTheList);
+    }
+
+    /// <summary>
+    /// With no list file there is nothing to be demoted by.
+    /// </summary>
+    /// <remarks>
+    /// Precedence then follows file names, which a reader can see and a rename
+    /// can change. The hazard this reports is the one a rename cannot fix.
+    /// </remarks>
+    [Fact]
+    public void WithNoListFileNoArchiveIsReportedAsDemoted()
+    {
+        var contested = Resolve(
+            modlist: null,
+            Carrying("rdp_a.archive", (1, ContestedPath)),
+            Carrying("rdp_b.archive", (1, ContestedPath)));
+
+        Assert.Empty(contested.Demotions);
+        Assert.Equal("rdp_a.archive", Assert.Single(contested.Contests).Winner);
+    }
+
+    /// <summary>
+    /// A set computed over archives that could not all be read says so.
+    /// </summary>
+    /// <remarks>
+    /// An archive nothing could read may carry any of these resources, and
+    /// where it ranks first it wins one. So a winner named here can be wrong,
+    /// and the artifact has to carry that rather than present itself as the
+    /// whole directory.
+    /// </remarks>
+    [Fact]
+    public void AnArchiveThatCouldNotBeReadLeavesTheSetIncompleteAndNamed()
+    {
+        var inventory = new ArchiveInventory(
+            [
+                ArchiveContents.Read("rdp_a.archive", [new ArchiveEntry(1, ContestedPath, 1, 1)]),
+                ArchiveContents.Read("rdp_b.archive", [new ArchiveEntry(1, ContestedPath, 1, 1)]),
+                ArchiveContents.Unreadable("rdp_broken.archive", ArchiveFailureKind.MalformedContainer, "it raised"),
+            ],
+            [],
+            default);
+
+        var contested = ContestedSet.Of(inventory, ArchiveLoadOrder.Of(inventory, Modlist.Absent));
+
+        Assert.False(contested.IsComplete);
+        Assert.Equal(new[] { "rdp_broken.archive" }, contested.UnreadArchives);
+
+        // The archives that were read still resolve. An unreadable one costs
+        // its own contents, not everyone else's answer.
+        Assert.Equal("rdp_a.archive", Assert.Single(contested.Contests).Winner);
+    }
+
+    /// <summary>
+    /// A contested resource nothing can name is reported by hash.
+    /// </summary>
+    /// <remarks>
+    /// The naming posture's whole point, carried into the artifact the archive
+    /// layer exists to produce. A contested set that dropped its nameless
+    /// entries would report fewer contests than there are and call the number
+    /// complete.
+    /// </remarks>
+    [Fact]
+    public void AContestedResourceWithNoNameIsReportedByHash()
+    {
+        var contested = Resolve(
+            modlist: null,
+            Carrying("rdp_a.archive", (4242, null)),
+            Carrying("rdp_b.archive", (4242, null)));
+
+        var contest = Assert.Single(contested.Contests);
+
+        Assert.False(contest.IsNamed);
+        Assert.Equal("4242", contest.Display);
+        Assert.Equal("rdp_a.archive", contest.Winner);
+    }
+
+    [Fact]
+    public void AResourceNamedByOneCarrierAndNamelessInAnotherIsNamed()
+    {
+        var contested = Resolve(
+            modlist: null,
+            Carrying("rdp_a.archive", (4242, null)),
+            Carrying("rdp_b.archive", (4242, ContestedPath)));
+
+        var contest = Assert.Single(contested.Contests);
+
+        Assert.True(contest.IsNamed);
+        Assert.Equal(ContestedPath, contest.Name);
+    }
+
+    /// <summary>
+    /// A resource is written the same way wherever it is reported.
+    /// </summary>
+    /// <remarks>
+    /// Two artifacts print resources and both have to mean the same thing by
+    /// "report by hash, never omit". Each is held against the one home of that
+    /// rule rather than against the other, so a site that grew a private copy
+    /// of it fails here the moment the shared one changes.
+    /// </remarks>
+    [Theory]
+    [InlineData(7UL, null)]
+    [InlineData(7UL, ContestedPath)]
+    [InlineData(0UL, "")]
+    public void TheEntryAndTheContestWriteAResourceTheSameWay(ulong hash, string? name)
+    {
+        var contested = Resolve(
+            modlist: null,
+            Carrying("rdp_a.archive", (hash, name)),
+            Carrying("rdp_b.archive", (hash, name)));
+
+        Assert.Equal(ResourceDisplay.Of(hash, name), new ArchiveEntry(hash, name, 1, 1).Display);
+        Assert.Equal(ResourceDisplay.Of(hash, name), Assert.Single(contested.Contests).Display);
+    }
+
+    [Fact]
+    public void TheBasisIsStatedAndTheResourcesItDidNotExamineAreCounted()
+    {
+        var contested = Resolve(
+            modlist: null,
+            Carrying("rdp_a.archive", (1, ContestedPath), (2, @"base\rdp\a.json")),
+            Carrying("rdp_b.archive", (1, ContestedPath), (3, @"base\rdp\b.json")));
+
+        Assert.Equal(ContestBasis.ResourcePath, contested.Basis);
+        Assert.Equal(3, contested.DistinctResourceCount);
+        Assert.Equal(1, contested.ContestedCount);
+        Assert.Equal(2, contested.ResourcesUncontestedAtThisBasis);
+    }
+
+    [Fact]
+    public void TwoRunsOverTheSameInventoryProduceTheSameList()
+    {
+        var archives = new[]
+        {
+            Carrying("rdp_z.archive", (3, @"base\rdp\c.json"), (1, ContestedPath)),
+            Carrying("rdp_a.archive", (1, ContestedPath), (3, @"base\rdp\c.json")),
+        };
+
+        Assert.Equal(
+            Resolve(null, archives).Contests.Select(contest => contest.Display),
+            Resolve(null, archives).Contests.Select(contest => contest.Display));
+    }
+
+    private static ArchiveContents Carrying(string fileName, params (ulong Hash, string? Name)[] entries) =>
+        ArchiveContents.Read(
+            fileName,
+            entries.Select(entry => new ArchiveEntry(entry.Hash, entry.Name, 1, 1)).ToList());
+
+    private static ContestedSet Resolve(string[]? modlist, params ArchiveContents[] archives)
+    {
+        var inventory = new ArchiveInventory(archives, [], default);
+        var list = modlist is null ? Modlist.Absent : Modlist.Of(modlist);
+
+        return ContestedSet.Of(inventory, ArchiveLoadOrder.Of(inventory, list));
+    }
+}
