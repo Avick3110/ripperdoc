@@ -178,8 +178,11 @@ public sealed class ArchiveLoadOrder
             .Select(name => listedRanks.TryGetValue(name, out var rank)
                 ? new ArchiveLoadPosition(name, rank, IsListed: true)
                 : new ArchiveLoadPosition(name, unlistedRank, IsListed: false))
+            // Ordering by rank only. The names went in sorted and this sort is
+            // stable, so archives sharing a rank keep that order; a second key
+            // here would be a third guarantee of the same thing, and it was
+            // masking which one actually holds it.
             .OrderBy(position => position.Rank)
-            .ThenBy(position => position.FileName, StringComparer.Ordinal)
             .ToList();
 
         var present = new HashSet<string>(fileNames, ArchiveFileNames.Comparer);
