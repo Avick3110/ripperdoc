@@ -471,6 +471,36 @@ public sealed class ContestedSetTests
     }
 
     /// <summary>
+    /// Two readings of one unchanged directory are still two readings.
+    /// </summary>
+    /// <remarks>
+    /// The arm a caller reaches by reading the same directory twice and pairing
+    /// the second reading with the first order, which is the ordinary way to
+    /// get this wrong. Nothing differs between them, so the refusal carries the
+    /// whole message here - including how many names they agree on, which is
+    /// what tells a reader the two are the same directory and not two.
+    /// </remarks>
+    [Fact]
+    public void TwoReadingsOfOneDirectoryAreRefusedRatherThanTakenForOne()
+    {
+        var first = Inventory(
+            Carrying("rdp_a.archive", (1, ContestedPath)),
+            Carrying("rdp_b.archive", (1, ContestedPath)));
+        var second = Inventory(
+            Carrying("rdp_a.archive", (1, ContestedPath)),
+            Carrying("rdp_b.archive", (1, ContestedPath)));
+
+        var failure = Assert.Throws<ArchiveReadException>(
+            () => ContestedSet.Of(second, ArchiveLoadOrder.Of(first, Modlist.Absent)));
+
+        Assert.Equal(ArchiveFailureKind.MismatchedLoadOrder, failure.Kind);
+        Assert.Contains(
+            "both cover the same 2 archive name(s), so they are two readings rather than one",
+            failure.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The order built from this reading is the one that resolves it.
     /// </summary>
     /// <remarks>
