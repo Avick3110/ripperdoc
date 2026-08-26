@@ -43,13 +43,16 @@ public sealed class ArchiveLoadOrder
         _inventory = inventory;
 
         _byName = new Dictionary<string, ArchiveLoadPosition>(ArchiveFileNames.Comparer);
+        var collapsed = new List<string>();
         foreach (var position in positions)
         {
-            // Two files whose names differ only in case cannot exist in one
-            // Windows directory, and a tree copied to a file system where they
-            // can is not a reason to end a read.
-            _byName.TryAdd(position.FileName, position);
+            if (!_byName.TryAdd(position.FileName, position))
+            {
+                collapsed.Add(position.FileName);
+            }
         }
+
+        ArchivesCollapsedByName = collapsed;
     }
 
     /// <summary>
@@ -75,6 +78,24 @@ public sealed class ArchiveLoadOrder
     /// this order wants to know before trusting it.
     /// </remarks>
     public IReadOnlyList<string> ListedButNotPresent { get; }
+
+    /// <summary>
+    /// Archives whose file name matches another archive's under the name-match
+    /// rule, each named at the spelling that kept no position of its own.
+    /// </summary>
+    /// <remarks>
+    /// Two files whose names differ only in case cannot exist in one Windows
+    /// directory, and a tree copied to a file system where they can is not a
+    /// reason to end a read. It is a reason to report, because a name is how
+    /// everything downstream asks this order about an archive, and a caller who
+    /// is not told that two answered to one name has nothing else to learn it
+    /// from.
+    /// <para>
+    /// What the game does with such a pair is not measured. This names what the
+    /// order could not tell apart, and no more.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> ArchivesCollapsedByName { get; }
 
     /// <summary>
     /// Whether every archive's place is known relative to every other's.
