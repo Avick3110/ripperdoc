@@ -105,7 +105,12 @@ public sealed class Modlist
 
         var listed = new List<string>();
         var repeated = new List<string>();
-        var seen = new HashSet<string>(ArchiveFileNames.Comparer);
+
+        // Keyed by the match rule, valued by the spelling first written down.
+        // A repeat spelled differently is the same name, and reporting the
+        // repeat's own spelling would hand back one no other collection here
+        // holds.
+        var firstSpelling = new Dictionary<string, string>(ArchiveFileNames.Comparer);
 
         foreach (var line in lines)
         {
@@ -115,13 +120,13 @@ public sealed class Modlist
                 continue;
             }
 
-            if (seen.Add(name))
+            if (firstSpelling.TryAdd(name, name))
             {
                 listed.Add(name);
             }
-            else if (!repeated.Contains(name, ArchiveFileNames.Comparer))
+            else if (!repeated.Contains(firstSpelling[name], ArchiveFileNames.Comparer))
             {
-                repeated.Add(name);
+                repeated.Add(firstSpelling[name]);
             }
         }
 

@@ -221,6 +221,27 @@ public sealed class ArchiveLoadOrderTests : IDisposable
     /// case-sensitive match would order this archive as unlisted and report a
     /// winner the game does not agree with, without saying anything was wrong.
     /// </remarks>
+    /// <summary>
+    /// A repeat spelled differently is reported at the spelling that was kept.
+    /// </summary>
+    /// <remarks>
+    /// The repeat is the same name under the match rule, so reporting its own
+    /// spelling would hand a caller a string that appears in neither the listed
+    /// names nor the order, and a cross-reference by exact text would find
+    /// nothing.
+    /// </remarks>
+    [Fact]
+    public void ARepeatedNameIsReportedAtTheSpellingTheListKept()
+    {
+        var modlist = Modlist.Of(["A.archive", "a.archive"]);
+
+        Assert.Equal(new[] { "A.archive" }, modlist.ListedNames);
+        Assert.Equal(new[] { "A.archive" }, modlist.RepeatedNames);
+        Assert.All(
+            modlist.RepeatedNames,
+            name => Assert.Contains(name, modlist.ListedNames, StringComparer.Ordinal));
+    }
+
     [Fact]
     public void AListEntryMatchesAnArchiveWhoseNameDiffersOnlyInCase()
     {
