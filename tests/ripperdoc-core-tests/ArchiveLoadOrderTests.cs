@@ -281,6 +281,34 @@ public sealed class ArchiveLoadOrderTests : IDisposable
         Assert.Empty(order.ListedButNotPresent);
     }
 
+    /// <summary>
+    /// Two archives one name answers to are named, and no others are.
+    /// </summary>
+    /// <remarks>
+    /// The pair is unreachable through a Windows directory, so the inventory is
+    /// built here rather than read. A third archive with a name of its own is
+    /// present so that the assertion fails in both directions: an order that
+    /// reported nothing and an order that reported every archive would each
+    /// disagree with it.
+    /// </remarks>
+    [Fact]
+    public void TwoArchivesOneNameAnswersToAreNamedRatherThanSilentlyCollapsed()
+    {
+        var inventory = new ArchiveInventory(
+            [
+                ArchiveContents.Read("Foo.archive", [new ArchiveEntry(1, @"base\rdp\shared.json", 1, 1)]),
+                ArchiveContents.Read("foo.archive", [new ArchiveEntry(1, @"base\rdp\shared.json", 1, 1)]),
+                ArchiveContents.Read(ArchiveA, [new ArchiveEntry(2, @"base\rdp\a.json", 1, 1)]),
+            ],
+            [],
+            default);
+
+        var order = ArchiveLoadOrder.Of(inventory, Modlist.Absent);
+
+        Assert.Equal(new[] { "foo.archive" }, order.ArchivesCollapsedByName);
+        Assert.Equal("Foo.archive", order.PositionOf("foo.archive")!.Value.FileName);
+    }
+
     [Fact]
     public void BlankLinesInTheListAreNotArchives()
     {
