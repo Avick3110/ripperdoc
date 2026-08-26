@@ -188,7 +188,9 @@ public sealed class ArchiveInventoryReader
         catch (Exception exception)
         {
             throw ArchiveFailure.Failure(
-                ArchiveFailure.Classify(exception, denied), modDirectory, exception);
+                ArchiveFailure.Classify(exception, denied, ArchiveOperation.DirectoryListing),
+                modDirectory,
+                exception);
         }
     }
 

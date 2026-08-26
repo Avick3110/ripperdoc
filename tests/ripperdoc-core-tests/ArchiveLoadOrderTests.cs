@@ -273,7 +273,9 @@ public sealed class ArchiveLoadOrderTests : IDisposable
         Assert.Equal(
             ArchiveFailureKind.UnreadableModlist,
             ArchiveFailure.Classify(
-                new UnauthorizedAccessException(), ArchiveFailureKind.UnreadableModlist));
+                new UnauthorizedAccessException(),
+                ArchiveFailureKind.UnreadableModlist,
+                ArchiveOperation.FileRead));
 
         var message = ArchiveFailure.Describe(
             ArchiveFailureKind.UnreadableModlist,
@@ -285,6 +287,61 @@ public sealed class ArchiveLoadOrderTests : IDisposable
         Assert.Contains("could not be read", message, StringComparison.Ordinal);
         Assert.Contains("no order is reported", message, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A list file held open by something else is refused as itself.
+    /// </summary>
+    /// <remarks>
+    /// The likeliest way a list file that exists fails to be read is that
+    /// another process has it, which raises no denial. Driven end to end
+    /// rather than through the classifier, because what is held is the kind
+    /// and sentence a caller actually receives.
+    /// </remarks>
+    [Fact]
+    public void AListFileAnotherProcessHoldsOpenIsRefusedAsUnreadableRatherThanUnclassified()
+    {
+        File.WriteAllText(Path.Combine(_directory, Modlist.FileName), ArchiveA + Environment.NewLine);
+
+        using var held = new FileStream(
+            Path.Combine(_directory, Modlist.FileName),
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.None);
+
+        var thrown = Assert.Throws<ArchiveReadException>(() => Modlist.Read(_directory));
+
+        Assert.Equal(ArchiveFailureKind.UnreadableModlist, thrown.Kind);
+        Assert.IsAssignableFrom<IOException>(thrown.InnerException);
+        Assert.Contains("could not be read", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("could not be enumerated", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// No failure of a file read is reported as an unclassified enumeration.
+    /// </summary>
+    /// <remarks>
+    /// The claim the operation seam makes. A file read reaches the classifier
+    /// only after the file was seen to exist, so there is no cause for which
+    /// the caller should be handed the listing wording.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(ReadFailures))]
+    public void NoCauseOfAFileReadFailureIsReportedAsAnUnclassifiedListing(Exception cause)
+    {
+        Assert.Equal(
+            ArchiveFailureKind.UnreadableModlist,
+            ArchiveFailure.Classify(cause, ArchiveFailureKind.UnreadableModlist, ArchiveOperation.FileRead));
+    }
+
+    public static IEnumerable<object[]> ReadFailures() =>
+    [
+        [new IOException("held open")],
+        [new UnauthorizedAccessException("denied")],
+        [new FileNotFoundException("removed between the check and the read")],
+        [new DirectoryNotFoundException("the directory went away")],
+        [new System.Security.SecurityException("refused by policy")],
+        [new NotSupportedException("the path names something unreadable")],
+    ];
 
     private void WriteTheThreeArchives()
     {

@@ -82,7 +82,10 @@ public sealed class Modlist
         catch (Exception exception)
         {
             throw ArchiveFailure.Failure(
-                ArchiveFailure.Classify(exception, ArchiveFailureKind.UnreadableModlist), path, exception);
+                ArchiveFailure.Classify(
+                    exception, ArchiveFailureKind.UnreadableModlist, ArchiveOperation.FileRead),
+                path,
+                exception);
         }
 
         return Of(lines);
