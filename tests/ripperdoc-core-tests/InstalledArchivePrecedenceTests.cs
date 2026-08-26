@@ -291,12 +291,21 @@ public class InstalledArchivePrecedenceTests
 
     private static string DemotionReport(ContestedSet contested)
     {
+        if (!contested.Order.Modlist.IsPresent)
+        {
+            return """
+                   this lane has no list file, so no archive here is demoted by one
+                     no demotion figures are reported for it, and the arm of this
+                     check that reads them did not run against this lane
+                   """;
+        }
+
         var wholly = contested.Demotions.Count(demotion => demotion.LosesEveryContestToTheList);
 
         return $"""
                 unlisted archives in contests ... {contested.Demotions.Count}
                   losing every contest .......... {wholly}
-                  shadowed resources ............ {contested.Demotions.Sum(demotion => demotion.ContestsLostToListedArchives)}
+                  resources lost to the list .... {contested.ResourcesLostToTheList}
                 """;
     }
 }

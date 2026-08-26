@@ -426,6 +426,74 @@ public sealed class ContestedSetTests
         Assert.Equal("rdp_a.archive", Assert.Single(contested.Contests).Winner);
     }
 
+    /// <summary>
+    /// A resource two unlisted archives lose is one resource, not two.
+    /// </summary>
+    /// <remarks>
+    /// The per-archive tallies answer "how did this archive fare"; summing
+    /// them counts a resource once per archive that lost it, which overstates
+    /// the hazard this wave exists to report.
+    /// </remarks>
+    [Fact]
+    public void AResourceLostByTwoUnlistedArchivesIsCountedOnce()
+    {
+        var contested = Resolve(
+            ["rdp_listed.archive"],
+            Carrying("rdp_listed.archive", (1, ContestedPath)),
+            Carrying("rdp_u1.archive", (1, ContestedPath)),
+            Carrying("rdp_u2.archive", (1, ContestedPath)));
+
+        Assert.Equal(1, contested.ResourcesLostToTheList);
+        Assert.Equal(2, contested.Demotions.Sum(demotion => demotion.ContestsLostToListedArchives));
+    }
+
+    /// <summary>
+    /// Every contested resource the list takes is counted.
+    /// </summary>
+    [Fact]
+    public void EachResourceTheListTakesFromAnUnlistedArchiveIsCounted()
+    {
+        var contested = Resolve(
+            ["rdp_listed.archive"],
+            Carrying("rdp_listed.archive", (1, ContestedPath), (2, @"base\rdp\second.json")),
+            Carrying("rdp_u1.archive", (1, ContestedPath), (2, @"base\rdp\second.json")));
+
+        Assert.Equal(2, contested.ResourcesLostToTheList);
+    }
+
+    /// <summary>
+    /// A contest between two unlisted archives is nobody's loss to the list.
+    /// </summary>
+    [Fact]
+    public void AResourceNoListedArchiveCarriesIsNotCountedAsLostToTheList()
+    {
+        var contested = Resolve(
+            ["rdp_listed.archive"],
+            Carrying("rdp_listed.archive", (9, @"base\rdp\elsewhere.json")),
+            Carrying("rdp_u1.archive", (1, ContestedPath)),
+            Carrying("rdp_u2.archive", (1, ContestedPath)));
+
+        Assert.Equal(0, contested.ResourcesLostToTheList);
+        Assert.Equal(1, contested.UndeterminedCount);
+    }
+
+    /// <summary>
+    /// With no list file nothing is lost to one, and that is not a measurement
+    /// of what is being shadowed.
+    /// </summary>
+    [Fact]
+    public void WithNoListFileNothingIsLostToTheList()
+    {
+        var contested = Resolve(
+            modlist: null,
+            Carrying("rdp_a.archive", (1, ContestedPath)),
+            Carrying("rdp_b.archive", (1, ContestedPath)));
+
+        Assert.Equal(0, contested.ResourcesLostToTheList);
+        Assert.Empty(contested.Demotions);
+        Assert.Single(contested.Contests);
+    }
+
     [Fact]
     public void TheBasisIsStatedAndTheResourcesItDidNotExamineAreCounted()
     {

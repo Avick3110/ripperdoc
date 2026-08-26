@@ -106,6 +106,24 @@ public sealed class ContestedSet
     public IReadOnlyList<ArchiveDemotion> Demotions { get; }
 
     /// <summary>
+    /// How many contested resources a listed archive takes from an unlisted
+    /// one.
+    /// </summary>
+    /// <remarks>
+    /// Counted once per resource. The per-archive tallies in
+    /// <see cref="Demotions" /> answer a different question and cannot be
+    /// summed into this one: two unlisted archives losing the same resource
+    /// are two tallies and one resource.
+    /// <para>
+    /// Zero under an absent list file, for the reason <see cref="Demotions" />
+    /// is empty there - not because nothing is being shadowed.
+    /// </para>
+    /// </remarks>
+    public int ResourcesLostToTheList => Contests.Count(contest =>
+        contest.Carriers.Any(carrier => !carrier.IsListed)
+        && contest.Carriers.Any(carrier => carrier.IsListed && carrier.FileName == contest.Winner));
+
+    /// <summary>
     /// Resolves an inventory's contests under a load order.
     /// </summary>
     /// <param name="inventory">The archives and what they carry.</param>
