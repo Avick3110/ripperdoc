@@ -71,20 +71,27 @@ public sealed class ContestedSet
     public int ResourcesUncontestedAtThisBasis => DistinctResourceCount - ContestedCount;
 
     /// <summary>
-    /// Archives whose index could not be read, so nothing is known about what
-    /// they carry.
+    /// Archives in the mod directory whose index could not be read, so nothing
+    /// is known about what they carry.
     /// </summary>
     public IReadOnlyList<string> UnreadArchives { get; }
 
     /// <summary>
-    /// Whether every archive in the directory contributed its entries.
+    /// Whether every archive the mod directory itself holds contributed its
+    /// entries.
     /// </summary>
     /// <remarks>
-    /// False means these contests are computed over part of the directory. An
+    /// False means these contests are computed over part of that set. An
     /// archive nothing could read may carry any of these resources, and where
     /// it ranks first it would win one - so an incomplete set can name a winner
     /// that is not the winner, and says so here rather than presenting itself
     /// as the whole picture.
+    /// <para>
+    /// It says nothing about archives in subdirectories. Whether the game loads
+    /// those is not measured, so they are not ordered, not resolved, and
+    /// reported by the inventory instead - which is the one place that fact
+    /// lives.
+    /// </para>
     /// </remarks>
     public bool IsComplete => UnreadArchives.Count == 0;
 

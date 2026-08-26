@@ -208,6 +208,37 @@ public sealed class ContestedSetTests
     }
 
     /// <summary>
+    /// An archive in a subdirectory neither joins the contests nor spoils the
+    /// completeness of the ones there are.
+    /// </summary>
+    /// <remarks>
+    /// Whether the game loads one is not measured, so it is not ordered and not
+    /// resolved. Counting it as unread would report the mod directory's own
+    /// answer as partial on account of a file the answer never claimed to
+    /// cover.
+    /// </remarks>
+    [Fact]
+    public void AnArchiveInASubdirectoryIsNeitherResolvedNorCountedAgainstTheSet()
+    {
+        var inventory = new ArchiveInventory(
+            [
+                ArchiveContents.Read("rdp_a.archive", [new ArchiveEntry(1, ContestedPath, 1, 1)]),
+                ArchiveContents.Read("rdp_b.archive", [new ArchiveEntry(1, ContestedPath, 1, 1)]),
+            ],
+            [@"nested\rdp_hidden.archive"],
+            default);
+
+        var contested = ContestedSet.Of(inventory, ArchiveLoadOrder.Of(inventory, Modlist.Absent));
+
+        Assert.True(contested.IsComplete);
+        Assert.Empty(contested.UnreadArchives);
+        Assert.Equal(2, contested.Order.Positions.Count);
+        Assert.DoesNotContain(
+            @"nested\rdp_hidden.archive",
+            Assert.Single(contested.Contests).Carriers.Select(carrier => carrier.FileName));
+    }
+
+    /// <summary>
     /// A contested resource nothing can name is reported by hash.
     /// </summary>
     /// <remarks>
