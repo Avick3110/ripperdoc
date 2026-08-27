@@ -120,6 +120,30 @@ public class ScriptAnnotationReaderTests
     }
 
     [Fact]
+    public void AGateWhoseConditionNeverClosesLeavesItsAnnotationUndecided()
+    {
+        // Where the gate's reach ends is what an unclosed condition takes away,
+        // so reading the annotation beneath it as live is a claim resting on the
+        // part that could not be read. Undetermined is the direction that costs
+        // a sentence rather than a wrong winner.
+        var text = "@if(ModuleExists(\"SomeOtherMod\")\n" + SyntheticScriptLayer.Replaces("T", "M");
+
+        Assert.True(Assert.Single(Read(text).Annotations).IsGated);
+    }
+
+    [Fact]
+    public void AnAnnotationStackedBetweenAGateAndItsTargetDoesNotBreakThePairing()
+    {
+        // Whether a gate reaches past another annotation stacked beneath it
+        // rests on a grammar this project has not measured, and of the two
+        // readings only one can name a mod that a false gate removed.
+        var text = "@if(ModuleExists(\"SomeOtherMod\"))\n@runtimeProperty(\"a\", \"b\")\n"
+            + SyntheticScriptLayer.Replaces("T", "M");
+
+        Assert.True(Assert.Single(Read(text).Annotations).IsGated);
+    }
+
+    [Fact]
     public void AGateInsideACommentGatesNothing()
     {
         var text = "// @if(ModuleExists(\"SomeOtherMod\"))\n" + SyntheticScriptLayer.Replaces("T", "M");

@@ -77,12 +77,15 @@ public static class ScriptAnnotationReader
         ArgumentNullException.ThrowIfNull(text);
 
         var blanked = ScriptText.Blanked(text);
-        var gateEnds = GateEnds(blanked);
+        var gates = Gates(blanked);
         var found = new List<ScriptAnnotation>();
         var unattached = new List<int>();
 
         var anyAnnotations = AnyAnnotationPattern.Matches(blanked);
         var annotationStarts = anyAnnotations.Select(m => m.Index).ToList();
+        var annotationSpans = anyAnnotations
+            .Select(m => (Start: m.Index, End: ScriptText.EndOfParenthesised(blanked, m.Index + m.Length - 1)))
+            .ToList();
 
         var matches = AnnotationPattern.Matches(blanked);
         var resolvedStarts = matches.Select(m => m.Index).ToHashSet();
@@ -130,7 +133,7 @@ public static class ScriptAnnotationReader
                 source,
                 ScriptText.LineAt(blanked, match.Index),
                 ReadWrappedCall(kind, blanked, declaration.Index),
-                IsGated(blanked, gateEnds, match.Index)));
+                IsGated(blanked, gates, annotationSpans, match.Index)));
         }
 
         // Two passes fill this list and they run in different orders, so it is
@@ -181,12 +184,20 @@ public static class ScriptAnnotationReader
     }
 
     /// <summary>
-    /// The index just past each conditional-compilation gate in the source, in
-    /// order.
+    /// Each conditional-compilation gate in the source: the index just past the
+    /// ones whose condition closes, and the start of the ones whose does not.
     /// </summary>
-    private static List<int> GateEnds(string blanked)
+    /// <remarks>
+    /// A gate whose condition never closes is kept rather than discarded. Its
+    /// reach is what cannot be read, and dropping it answers that unknown with
+    /// the one reading this layer may not fail into - the annotation beneath it
+    /// standing as live, joining a contest and taking or losing a method.
+    /// </remarks>
+    private static (List<int> Ends, List<int> UnclosedStarts) Gates(string blanked)
     {
         var ends = new List<int>();
+        var unclosedStarts = new List<int>();
+
         foreach (Match gate in GatePattern.Matches(blanked))
         {
             var end = ScriptText.EndOfParenthesised(blanked, gate.Index + gate.Length - 1);
@@ -194,9 +205,13 @@ public static class ScriptAnnotationReader
             {
                 ends.Add(end);
             }
+            else
+            {
+                unclosedStarts.Add(gate.Index);
+            }
         }
 
-        return ends;
+        return (ends, unclosedStarts);
     }
 
     /// <summary>
@@ -206,14 +221,26 @@ public static class ScriptAnnotationReader
     /// <remarks>
     /// A gate reaches exactly the one declaration that follows it, measured, so
     /// only the nearest gate above the annotation can be its own - and it is its
-    /// own only when nothing but whitespace lies between. Comments are already
-    /// blanked to spaces when this runs, which is why a comment between the two
-    /// does not break the pairing, as measured.
+    /// own only when nothing but whitespace and other annotations lies between.
+    /// Comments are already blanked to spaces when this runs, which is why a
+    /// comment between the two does not break the pairing, as measured.
     /// </remarks>
-    private static bool IsGated(string blanked, List<int> gateEnds, int annotationIndex)
+    private static bool IsGated(
+        string blanked,
+        (List<int> Ends, List<int> UnclosedStarts) gates,
+        IReadOnlyList<(int Start, int End)> annotationSpans,
+        int annotationIndex)
     {
+        foreach (var start in gates.UnclosedStarts)
+        {
+            if (start < annotationIndex)
+            {
+                return true;
+            }
+        }
+
         var nearest = -1;
-        foreach (var end in gateEnds)
+        foreach (var end in gates.Ends)
         {
             if (end <= annotationIndex && end > nearest)
             {
@@ -226,12 +253,50 @@ public static class ScriptAnnotationReader
             return false;
         }
 
-        for (var i = nearest; i < annotationIndex; i++)
+        return OnlyWhitespaceAndAnnotations(blanked, annotationSpans, nearest, annotationIndex);
+    }
+
+    /// <summary>
+    /// Whether the span between <paramref name="from" /> and
+    /// <paramref name="to" /> holds nothing but whitespace and whole
+    /// annotations.
+    /// </summary>
+    /// <remarks>
+    /// Whether a gate reaches past another annotation stacked beneath it rests
+    /// on a grammar this project has not measured. Of the two readings only one
+    /// can name a mod a false gate removed from the compile, so an annotation
+    /// standing between the gate and its target leaves the pairing intact. An
+    /// annotation whose own parentheses do not close has no readable extent
+    /// either, and the same direction applies to it.
+    /// </remarks>
+    private static bool OnlyWhitespaceAndAnnotations(
+        string blanked,
+        IReadOnlyList<(int Start, int End)> annotationSpans,
+        int from,
+        int to)
+    {
+        var index = from;
+
+        while (index < to)
         {
-            if (!char.IsWhiteSpace(blanked[i]))
+            if (char.IsWhiteSpace(blanked[index]))
+            {
+                index++;
+                continue;
+            }
+
+            var span = annotationSpans.FirstOrDefault(candidate => candidate.Start == index, (Start: -1, End: -1));
+            if (span.Start < 0)
             {
                 return false;
             }
+
+            if (span.End <= span.Start)
+            {
+                return true;
+            }
+
+            index = span.End;
         }
 
         return true;
