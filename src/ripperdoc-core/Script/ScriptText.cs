@@ -123,7 +123,12 @@ internal static class ScriptText
     /// </summary>
     /// <remarks>
     /// The index arrives on the opening quote and leaves past the closing one,
-    /// or at the end of the source when the literal does not close.
+    /// or past the line break ending the line the literal opened on. A literal
+    /// carried to the end of the source instead puts every annotation after one
+    /// stray quote inside a blanked span, which costs a whole file's carriers
+    /// and reports their contest as no contest; the line bound holds that cost
+    /// to the line the quote sits on. A line break the escape branch consumes
+    /// belongs to the literal and never reaches the bound.
     /// </remarks>
     private static void ScanString(string source, char[] result, ref int index)
     {
@@ -166,8 +171,15 @@ internal static class ScriptText
                 continue;
             }
 
+            if (source[index] == '\n')
+            {
+                result[index] = '\n';
+                index++;
+                return;
+            }
+
             var closing = source[index] == '"';
-            result[index] = source[index] == '\n' ? '\n' : ' ';
+            result[index] = ' ';
             index++;
 
             if (closing)

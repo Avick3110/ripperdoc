@@ -167,6 +167,21 @@ public class ScriptAnnotationReaderTests
     }
 
     [Fact]
+    public void AStrayQuoteCostsItsOwnLineAndNotTheRestOfTheFile()
+    {
+        // A literal run to the end of the file blanks every annotation after the
+        // quote, and a contest one carrier short is reported as no contest. The
+        // annotation below the stray quote is what tells the two bounds apart.
+        var reading = Read(
+            "public func L() -> Void {\n  let s = \"oops;\n}\n"
+            + "@replaceMethod(T)\npublic func M() -> String { return \"x\"; }\n");
+
+        var annotation = Assert.Single(reading.Annotations);
+        Assert.Equal("T", annotation.Method.TypeName);
+        Assert.Equal(4, annotation.Line);
+    }
+
+    [Fact]
     public void AnnotationShapedTextInsideAnInterpolatedStringIsNotAnAnnotation()
     {
         // Discriminating on purpose: one source carrying both a phantom inside a
