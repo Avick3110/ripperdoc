@@ -156,6 +156,26 @@ public class ScriptSourceOrderTests
     }
 
     [Fact]
+    public void AFileThatIsNotAScriptSourceIsLeftOutOfTheOrder()
+    {
+        // The exclusion half of the extension filter, which nothing asserted.
+        // A real script directory carries licence files and readmes beside the
+        // sources, and taking one into the order would have this engine read a
+        // non-source as script text and report a source count that is not the
+        // layer's.
+        using var layer = SyntheticScriptLayer.Of(
+            ("real.reds", "public class C {}\n"),
+            ("LICENSE", "not a script\n"),
+            ("readme.md", "@replaceMethod(T)\n"),
+            ("data.json", "{}\n"));
+
+        var enumeration = ScriptSourceOrder.Of(layer.Root);
+
+        Assert.Equal(["real.reds"], enumeration.Sources.Select(source => source.Path));
+        Assert.Empty(enumeration.SourcesNotSpelledInLowerCase);
+    }
+
+    [Fact]
     public void ADirectoryThatIsNotThereIsRefusedRatherThanReadAsAnEmptyLayer()
     {
         var missing = Path.Combine(Path.GetTempPath(), "ripperdoc-no-such-" + Guid.NewGuid().ToString("N"));
