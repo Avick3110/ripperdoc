@@ -81,6 +81,8 @@ public static class ScriptSourceOrder
         if (pluginSources is { Count: > 0 })
         {
             posture = PluginScriptPosture.Supplied;
+            RefuseSourcesAlreadyWalked(scriptDirectory, walked, pluginSources);
+
             foreach (var path in pluginSources)
             {
                 sources.Add(new ScriptSource(path, ScriptSourceOrigin.RuntimeExtensionPlugin, rank++));
@@ -88,6 +90,44 @@ public static class ScriptSourceOrder
         }
 
         return new ScriptEnumeration(sources, posture, oddlySpelled);
+    }
+
+    /// <summary>
+    /// Refuses a plugin-contributed path that the directory walk already found.
+    /// </summary>
+    /// <remarks>
+    /// Such a path would enter the order twice, and two ranks over one file
+    /// makes a contest out of a single annotation: the file would be reported as
+    /// replacing a method it replaces once, with the earlier of its two entries
+    /// named as a replacement that lost and does nothing. That sentence names a
+    /// mod, and it would be false. What the compiler does when a plugin
+    /// registers a path inside the script directory is not measured, so this
+    /// refuses rather than picking one of the two to drop.
+    /// </remarks>
+    private static void RefuseSourcesAlreadyWalked(
+        string scriptDirectory,
+        List<string> walked,
+        IReadOnlyList<string> pluginSources)
+    {
+        var alreadyWalked = walked
+            .Select(relative => Path.GetFullPath(Path.Combine(scriptDirectory, relative)))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var duplicated = pluginSources
+            .Where(path => alreadyWalked.Contains(Path.GetFullPath(path)))
+            .ToList();
+
+        if (duplicated.Count == 0)
+        {
+            return;
+        }
+
+        throw new ScriptReadException(
+            $"{duplicated.Count} plugin-contributed source(s) are also inside the script directory, "
+            + $"the first being '{duplicated[0]}'. No order is reported: the same file at two ranks "
+            + "is read as two annotations, which turns one replacement into a contest and reports "
+            + "the file as a replacement that lost and does nothing. Supply plugin sources that the "
+            + "walk does not already reach, or omit them and take the provisional reading.");
     }
 
     private static void Walk(string directory, string relative, List<string> into, List<string> oddlySpelled)

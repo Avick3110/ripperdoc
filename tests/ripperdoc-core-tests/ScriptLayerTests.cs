@@ -169,6 +169,46 @@ public class ScriptLayerTests
     }
 
     [Fact]
+    public void APluginSourceTheWalkAlreadyFoundIsRefusedRatherThanCountedTwice()
+    {
+        // The same file at two ranks reads as two annotations, which reports one
+        // replacement as a contest and names the file as a replacement that lost
+        // and does nothing. That sentence names a mod and would be false.
+        using var layer = SyntheticScriptLayer.Of(
+            ("inside.reds", SyntheticScriptLayer.Replaces(Type, Method)));
+
+        var inside = Path.Combine(layer.Root, "inside.reds");
+
+        var failure = Assert.Throws<ScriptReadException>(() => ScriptLayer.Read(layer.Root, [inside]));
+
+        Assert.Contains("also inside the script directory", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("inside.reds", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReadingsShortOfTheEnumerationAreRefusedRatherThanResolved()
+    {
+        // Resolving over part of the order names whichever source is last among
+        // the part, which is a different mod, with nothing said.
+        using var layer = SyntheticScriptLayer.Of(
+            ("a.reds", SyntheticScriptLayer.Replaces(Type, Method)),
+            ("b.reds", SyntheticScriptLayer.Replaces(Type, Method)),
+            ("c.reds", SyntheticScriptLayer.Replaces(Type, Method)));
+
+        var enumeration = ScriptSourceOrder.Of(layer.Root);
+        var partial = enumeration.Sources
+            .Take(2)
+            .Select(source => ScriptAnnotationReader.Read(
+                source, File.ReadAllText(Path.Combine(layer.Root, source.Path))))
+            .ToList();
+
+        var failure = Assert.Throws<ScriptReadException>(() => ScriptLayer.Of(enumeration, partial));
+
+        Assert.Contains("3 source(s) and 2 reading(s)", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("names whichever source is last among the part", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AWinnerFoundWithoutPluginSourcesSaysItCouldBeDisplaced()
     {
         using var layer = SyntheticScriptLayer.Of(("a.reds", SyntheticScriptLayer.Replaces(Type, Method)));

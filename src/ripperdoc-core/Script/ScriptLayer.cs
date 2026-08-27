@@ -142,6 +142,8 @@ public sealed class ScriptLayer
         ArgumentNullException.ThrowIfNull(enumeration);
         ArgumentNullException.ThrowIfNull(readings);
 
+        RefuseIncompleteReadings(enumeration, readings);
+
         var replacements = new Dictionary<MethodIdentity, List<ScriptAnnotation>>();
         var wraps = new Dictionary<MethodIdentity, List<ScriptAnnotation>>();
         var undetermined = new Dictionary<MethodIdentity, List<ScriptAnnotation>>();
@@ -179,5 +181,38 @@ public sealed class ScriptLayer
         }
 
         return new ScriptLayer(enumeration, readings, byMethod);
+    }
+
+    /// <summary>
+    /// Refuses a readings list that is not one reading per enumerated source.
+    /// </summary>
+    /// <remarks>
+    /// The winner of a contest is the last replacement in compile order, so a
+    /// state built from a readings list short of the enumeration names whichever
+    /// mod happens to be last among the sources that <em>were</em> read - a
+    /// different mod, with nothing said. That is the same failure the read path
+    /// refuses when a file cannot be opened, and it is refused here for the same
+    /// reason rather than left to a caller to avoid.
+    /// </remarks>
+    private static void RefuseIncompleteReadings(
+        ScriptEnumeration enumeration,
+        IReadOnlyList<ScriptFileReading> readings)
+    {
+        var read = readings.Select(reading => reading.Source).ToHashSet();
+        var missing = enumeration.Sources.Where(source => !read.Contains(source)).ToList();
+        var extra = read.Where(source => !enumeration.Sources.Contains(source)).ToList();
+
+        if (missing.Count == 0 && extra.Count == 0 && readings.Count == enumeration.Sources.Count)
+        {
+            return;
+        }
+
+        throw new ScriptReadException(
+            $"This enumeration holds {enumeration.Sources.Count} source(s) and {readings.Count} "
+            + $"reading(s) were given, of which {missing.Count} enumerated source(s) have no reading "
+            + $"and {extra.Count} reading(s) name a source the enumeration does not hold. No resolved "
+            + "state is reported: the winner of a contest is the last replacement in compile order, "
+            + "so a state resolved over part of the order names whichever source is last among the "
+            + "part - which is a different mod, with nothing said.");
     }
 }
