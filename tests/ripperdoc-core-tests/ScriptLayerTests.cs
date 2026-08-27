@@ -280,6 +280,31 @@ public class ScriptLayerTests
     }
 
     [Fact]
+    public void TheWrapClauseStopsThereWhenItIsTheLastThingSaid()
+    {
+        // The arm above pins the clause only where a limit follows it, and the
+        // semicolon doing the pinning is that limit's. With nothing after it the
+        // clause ends the sentence, and text appended to that shape would pass a
+        // guard written only against the other one - so this arm pins the
+        // terminal form against its own full stop.
+        using var layer = SyntheticScriptLayer.Of(
+            ("a.reds", SyntheticScriptLayer.Wraps(Type, Method)),
+            ("b.reds", SyntheticScriptLayer.Wraps(Type, Method)));
+
+        // Supplied plugin sources are what empties the limit list; the file is
+        // inert so that it changes the posture and nothing else.
+        using var elsewhere = SyntheticScriptLayer.Of(
+            ("plugin-provided.reds", "public func NothingHere() -> Void {}\n"));
+
+        var contest = ScriptLayer
+            .Read(layer.Root, [Path.Combine(elsewhere.Root, "plugin-provided.reds")])
+            .ContestFor(Target)!;
+
+        Assert.False(contest.ResultIsProvisional);
+        Assert.Contains("2 wrap(s) are listed in compile order.", contest.Describe(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AStrayQuoteInOneSourceDoesNotHideTheReplacementBelowIt()
     {
         // The reported consequence of the bound, at the layer: the replacement
