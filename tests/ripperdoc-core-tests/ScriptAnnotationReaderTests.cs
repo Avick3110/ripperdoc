@@ -267,7 +267,7 @@ public class ScriptAnnotationReaderTests
             "@replaceMethod(T)\n\n@addMethod(T)\npublic func BrandNew() -> Void {}\n");
 
         Assert.Empty(reading.Annotations);
-        Assert.Equal([1], reading.AnnotationsWithNoDeclaration);
+        Assert.Equal([1], reading.AnnotationsNotResolvedToAMethod);
     }
 
     [Fact]
@@ -281,7 +281,7 @@ public class ScriptAnnotationReaderTests
 
         var annotation = Assert.Single(reading.Annotations);
         Assert.Equal("Mine", annotation.Method.MethodName);
-        Assert.Empty(reading.AnnotationsWithNoDeclaration);
+        Assert.Empty(reading.AnnotationsNotResolvedToAMethod);
     }
 
     [Fact]
@@ -295,7 +295,23 @@ public class ScriptAnnotationReaderTests
         var annotation = Assert.Single(reading.Annotations);
         Assert.Equal(ScriptAnnotationKind.WrapMethod, annotation.Kind);
         Assert.Equal("U", annotation.Method.TypeName);
-        Assert.Equal([1], reading.AnnotationsWithNoDeclaration);
+        Assert.Equal([1], reading.AnnotationsNotResolvedToAMethod);
+    }
+
+    [Theory]
+    [InlineData("@replaceMethod(Mod.T)\npublic func M() -> Void {}\n")]
+    [InlineData("@wrapMethod(Mod.T)\npublic func M() -> Void {}\n")]
+    public void AContendingAnnotationWhoseArgumentIsNotModelledIsReportedRatherThanDropped(string text)
+    {
+        // The pattern that reads an argument and the pattern that bounds the
+        // search above one are different patterns, so an argument shape only the
+        // second models is recognised well enough to act as a bound and is then
+        // discarded. What is dropped that way is a carrier of somebody's
+        // contest, and the contest is reported one carrier short.
+        var reading = Read(text);
+
+        Assert.Empty(reading.Annotations);
+        Assert.Equal([1], reading.AnnotationsNotResolvedToAMethod);
     }
 
     [Fact]

@@ -54,8 +54,19 @@ public static class ScriptAnnotationReader
     /// real layer, not a curiosity.
     /// </remarks>
     private static readonly Regex AnyAnnotationPattern = new(
-        @"@[A-Za-z_][A-Za-z0-9_]*\s*\(",
+        @"@(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The annotations this engine contends over, by name alone.
+    /// </summary>
+    /// <remarks>
+    /// Read from the bounding pattern's own match rather than from
+    /// <see cref="AnnotationPattern" />, so that an occurrence carrying an
+    /// argument shape that pattern does not model is still known to be one of
+    /// these. Which argument shapes the language allows is not decided here.
+    /// </remarks>
+    private static readonly string[] ContendingNames = ["replaceMethod", "wrapMethod"];
 
     /// <summary>
     /// Reads <paramref name="text" /> as the contents of <paramref name="source" />.
@@ -70,9 +81,25 @@ public static class ScriptAnnotationReader
         var found = new List<ScriptAnnotation>();
         var unattached = new List<int>();
 
-        var annotationStarts = AnyAnnotationPattern.Matches(blanked).Select(m => m.Index).ToList();
+        var anyAnnotations = AnyAnnotationPattern.Matches(blanked);
+        var annotationStarts = anyAnnotations.Select(m => m.Index).ToList();
 
         var matches = AnnotationPattern.Matches(blanked);
+        var resolvedStarts = matches.Select(m => m.Index).ToHashSet();
+
+        // An occurrence this engine contends over that the argument pattern did
+        // not match is recorded rather than passed over. It is recognised well
+        // enough to bound the search above it either way, so passing over it
+        // keeps the cost of not modelling the argument and loses the report of
+        // it - which is the carrier going missing with nothing said.
+        foreach (Match any in anyAnnotations)
+        {
+            if (ContendingNames.Contains(any.Groups["name"].Value) && !resolvedStarts.Contains(any.Index))
+            {
+                unattached.Add(ScriptText.LineAt(blanked, any.Index));
+            }
+        }
+
         for (var i = 0; i < matches.Count; i++)
         {
             var match = matches[i];
@@ -105,6 +132,10 @@ public static class ScriptAnnotationReader
                 ReadWrappedCall(kind, blanked, declaration.Index),
                 IsGated(blanked, gateEnds, match.Index)));
         }
+
+        // Two passes fill this list and they run in different orders, so it is
+        // put back into the source's own order before it is reported.
+        unattached.Sort();
 
         return new ScriptFileReading(source, found, unattached);
     }

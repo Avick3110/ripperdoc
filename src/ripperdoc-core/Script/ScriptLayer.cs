@@ -83,16 +83,16 @@ public sealed class ScriptLayer
         Methods.SelectMany(contest => contest.Undetermined).ToList();
 
     /// <summary>
-    /// Every annotation this engine could not attach to a declaration, as
-    /// source and line.
+    /// Every annotation this engine contends over and could not resolve to a
+    /// method, as source and line.
     /// </summary>
     /// <remarks>
     /// Gathered across the reading. Held only per file, these were invisible
     /// to anyone looking at the resolved state.
     /// </remarks>
-    public IReadOnlyList<string> AnnotationsWithNoDeclaration =>
+    public IReadOnlyList<string> AnnotationsNotResolvedToAMethod =>
         Readings
-            .SelectMany(reading => reading.AnnotationsWithNoDeclaration
+            .SelectMany(reading => reading.AnnotationsNotResolvedToAMethod
                 .Select(line => $"{reading.Source.Display}:{line}"))
             .ToList();
 
@@ -221,7 +221,7 @@ public sealed class ScriptLayer
             limits.Add(ScriptResolutionLimit.SourceTakenOnAnUnmeasuredRule);
         }
 
-        if (readings.Any(reading => reading.AnnotationsWithNoDeclaration.Count > 0))
+        if (readings.Any(reading => reading.AnnotationsNotResolvedToAMethod.Count > 0))
         {
             limits.Add(ScriptResolutionLimit.AnnotationCouldNotBeAttached);
         }

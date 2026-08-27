@@ -195,8 +195,8 @@ public sealed class MethodContest
             + "includes on its own choice rather than on a measured rule, and the compile set decides "
             + "every winner here",
         ScriptResolutionLimit.AnnotationCouldNotBeAttached =>
-            "somewhere in this reading an annotation has no declaration beneath it, so it names no "
-            + "method and this result cannot be shown to have seen every carrier",
+            "somewhere in this reading an annotation could not be resolved to a method, so it names "
+            + "no method and this result cannot be shown to have seen every carrier",
         _ => throw new ArgumentOutOfRangeException(nameof(limit), limit, "unhandled resolution limit"),
     };
 }
