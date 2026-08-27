@@ -45,4 +45,31 @@ public enum ScriptResolutionLimit
     /// different thing from knowing it does not.
     /// </remarks>
     WrapBodyNotResolved,
+
+    /// <summary>
+    /// The compile order this result rests on includes a source taken on a rule
+    /// nobody measured.
+    /// </summary>
+    /// <remarks>
+    /// Whether the compiler reads a source whose extension is spelled with a
+    /// capital was never observed; this engine takes them, because the file
+    /// system it reads them from does not distinguish the spellings. One such
+    /// source anywhere changes the compile set, and the compile set decides
+    /// every winner, so this attaches to every result of the reading rather
+    /// than to the contests the source happens to touch.
+    /// </remarks>
+    SourceTakenOnAnUnmeasuredRule,
+
+    /// <summary>
+    /// Somewhere in this reading an annotation could not be attached to a
+    /// declaration.
+    /// </summary>
+    /// <remarks>
+    /// Layer-wide, and deliberately not narrowed: an annotation with no
+    /// declaration beneath it has no method name, so which contest it would
+    /// have joined is exactly what is unknown about it. Narrowing this to the
+    /// methods it "probably" affects would be the guess the state exists to
+    /// avoid.
+    /// </remarks>
+    AnnotationCouldNotBeAttached,
 }

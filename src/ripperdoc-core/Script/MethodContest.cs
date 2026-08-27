@@ -20,19 +20,22 @@ namespace Ripperdoc.Core.Script;
 public sealed class MethodContest
 {
     private readonly PluginScriptPosture _posture;
+    private readonly IReadOnlyList<ScriptResolutionLimit> _layerLimits;
 
     internal MethodContest(
         MethodIdentity method,
         IReadOnlyList<ScriptAnnotation> replacements,
         IReadOnlyList<ScriptAnnotation> wraps,
         IReadOnlyList<ScriptAnnotation> undetermined,
-        PluginScriptPosture posture)
+        PluginScriptPosture posture,
+        IReadOnlyList<ScriptResolutionLimit> layerLimits)
     {
         Method = method;
         Replacements = replacements;
         Wraps = wraps;
         Undetermined = undetermined;
         _posture = posture;
+        _layerLimits = layerLimits;
     }
 
     /// <summary>The method these annotations target.</summary>
@@ -122,6 +125,11 @@ public sealed class MethodContest
                 limits.Add(ScriptResolutionLimit.WrapBodyNotResolved);
             }
 
+            // Limits the whole reading carries. They are not narrowed to
+            // the contests they touch, because which contests those are is
+            // the part that is unknown.
+            limits.AddRange(_layerLimits);
+
             return limits;
         }
     }
@@ -157,12 +165,7 @@ public sealed class MethodContest
 
         if (Wraps.Count > 0)
         {
-            // Stated as what the order IS, not as a denial of what it is not.
-            // A disclaimer has to name the stronger reading to deny it, and the
-            // named reading is what survives a skim.
-            parts.Add(
-                $"{Wraps.Count} wrap(s) are listed in compile order, which is the order they are "
-                + "compiled in and not an execution order");
+            parts.Add($"{Wraps.Count} wrap(s) are listed in compile order");
         }
 
         foreach (var limit in Limits)
@@ -187,6 +190,13 @@ public sealed class MethodContest
             $"{Wraps.Count(annotation => annotation.BodyCouldNotBeRead)} wrap(s) here have a body "
             + "this engine could not read to the end, so whether they continue the chain is unknown "
             + "rather than answered",
+        ScriptResolutionLimit.SourceTakenOnAnUnmeasuredRule =>
+            "this reading took a source whose extension is spelled with a capital, which this engine "
+            + "includes on its own choice rather than on a measured rule, and the compile set decides "
+            + "every winner here",
+        ScriptResolutionLimit.AnnotationCouldNotBeAttached =>
+            "somewhere in this reading an annotation has no declaration beneath it, so it names no "
+            + "method and this result cannot be shown to have seen every carrier",
         _ => throw new ArgumentOutOfRangeException(nameof(limit), limit, "unhandled resolution limit"),
     };
 }
