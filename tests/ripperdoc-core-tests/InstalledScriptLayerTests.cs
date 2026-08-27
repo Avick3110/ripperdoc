@@ -196,7 +196,7 @@ public class InstalledScriptLayerTests
             $"wraps whose body was not read    {state.WrapsWhoseBodyCouldNotBeRead.Count}",
             $"undetermined (gated) annotations {state.UndeterminedAnnotations.Count}",
             $"methods with a gated annotation  {state.Methods.Count(c => c.Undetermined.Count > 0)}",
-            $"annotations with no declaration  {state.Readings.Sum(r => r.AnnotationsWithNoDeclaration.Count)}",
+            $"annotations not resolved         {state.Readings.Sum(r => r.AnnotationsNotResolvedToAMethod.Count)}",
             $"sources not spelled .reds        {state.Enumeration.SourcesNotSpelledInLowerCase.Count}",
         };
 

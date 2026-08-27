@@ -328,11 +328,32 @@ public class ScriptLayerTests
 
         var state = ScriptLayer.Read(layer.Root);
 
-        Assert.Single(state.AnnotationsWithNoDeclaration);
+        Assert.Single(state.AnnotationsNotResolvedToAMethod);
         Assert.All(state.Methods, contest =>
         {
             Assert.Contains(ScriptResolutionLimit.AnnotationCouldNotBeAttached, contest.Limits);
-            Assert.Contains("has no declaration beneath it", contest.Describe(), StringComparison.Ordinal);
+            Assert.Contains("could not be resolved to a method", contest.Describe(), StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void AContendingAnnotationWithAnUnmodelledArgumentReachesTheResultToo()
+    {
+        // The second door into the same limit. Dropped instead, this source is
+        // invisible: the contest reads as one uncontested replacement and no
+        // limit says the reading missed a thing.
+        using var layer = SyntheticScriptLayer.Of(
+            ("a.reds", SyntheticScriptLayer.Replaces(Type, Method)),
+            ("b.reds", "@replaceMethod(Mod.T)\npublic func M() -> Void {}\n"));
+
+        var state = ScriptLayer.Read(layer.Root);
+
+        Assert.Equal(["b.reds:1"], state.AnnotationsNotResolvedToAMethod);
+        Assert.All(state.Methods, contest =>
+        {
+            Assert.Contains(ScriptResolutionLimit.AnnotationCouldNotBeAttached, contest.Limits);
+            Assert.Contains(
+                "could not be resolved to a method", contest.Describe(), StringComparison.Ordinal);
         });
     }
 

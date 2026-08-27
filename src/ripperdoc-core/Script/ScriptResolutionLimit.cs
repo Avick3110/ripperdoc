@@ -61,15 +61,16 @@ public enum ScriptResolutionLimit
     SourceTakenOnAnUnmeasuredRule,
 
     /// <summary>
-    /// Somewhere in this reading an annotation could not be attached to a
-    /// declaration.
+    /// Somewhere in this reading an annotation this engine contends over could
+    /// not be resolved to a method.
     /// </summary>
     /// <remarks>
-    /// Layer-wide, and deliberately not narrowed: an annotation with no
-    /// declaration beneath it has no method name, so which contest it would
-    /// have joined is exactly what is unknown about it. Narrowing this to the
-    /// methods it "probably" affects would be the guess the state exists to
-    /// avoid.
+    /// Layer-wide, and deliberately not narrowed: such an annotation carries no
+    /// method name, so which contest it would have joined is exactly what is
+    /// unknown about it. Narrowing this to the methods it "probably" affects
+    /// would be the guess the state exists to avoid. Either no declaration
+    /// stands beneath it or its argument is a shape this engine does not model;
+    /// the reported line is where a reader settles which.
     /// </remarks>
     AnnotationCouldNotBeAttached,
 }
