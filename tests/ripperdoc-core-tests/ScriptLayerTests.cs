@@ -263,6 +263,75 @@ public class ScriptLayerTests
     }
 
     [Fact]
+    public void TheWrapClauseStatesTheOrderAndStopsThere()
+    {
+        // Asserted as the exact clause rather than as more banned words. A word
+        // list cannot police prose: the clause this replaced carried "and not an
+        // execution order", which names the stronger reading in order to deny it
+        // and which no plausible list of forbidden words would have caught. An
+        // exact clause reds if anything is appended to it at all.
+        using var layer = SyntheticScriptLayer.Of(
+            ("a.reds", SyntheticScriptLayer.Wraps(Type, Method)),
+            ("b.reds", SyntheticScriptLayer.Wraps(Type, Method)));
+
+        var contest = ScriptLayer.Read(layer.Root).ContestFor(Target)!;
+
+        Assert.Contains("2 wrap(s) are listed in compile order;", contest.Describe(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnOddlySpelledSourceMakesEveryResultOfTheReadingSaySo()
+    {
+        // The compile set decides every winner, so a source taken on this
+        // engine's own choice rather than on a measured rule is a limit of the
+        // whole reading and not of the contests it happens to touch.
+        using var layer = SyntheticScriptLayer.Of(
+            ("a.reds", SyntheticScriptLayer.Replaces(Type, Method)),
+            ("untouched.REDS", SyntheticScriptLayer.Replaces(Type, "Elsewhere")));
+
+        var state = ScriptLayer.Read(layer.Root);
+
+        Assert.All(state.Methods, contest =>
+        {
+            Assert.Contains(ScriptResolutionLimit.SourceTakenOnAnUnmeasuredRule, contest.Limits);
+            Assert.Contains("spelled with a capital", contest.Describe(), StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void AnUnattachedAnnotationMakesEveryResultOfTheReadingSaySo()
+    {
+        // It names no method, so which contest it would have joined is exactly
+        // what is unknown. Every result says the reading holds one rather than
+        // any result claiming to know which.
+        using var layer = SyntheticScriptLayer.Of(
+            ("a.reds", SyntheticScriptLayer.Replaces(Type, Method)),
+            ("b.reds", "@replaceMethod(T)\n\n@addMethod(T)\npublic func BrandNew() -> Void {}\n"));
+
+        var state = ScriptLayer.Read(layer.Root);
+
+        Assert.Single(state.AnnotationsWithNoDeclaration);
+        Assert.All(state.Methods, contest =>
+        {
+            Assert.Contains(ScriptResolutionLimit.AnnotationCouldNotBeAttached, contest.Limits);
+            Assert.Contains("has no declaration beneath it", contest.Describe(), StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void AReadingWithNeitherCarriesNeitherLimit()
+    {
+        // The arm that keeps the two above honest: an ordinary layer must not
+        // pick up either limit, or they would say nothing.
+        using var layer = SyntheticScriptLayer.Of(("a.reds", SyntheticScriptLayer.Replaces(Type, Method)));
+
+        var contest = ScriptLayer.Read(layer.Root).ContestFor(Target)!;
+
+        Assert.DoesNotContain(ScriptResolutionLimit.SourceTakenOnAnUnmeasuredRule, contest.Limits);
+        Assert.DoesNotContain(ScriptResolutionLimit.AnnotationCouldNotBeAttached, contest.Limits);
+    }
+
+    [Fact]
     public void AMethodOnlyWrappedHasNoWinnerAndIsNotAContest()
     {
         using var layer = SyntheticScriptLayer.Of(("a.reds", SyntheticScriptLayer.Wraps(Type, Method)));

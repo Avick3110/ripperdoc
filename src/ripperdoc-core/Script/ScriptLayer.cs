@@ -83,6 +83,20 @@ public sealed class ScriptLayer
         Methods.SelectMany(contest => contest.Undetermined).ToList();
 
     /// <summary>
+    /// Every annotation this engine could not attach to a declaration, as
+    /// source and line.
+    /// </summary>
+    /// <remarks>
+    /// Gathered across the reading. Held only per file, these were invisible
+    /// to anyone looking at the resolved state.
+    /// </remarks>
+    public IReadOnlyList<string> AnnotationsWithNoDeclaration =>
+        Readings
+            .SelectMany(reading => reading.AnnotationsWithNoDeclaration
+                .Select(line => $"{reading.Source.Display}:{line}"))
+            .ToList();
+
+    /// <summary>
     /// What this method resolves to, or <see langword="null" /> when nothing
     /// annotates it.
     /// </summary>
@@ -169,6 +183,8 @@ public sealed class ScriptLayer
             }
         }
 
+        var layerLimits = LimitsOfTheWholeReading(enumeration, readings);
+
         var byMethod = new Dictionary<MethodIdentity, MethodContest>();
         foreach (var method in replacements.Keys.Concat(wraps.Keys).Concat(undetermined.Keys).Distinct())
         {
@@ -177,10 +193,40 @@ public sealed class ScriptLayer
                 replacements.TryGetValue(method, out var r) ? r : [],
                 wraps.TryGetValue(method, out var w) ? w : [],
                 undetermined.TryGetValue(method, out var u) ? u : [],
-                enumeration.PluginPosture);
+                enumeration.PluginPosture,
+                layerLimits);
         }
 
         return new ScriptLayer(enumeration, readings, byMethod);
+    }
+
+    /// <summary>
+    /// The limits that belong to the whole reading rather than to one method.
+    /// </summary>
+    /// <remarks>
+    /// Both of these are known-unresolved inputs with no method attached: an
+    /// annotation that could not be attached names no method, and one oddly
+    /// spelled source changes the compile set every winner is drawn from. They
+    /// reach every result because narrowing them would mean guessing which
+    /// results they touch.
+    /// </remarks>
+    private static IReadOnlyList<ScriptResolutionLimit> LimitsOfTheWholeReading(
+        ScriptEnumeration enumeration,
+        IReadOnlyList<ScriptFileReading> readings)
+    {
+        var limits = new List<ScriptResolutionLimit>();
+
+        if (enumeration.SourcesNotSpelledInLowerCase.Count > 0)
+        {
+            limits.Add(ScriptResolutionLimit.SourceTakenOnAnUnmeasuredRule);
+        }
+
+        if (readings.Any(reading => reading.AnnotationsWithNoDeclaration.Count > 0))
+        {
+            limits.Add(ScriptResolutionLimit.AnnotationCouldNotBeAttached);
+        }
+
+        return limits;
     }
 
     /// <summary>
