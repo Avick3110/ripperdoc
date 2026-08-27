@@ -280,6 +280,24 @@ public class ScriptLayerTests
     }
 
     [Fact]
+    public void AStrayQuoteInOneSourceDoesNotHideTheReplacementBelowIt()
+    {
+        // The reported consequence of the bound, at the layer: the replacement
+        // beneath the stray quote is a carrier of this contest, and losing it
+        // turns a contest into an uncontested win naming the wrong source.
+        using var layer = SyntheticScriptLayer.Of(
+            ("a.reds", SyntheticScriptLayer.Replaces(Type, Method)),
+            ("b.reds", "public func L() -> Void {\n  let s = \"oops;\n}\n"
+                + SyntheticScriptLayer.Replaces(Type, Method)));
+
+        var contest = ScriptLayer.Read(layer.Root).ContestFor(Target)!;
+
+        Assert.True(contest.IsContested);
+        Assert.Equal("b.reds", contest.Winner!.Source.Path);
+        Assert.Equal("a.reds", contest.LoserNoWarningNames!.Source.Path);
+    }
+
+    [Fact]
     public void AnOddlySpelledSourceMakesEveryResultOfTheReadingSaySo()
     {
         // The compile set decides every winner, so a source taken on this
