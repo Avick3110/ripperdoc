@@ -56,6 +56,13 @@ inheritance_variable="RIPPERDOC_INHERITANCE_PATH"
 # than asserting them.
 mod_archives_variable="RIPPERDOC_MOD_ARCHIVES_PATH"
 
+# The script lane reads a real install's script directory - a fourth distinct
+# input, for the same reason the third is distinct from the second: a machine can
+# have script mods and no archives, or the reverse. Its subject is a directory
+# whose contents change whenever its owner installs a mod, so its checks assert
+# what holds of any layer and report the numbers rather than asserting them.
+scripts_variable="RIPPERDOC_SCRIPTS_PATH"
+
 # Tier (iii) reads type information generated from the user's own game install.
 # It is the input the dependency-drift audit needs, and no runner has one - the
 # dump is derived from the publisher's binary and is no more this project's to
@@ -114,7 +121,7 @@ run "build"                  dotnet build ripperdoc.sln --nologo -v minimal
 # A filter that matches nothing exits 0, so without the last flag a mistyped
 # filter would print PASS having run no checks at all - the failure mode where
 # verification machinery fails toward green.
-run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase&Tier!=InstalledTweakLayer&Tier!=InstalledModArchives&Tier!=RttiDump&Tier!=DeniedDirectory" -- RunConfiguration.TreatNoTestsAsError=true
+run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase&Tier!=InstalledTweakLayer&Tier!=InstalledModArchives&Tier!=RttiDump&Tier!=DeniedDirectory&Tier!=InstalledScriptLayer" -- RunConfiguration.TreatNoTestsAsError=true
 
 # A denied listing is a real condition on a real machine and the only way to
 # build one here is icacls, so this tier runs on Windows and is announced by
@@ -211,6 +218,18 @@ elif [ ! -d "$mod_archives_path" ]; then
   skip "installed-mod-archive checks" "$mod_archives_variable names a path with no directory at it - tier (ii) has nothing to read"
 else
   run "installed-mod-archive checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=InstalledModArchives" -- RunConfiguration.TreatNoTestsAsError=true
+fi
+
+# The script lane. Only a directory is needed: mods ship script source as plain
+# text by construction, so nothing has to be generated or unpacked to read it.
+scripts_path="$(printenv "$scripts_variable" || true)"
+
+if [ -z "$scripts_path" ]; then
+  skip "installed-script-layer checks" "needs a real install's script directory - tier (ii), local only; set $scripts_variable to one to run it"
+elif [ ! -d "$scripts_path" ]; then
+  skip "installed-script-layer checks" "$scripts_variable names a path with no directory at it - tier (ii) has nothing to read"
+else
+  run "installed-script-layer checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=InstalledScriptLayer" -- RunConfiguration.TreatNoTestsAsError=true
 fi
 
 rtti_dump_path="$(printenv "$rtti_dump_variable" || true)"

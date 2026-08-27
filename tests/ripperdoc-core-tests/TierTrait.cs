@@ -38,6 +38,30 @@ public static class TierTrait
     public const string RttiDump = "RttiDump";
 
     /// <summary>
+    /// Checks that read a real install's script layer - the directory the game
+    /// walks and the sources in it.
+    /// </summary>
+    /// <remarks>
+    /// A fourth distinct input rather than a reuse of one above: a machine can
+    /// have script mods and no tweak files or archives, or the reverse. Its
+    /// subject changes whenever its owner installs a mod, so its checks assert
+    /// what holds of any layer and report the numbers rather than asserting
+    /// them.
+    /// </remarks>
+    public const string InstalledScriptLayer = "InstalledScriptLayer";
+
+    /// <summary>
+    /// Checks that run the game's own script compiler.
+    /// </summary>
+    /// <remarks>
+    /// Its own tier because it needs two things the layer tier does not - the
+    /// compiler and a base script blob - and because it is the one check that
+    /// holds this engine's compile order against the order the compiler
+    /// actually uses, rather than against the finding that recorded it.
+    /// </remarks>
+    public const string ScriptCompiler = "ScriptCompiler";
+
+    /// <summary>
     /// Checks that need a directory the running user is refused.
     /// </summary>
     /// <remarks>
