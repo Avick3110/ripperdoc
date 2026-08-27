@@ -52,6 +52,29 @@ internal sealed class SyntheticScriptLayer : IDisposable
     internal static string WrapsWithoutCalling(string type, string method) =>
         $"@wrapMethod({type})\npublic func {method}() -> String {{\n  return \"x\";\n}}\n";
 
+    /// <summary>A wrap whose body never closes, so its end cannot be found.</summary>
+    internal static string WrapWithAnUnclosedBody(string type, string method) =>
+        $"@wrapMethod({type})\npublic func {method}() -> String {{\n  return \"x\" + wrappedMethod();\n";
+
+    /// <summary>
+    /// The conditional-compilation gate, as it appears above a declaration.
+    /// </summary>
+    /// <remarks>
+    /// The condition's text is deliberately arbitrary. This engine reads that a
+    /// gate is there and never what it evaluates to, so a fixture that picked a
+    /// condition meant to be true or false would be asserting the thing the
+    /// engine refuses to decide.
+    /// </remarks>
+    internal static string Gate => "@if(ModuleExists(\"SomeOtherMod\"))\n";
+
+    /// <summary>A gated replacement of one method.</summary>
+    internal static string GatedReplaces(string type, string method) =>
+        Gate + Replaces(type, method);
+
+    /// <summary>A gated wrap of one method.</summary>
+    internal static string GatedWraps(string type, string method) =>
+        Gate + Wraps(type, method);
+
     public void Dispose()
     {
         try

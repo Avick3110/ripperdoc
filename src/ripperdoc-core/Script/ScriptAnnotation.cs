@@ -7,27 +7,33 @@ namespace Ripperdoc.Core.Script;
 /// <param name="Method">The method it targets.</param>
 /// <param name="Source">The source it was read from.</param>
 /// <param name="Line">The one-based line the annotation sits on.</param>
-/// <param name="CallsWrappedMethod">
-/// Whether the body beneath it calls the wrapped method. Meaningful for a wrap
-/// and always false for a replacement, which has nothing beneath it to call.
+/// <param name="WrappedCall">What could be read about its call to the wrapped method.</param>
+/// <param name="IsGated">
+/// Whether a conditional-compilation gate stands immediately above it.
 /// </param>
 public sealed record ScriptAnnotation(
     ScriptAnnotationKind Kind,
     MethodIdentity Method,
     ScriptSource Source,
     int Line,
-    bool CallsWrappedMethod)
+    WrappedCallReading WrappedCall,
+    bool IsGated)
 {
     /// <summary>
-    /// Whether this is a wrap that never calls the method it wraps.
+    /// Whether this is a wrap read to hold no call to the method it wraps.
     /// </summary>
     /// <remarks>
-    /// The compiler says nothing about this: a wrap whose body has no such call
-    /// compiles with no error and no warning, measured. At run time the wraps it
-    /// encloses never execute, so every mod inside it silently does nothing -
-    /// and which mods those are depends on a chain position this engine does not
-    /// claim to know.
+    /// Such a wrap compiles with no error and no warning, measured. False when
+    /// the body could not be read, which is a separate state.
     /// </remarks>
     public bool IsWrapThatDropsTheChain =>
-        Kind == ScriptAnnotationKind.WrapMethod && !CallsWrappedMethod;
+        Kind == ScriptAnnotationKind.WrapMethod && WrappedCall == WrappedCallReading.DoesNotCall;
+
+    /// <summary>
+    /// Whether this engine failed to read the body beneath this annotation.
+    /// </summary>
+    public bool BodyCouldNotBeRead => WrappedCall == WrappedCallReading.BodyNotResolved;
+
+    /// <summary>How to name this annotation to a reader.</summary>
+    public string Display => $"{Source.Display}:{Line}";
 }
