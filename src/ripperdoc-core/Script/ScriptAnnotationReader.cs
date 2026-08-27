@@ -43,6 +43,21 @@ public static class ScriptAnnotationReader
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
+    /// Any annotation at all, including the ones this engine does not resolve.
+    /// </summary>
+    /// <remarks>
+    /// The bound on the search for a declaration. Bounding at the next
+    /// <em>contending</em> annotation leaves an annotation with nothing beneath
+    /// it free to adopt the function belonging to an <c>@addMethod</c>, and
+    /// report it as a live replacement of a method nobody wrote one for. The
+    /// annotations this engine does not resolve are the common neighbour on a
+    /// real layer, not a curiosity.
+    /// </remarks>
+    private static readonly Regex AnyAnnotationPattern = new(
+        @"@[A-Za-z_][A-Za-z0-9_]*\s*\(",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
     /// Reads <paramref name="text" /> as the contents of <paramref name="source" />.
     /// </summary>
     public static ScriptFileReading Read(ScriptSource source, string text)
@@ -55,17 +70,22 @@ public static class ScriptAnnotationReader
         var found = new List<ScriptAnnotation>();
         var unattached = new List<int>();
 
+        var annotationStarts = AnyAnnotationPattern.Matches(blanked).Select(m => m.Index).ToList();
+
         var matches = AnnotationPattern.Matches(blanked);
         for (var i = 0; i < matches.Count; i++)
         {
             var match = matches[i];
 
-            // The declaration is looked for only as far as the next annotation.
-            // Without that bound an annotation with nothing beneath it would
-            // adopt the function belonging to the annotation after it, and
-            // report a conflict on a method nobody wrote one for.
-            var limit = i + 1 < matches.Count ? matches[i + 1].Index : blanked.Length;
-            var declaration = FunctionPattern.Match(blanked, match.Index + match.Length, limit - (match.Index + match.Length));
+            // The declaration is looked for only as far as the next annotation
+            // of any kind. Without that bound an annotation with nothing beneath
+            // it adopts the function belonging to whatever follows, and reports
+            // a conflict on a method nobody wrote one for.
+            var from = match.Index + match.Length;
+            var limit = NextAnnotationAfter(annotationStarts, match.Index, blanked.Length);
+            var declaration = limit > from
+                ? FunctionPattern.Match(blanked, from, limit - from)
+                : Match.Empty;
 
             if (!declaration.Success)
             {
@@ -87,6 +107,23 @@ public static class ScriptAnnotationReader
         }
 
         return new ScriptFileReading(source, found, unattached);
+    }
+
+    /// <summary>
+    /// Where the search for a declaration has to stop: the start of the next
+    /// annotation after <paramref name="index" />, or the end of the source.
+    /// </summary>
+    private static int NextAnnotationAfter(List<int> annotationStarts, int index, int end)
+    {
+        foreach (var start in annotationStarts)
+        {
+            if (start > index)
+            {
+                return start;
+            }
+        }
+
+        return end;
     }
 
     private static WrappedCallReading ReadWrappedCall(ScriptAnnotationKind kind, string blanked, int declarationIndex)

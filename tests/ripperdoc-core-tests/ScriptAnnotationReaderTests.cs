@@ -167,6 +167,90 @@ public class ScriptAnnotationReaderTests
     }
 
     [Fact]
+    public void AnnotationShapedTextInsideAnInterpolatedStringIsNotAnAnnotation()
+    {
+        // Discriminating on purpose: one source carrying both a phantom inside a
+        // string nested in an interpolation, and a real annotation beside it. A
+        // reader that treats the whole literal as one span reads the phantom; one
+        // that treats the interpolation as opaque loses the real annotation. Only
+        // a reader that enters the interpolation as code, and blanks the string
+        // nested in it, gets exactly one.
+        var text =
+            "public func Log() -> Void {\n"
+            + "  FTLog(s\"note \\(GetText(\"@replaceMethod(Ghost)\\npublic func Boom() -> Void {}\"))\");\n"
+            + "}\n"
+            + "@replaceMethod(Real)\n"
+            + "public func Genuine() -> String { return \"x\"; }\n";
+
+        var annotation = Assert.Single(Read(text).Annotations);
+
+        Assert.Equal("Real", annotation.Method.TypeName);
+        Assert.Equal("Genuine", annotation.Method.MethodName);
+    }
+
+    [Fact]
+    public void ABraceInsideAnInterpolatedStringDoesNotEndTheBody()
+    {
+        // The brace is inside a string nested in an interpolation. Exposed as
+        // code it closes the body early, the call below it is never read, and the
+        // wrap is named as one that ends the chain - an accusation out of a
+        // mis-read. The compiler takes this source without complaint.
+        var text =
+            "@wrapMethod(T)\n"
+            + "public func M() -> String {\n"
+            + "  FTLog(s\"a \\(GetText(\"}\")) b\");\n"
+            + "  return wrappedMethod();\n"
+            + "}\n";
+
+        var annotation = Assert.Single(Read(text).Annotations);
+
+        Assert.Equal(WrappedCallReading.Calls, annotation.WrappedCall);
+        Assert.False(annotation.IsWrapThatDropsTheChain);
+    }
+
+    [Fact]
+    public void ACallInsideAnInterpolationIsRealCodeAndCounts()
+    {
+        // The other direction. The interpolation's contents are code, so the only
+        // call to the wrapped method sitting inside one still counts.
+        var text =
+            "@wrapMethod(T)\n"
+            + "public func M() -> String {\n"
+            + "  return s\"prefix \\(wrappedMethod())\";\n"
+            + "}\n";
+
+        Assert.Equal(WrappedCallReading.Calls, Assert.Single(Read(text).Annotations).WrappedCall);
+    }
+
+    [Fact]
+    public void ABareAnnotationDoesNotAdoptTheFunctionOfTheAnnotationAfterIt()
+    {
+        // The neighbour is an annotation this engine does not resolve, which is
+        // the common case on a real layer. Bounded only at the next contending
+        // annotation, the bare replacement adopts BrandNew and is reported as a
+        // live replacement of a method nobody annotated.
+        var reading = Read(
+            "@replaceMethod(T)\n\n@addMethod(T)\npublic func BrandNew() -> Void {}\n");
+
+        Assert.Empty(reading.Annotations);
+        Assert.Equal([1], reading.AnnotationsWithNoDeclaration);
+    }
+
+    [Fact]
+    public void AnAnnotationWithItsOwnFunctionIsStillReadWhenAnotherAnnotationFollows()
+    {
+        // The other direction of the same bound: tightening it must not stop a
+        // real annotation from finding the declaration directly beneath it.
+        var reading = Read(
+            "@replaceMethod(T)\npublic func Mine() -> Void {}\n"
+            + "@addMethod(T)\npublic func BrandNew() -> Void {}\n");
+
+        var annotation = Assert.Single(reading.Annotations);
+        Assert.Equal("Mine", annotation.Method.MethodName);
+        Assert.Empty(reading.AnnotationsWithNoDeclaration);
+    }
+
+    [Fact]
     public void AnAnnotationWithNoDeclarationBeneathItIsReportedRatherThanDropped()
     {
         // The second annotation has a function; the first does not. Bounding the
