@@ -133,6 +133,11 @@ public static class ScriptAnnotationReader
             return WrappedCallReading.NotAWrap;
         }
 
+        if (ScriptText.DeclaresNoBody(blanked, declarationIndex))
+        {
+            return WrappedCallReading.BodyNotResolved;
+        }
+
         var bodyEnd = ScriptText.EndOfBody(blanked, declarationIndex);
         if (bodyEnd <= declarationIndex)
         {

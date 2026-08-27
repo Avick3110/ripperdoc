@@ -219,6 +219,35 @@ internal static class ScriptText
     }
 
     /// <summary>
+    /// Whether the declaration at <paramref name="from" /> is terminated before
+    /// it opens a body.
+    /// </summary>
+    /// <remarks>
+    /// A declaration ending at a semicolon carries no braces of its own, so a
+    /// brace-matching scan started from it balances on the braces of whatever
+    /// declaration comes next. The reading that produces belongs to the
+    /// neighbour, and one of the two answers it can give names a mod as ending
+    /// a wrap chain.
+    /// </remarks>
+    internal static bool DeclaresNoBody(string blanked, int from)
+    {
+        for (var i = from; i < blanked.Length; i++)
+        {
+            if (blanked[i] == '{')
+            {
+                return false;
+            }
+
+            if (blanked[i] == ';')
+            {
+                return true;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// The index just past the parenthesised group opening at
     /// <paramref name="openParen" />, or -1 when it does not close.
     /// </summary>
