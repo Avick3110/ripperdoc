@@ -51,6 +51,25 @@ public class ScriptAnnotationReaderTests
         Assert.False(annotation.IsWrapThatDropsTheChain);
     }
 
+    [Theory]
+    [InlineData("  Log(\"x\");")]
+    [InlineData("  wrappedMethod();")]
+    public void AWrapOnADeclarationCarryingNoBodyIsUnreadRatherThanJudgedFromItsNeighbour(string neighbour)
+    {
+        // The two neighbours disagree about the wrapped call and the annotated
+        // declaration has no body of its own, so an answer that moves with the
+        // neighbour is an answer drawn from a function nobody annotated - and
+        // one of the two names a mod as ending the chain.
+        var reading = Read(
+            "@wrapMethod(T)\npublic native func M() -> Void;\n\n"
+            + "public func Other() -> Void {\n" + neighbour + "\n}\n");
+
+        var annotation = Assert.Single(reading.Annotations);
+        Assert.Equal(WrappedCallReading.BodyNotResolved, annotation.WrappedCall);
+        Assert.True(annotation.BodyCouldNotBeRead);
+        Assert.False(annotation.IsWrapThatDropsTheChain);
+    }
+
     [Fact]
     public void AnAnnotationBehindAGateIsMarkedAndOneWithoutIsNot()
     {
