@@ -156,6 +156,17 @@ public class ScriptAnnotationReaderTests
     }
 
     [Fact]
+    public void BlankingKeepsLineNumbersHonestAcrossAnEscapedNewline()
+    {
+        // A backslash at the end of a line inside a string escapes the newline.
+        // Blanking the escaped character along with the backslash would eat that
+        // newline, and every line number after it would come back one short.
+        var reading = Read("let s = \"a\\\nb\";\n@replaceMethod(T)\npublic func M() -> String { return \"x\"; }\n");
+
+        Assert.Equal(3, Assert.Single(reading.Annotations).Line);
+    }
+
+    [Fact]
     public void AnAnnotationWithNoDeclarationBeneathItIsReportedRatherThanDropped()
     {
         // The second annotation has a function; the first does not. Bounding the

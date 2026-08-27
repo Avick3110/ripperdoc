@@ -80,7 +80,12 @@ internal static class ScriptText
                     if (source[index] == '\\' && index + 1 < source.Length)
                     {
                         result[index] = ' ';
-                        result[index + 1] = ' ';
+
+                        // The escaped character is blanked like any other, but a
+                        // newline stays a newline: every span this pass blanks
+                        // keeps its line breaks, and an escape is not an
+                        // exception to that.
+                        result[index + 1] = source[index + 1] == '\n' ? '\n' : ' ';
                         index += 2;
                         continue;
                     }
