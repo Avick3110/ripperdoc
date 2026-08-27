@@ -134,6 +134,38 @@ internal static class ScriptText
         return -1;
     }
 
+    /// <summary>
+    /// The index just past the parenthesised group opening at
+    /// <paramref name="openParen" />, or -1 when it does not close.
+    /// </summary>
+    /// <remarks>
+    /// Counted rather than matched to the first close, because a gate's
+    /// condition carries calls of its own and their parentheses nest. Strings
+    /// are already blanked when this runs, so no parenthesis inside one is
+    /// counted.
+    /// </remarks>
+    internal static int EndOfParenthesised(string blanked, int openParen)
+    {
+        var depth = 0;
+        for (var i = openParen; i < blanked.Length; i++)
+        {
+            if (blanked[i] == '(')
+            {
+                depth++;
+            }
+            else if (blanked[i] == ')')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    return i + 1;
+                }
+            }
+        }
+
+        return -1;
+    }
+
     /// <summary>The one-based line number of <paramref name="index" />.</summary>
     internal static int LineAt(string text, int index)
     {

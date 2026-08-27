@@ -153,14 +153,19 @@ public class ScriptLayerTests
         using var layer = SyntheticScriptLayer.Of(
             ("zzz_last_in_the_directory.reds", SyntheticScriptLayer.Replaces(Type, Method)));
 
-        var pluginPath = Path.Combine(layer.Root, "plugin-provided.reds");
-        File.WriteAllText(pluginPath, SyntheticScriptLayer.Replaces(Type, Method));
+        // The plugin's source lives outside the script directory, which is where
+        // the one measured install carries them. Writing it inside would put the
+        // same file at two ranks and make a contest out of one annotation.
+        using var elsewhere = SyntheticScriptLayer.Of(
+            ("plugin-provided.reds", SyntheticScriptLayer.Replaces(Type, Method)));
+        var pluginPath = Path.Combine(elsewhere.Root, "plugin-provided.reds");
 
         var state = ScriptLayer.Read(layer.Root, [pluginPath]);
         var contest = state.ContestFor(Target)!;
 
         Assert.Equal(ScriptSourceOrigin.RuntimeExtensionPlugin, contest.Winner!.Source.Origin);
-        Assert.False(contest.WinnerIsProvisional);
+        Assert.DoesNotContain(
+            ScriptResolutionLimit.PluginScriptsNotSupplied, contest.Limits);
     }
 
     [Fact]
@@ -170,9 +175,10 @@ public class ScriptLayerTests
 
         var contest = ScriptLayer.Read(layer.Root).ContestFor(Target)!;
 
-        Assert.True(contest.WinnerIsProvisional);
+        Assert.True(contest.ResultIsProvisional);
+        Assert.Contains(ScriptResolutionLimit.PluginScriptsNotSupplied, contest.Limits);
         Assert.Contains(
-            "would take it from the winner named",
+            "would take it from whatever this result names",
             contest.Describe(),
             StringComparison.Ordinal);
     }
@@ -210,7 +216,7 @@ public class ScriptLayerTests
         var sentence = ScriptLayer.Read(layer.Root).ContestFor(Target)!.Describe();
 
         Assert.Contains("compile order", sentence, StringComparison.Ordinal);
-        foreach (var forbidden in new[] { "outermost", "innermost", "nesting", "runs first", "runs last" })
+        foreach (var forbidden in NestingVocabulary.Forbidden)
         {
             Assert.DoesNotContain(forbidden, sentence, StringComparison.OrdinalIgnoreCase);
         }
@@ -225,8 +231,86 @@ public class ScriptLayerTests
 
         Assert.Null(contest.Winner);
         Assert.False(contest.IsContested);
-        Assert.False(contest.WinnerIsProvisional);
-        Assert.Contains("is not replaced", contest.Describe(), StringComparison.Ordinal);
+
+        // The negative claim is displaceable by exactly the input a positive one
+        // is - a plugin source compiling after the whole walk - so it carries the
+        // same limit rather than going out flat.
+        Assert.True(contest.ResultIsProvisional);
+        Assert.Contains(ScriptResolutionLimit.PluginScriptsNotSupplied, contest.Limits);
+
+        var sentence = contest.Describe();
+        Assert.Contains("is not replaced by any source this reading resolved", sentence, StringComparison.Ordinal);
+        Assert.Contains("would take it from whatever this result names", sentence, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AGatedReplacementIsHeldOutOfTheContestRatherThanWinningIt()
+    {
+        // The inversion this exists to stop: a gated replacement last in compile
+        // order would otherwise be named the winner, and the replacement that
+        // actually takes the method reported as doing nothing.
+        using var layer = SyntheticScriptLayer.Of(
+            ("a_real.reds", SyntheticScriptLayer.Replaces(Type, Method)),
+            ("b_gated.reds", SyntheticScriptLayer.GatedReplaces(Type, Method)));
+
+        var contest = ScriptLayer.Read(layer.Root).ContestFor(Target)!;
+
+        Assert.Equal("a_real.reds", contest.Winner!.Source.Path);
+        Assert.False(contest.IsContested);
+        Assert.Empty(contest.Overridden);
+        Assert.Equal("b_gated.reds", Assert.Single(contest.Undetermined).Source.Path);
+        Assert.Contains(ScriptResolutionLimit.GatedAnnotationPresent, contest.Limits);
+    }
+
+    [Fact]
+    public void AGatedWrapIsNotReportedAsWrappingTheMethod()
+    {
+        using var layer = SyntheticScriptLayer.Of(
+            ("a.reds", SyntheticScriptLayer.GatedWraps(Type, Method)));
+
+        var state = ScriptLayer.Read(layer.Root);
+        var contest = state.ContestFor(Target)!;
+
+        Assert.Empty(contest.Wraps);
+        Assert.Empty(state.Wrapped);
+        Assert.Single(state.UndeterminedAnnotations);
+        Assert.Contains(
+            "annotation(s) on this method are behind a conditional-compilation gate",
+            contest.Describe(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AMethodOnlyGatedIsStillReportedRatherThanDisappearing()
+    {
+        // Dropping it would be the other silent answer: a reader asking about
+        // this method would be told nothing touches it.
+        using var layer = SyntheticScriptLayer.Of(
+            ("a.reds", SyntheticScriptLayer.GatedReplaces(Type, Method)));
+
+        var state = ScriptLayer.Read(layer.Root);
+        var contest = state.ContestFor(Target);
+
+        Assert.NotNull(contest);
+        Assert.Null(contest.Winner);
+        Assert.Single(contest.Undetermined);
+        Assert.True(contest.ResultIsProvisional);
+    }
+
+    [Fact]
+    public void AWrapWhoseBodyCouldNotBeReadIsNamedAsUnreadAndNotAsBroken()
+    {
+        using var layer = SyntheticScriptLayer.Of(
+            ("a.reds", SyntheticScriptLayer.WrapWithAnUnclosedBody(Type, Method)));
+
+        var state = ScriptLayer.Read(layer.Root);
+        var contest = state.ContestFor(Target)!;
+
+        Assert.Empty(state.WrapsThatDropTheChain);
+        Assert.Single(state.WrapsWhoseBodyCouldNotBeRead);
+        Assert.Contains(ScriptResolutionLimit.WrapBodyNotResolved, contest.Limits);
+        Assert.Contains(
+            "could not read to the end", contest.Describe(), StringComparison.Ordinal);
     }
 
     [Fact]

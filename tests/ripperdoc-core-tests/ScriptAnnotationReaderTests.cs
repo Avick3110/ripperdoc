@@ -31,11 +31,81 @@ public class ScriptAnnotationReaderTests
         var calls = Assert.Single(Read(SyntheticScriptLayer.Wraps("T", "M")).Annotations);
         var doesNot = Assert.Single(Read(SyntheticScriptLayer.WrapsWithoutCalling("T", "M")).Annotations);
 
-        Assert.True(calls.CallsWrappedMethod);
+        Assert.Equal(WrappedCallReading.Calls, calls.WrappedCall);
         Assert.False(calls.IsWrapThatDropsTheChain);
 
-        Assert.False(doesNot.CallsWrappedMethod);
+        Assert.Equal(WrappedCallReading.DoesNotCall, doesNot.WrappedCall);
         Assert.True(doesNot.IsWrapThatDropsTheChain);
+    }
+
+    [Fact]
+    public void AWrapWhoseBodyDoesNotCloseIsUnreadRatherThanAccused()
+    {
+        // The two failures look the same from a bool: a body read and holding no
+        // call, and a body never read at all. Only the first names a mod.
+        var annotation = Assert.Single(
+            Read(SyntheticScriptLayer.WrapWithAnUnclosedBody("T", "M")).Annotations);
+
+        Assert.Equal(WrappedCallReading.BodyNotResolved, annotation.WrappedCall);
+        Assert.True(annotation.BodyCouldNotBeRead);
+        Assert.False(annotation.IsWrapThatDropsTheChain);
+    }
+
+    [Fact]
+    public void AnAnnotationBehindAGateIsMarkedAndOneWithoutIsNot()
+    {
+        var gated = Assert.Single(Read(SyntheticScriptLayer.GatedReplaces("T", "M")).Annotations);
+        var plain = Assert.Single(Read(SyntheticScriptLayer.Replaces("T", "M")).Annotations);
+
+        Assert.True(gated.IsGated);
+        Assert.False(plain.IsGated);
+    }
+
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\n\n\n")]
+    [InlineData("\n// a comment between the two\n")]
+    public void AGateReachesItsAnnotationAcrossBlankLinesAndComments(string between)
+    {
+        // Measured: neither a blank line nor a comment breaks the pairing.
+        var text = "@if(ModuleExists(\"SomeOtherMod\"))" + between
+            + SyntheticScriptLayer.Replaces("T", "M");
+
+        Assert.True(Assert.Single(Read(text).Annotations).IsGated);
+    }
+
+    [Fact]
+    public void AGateReachesOneDeclarationAndNotTheNext()
+    {
+        // Measured: the declaration after the gated one is compiled. An engine
+        // that let the gate run on would report a live replacement as undecided.
+        var text = SyntheticScriptLayer.GatedReplaces("T", "One")
+            + SyntheticScriptLayer.Replaces("T", "Two");
+
+        var annotations = Read(text).Annotations;
+
+        Assert.Equal(2, annotations.Count);
+        Assert.True(annotations[0].IsGated);
+        Assert.False(annotations[1].IsGated);
+    }
+
+    [Fact]
+    public void AGateWhoseConditionCarriesNestedParenthesesStillPairs()
+    {
+        // The condition holds a call of its own, so a scan that stopped at the
+        // first close paren would end inside the condition and read the gate as
+        // ending before it does.
+        var text = "@if(!ModuleExists(\"SomeOtherMod\"))\n" + SyntheticScriptLayer.Replaces("T", "M");
+
+        Assert.True(Assert.Single(Read(text).Annotations).IsGated);
+    }
+
+    [Fact]
+    public void AGateInsideACommentGatesNothing()
+    {
+        var text = "// @if(ModuleExists(\"SomeOtherMod\"))\n" + SyntheticScriptLayer.Replaces("T", "M");
+
+        Assert.False(Assert.Single(Read(text).Annotations).IsGated);
     }
 
     [Fact]
@@ -46,8 +116,9 @@ public class ScriptAnnotationReaderTests
         // silently-broken-chain report would name every replacement in the layer.
         var annotation = Assert.Single(Read(SyntheticScriptLayer.Replaces("T", "M")).Annotations);
 
-        Assert.False(annotation.CallsWrappedMethod);
+        Assert.Equal(WrappedCallReading.NotAWrap, annotation.WrappedCall);
         Assert.False(annotation.IsWrapThatDropsTheChain);
+        Assert.False(annotation.BodyCouldNotBeRead);
     }
 
     [Theory]

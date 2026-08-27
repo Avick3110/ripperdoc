@@ -41,10 +41,18 @@ public static class ScriptSourceOrder
     /// <param name="scriptDirectory">The directory the game walks.</param>
     /// <param name="pluginSources">
     /// Paths of scripts contributed by runtime-extension plugins, already in
-    /// the order the plugins register them, or empty when the caller has none
-    /// to give. They are appended in the order supplied and are never sorted:
-    /// the order measured on a real install is not the order their names sort
-    /// in, so sorting them would impose an order the compiler does not use.
+    /// the order the plugins register them. They are appended in the order
+    /// supplied and are never sorted: the order measured on a real install is
+    /// not the order their names sort in, so sorting them would impose an order
+    /// the compiler does not use.
+    /// <para>
+    /// An omitted or empty list is recorded as
+    /// <see cref="PluginScriptPosture.NotSupplied" />, because nothing here can
+    /// tell a caller who looked and found none from one who did not look. A
+    /// caller who did look loses nothing by it: the posture costs a sentence on
+    /// each result, and the alternative is an engine that takes a caller's word
+    /// for the one input that outranks everything else it read.
+    /// </para>
     /// </param>
     public static ScriptEnumeration Of(string scriptDirectory, IReadOnlyList<string>? pluginSources = null)
     {
