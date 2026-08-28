@@ -9,12 +9,22 @@ namespace Ripperdoc.Core.Script;
 /// kept regardless of where it sits relative to that replacement.
 /// <para>
 /// Only annotations this engine resolved take part. An annotation carrying a
-/// conditional-compilation gate is held out in <see cref="Undetermined" />
+/// conditional-compilation gate is held out in <see cref="UndeterminedInCompileOrder" />
 /// instead, because a gate decides whether its declaration is compiled at all
 /// and this engine does not decide gates. Counting one in would be the inverted
 /// answer the layer exists to prevent: a gated-out replacement would be named
 /// the winner, and the replacement that actually takes the method would be
 /// reported as doing nothing.
+/// </para>
+/// <para>
+/// Nothing here assembles a sentence. Every fact a sentence would carry is a
+/// member of this type, and a sentence naming a mod says more than its parts
+/// as soon as one of them turns out not to hold - a result can be reported
+/// uncontested and carry, in the same breath, a gated annotation that would
+/// contest it. The order every annotation list is given in is in that list's
+/// name rather than in prose, because the order is the part a caller cannot
+/// recover from the data and the reading this project has not measured is the
+/// one a reader supplies unaided.
 /// </para>
 /// </remarks>
 public sealed class MethodContest
@@ -28,9 +38,9 @@ public sealed class MethodContest
         IReadOnlyList<ScriptFileReading> readings)
     {
         Method = method;
-        Replacements = replacements;
-        Wraps = wraps;
-        Undetermined = undetermined;
+        ReplacementsInCompileOrder = replacements;
+        WrapsInCompileOrder = wraps;
+        UndeterminedInCompileOrder = undetermined;
         Enumeration = enumeration;
         Readings = readings;
     }
@@ -50,7 +60,7 @@ public sealed class MethodContest
     public MethodIdentity Method { get; }
 
     /// <summary>Every resolved replacement of it, in compile order.</summary>
-    public IReadOnlyList<ScriptAnnotation> Replacements { get; }
+    public IReadOnlyList<ScriptAnnotation> ReplacementsInCompileOrder { get; }
 
     /// <summary>
     /// Every resolved wrap of it, <strong>in compile order</strong>.
@@ -64,20 +74,20 @@ public sealed class MethodContest
     /// sequence for an execution order is reading in something this project has
     /// not established.
     /// </remarks>
-    public IReadOnlyList<ScriptAnnotation> Wraps { get; }
+    public IReadOnlyList<ScriptAnnotation> WrapsInCompileOrder { get; }
 
     /// <summary>
     /// Annotations on this method that carry a gate, and so are neither
     /// resolved as live nor known to be absent.
     /// </summary>
-    public IReadOnlyList<ScriptAnnotation> Undetermined { get; }
+    public IReadOnlyList<ScriptAnnotation> UndeterminedInCompileOrder { get; }
 
     /// <summary>
     /// The replacement that takes the method, or <see langword="null" /> when
     /// nothing resolved replaces it.
     /// </summary>
     public ScriptAnnotation? Winner =>
-        Replacements.Count == 0 ? null : Replacements[^1];
+        ReplacementsInCompileOrder.Count == 0 ? null : ReplacementsInCompileOrder[^1];
 
     /// <summary>
     /// The replacements that lose - every one but the last.
@@ -86,8 +96,10 @@ public sealed class MethodContest
     /// This is the state the layer is worth reporting for. A mod here installed
     /// cleanly, compiled cleanly, and does nothing at all for this method.
     /// </remarks>
-    public IReadOnlyList<ScriptAnnotation> Overridden =>
-        Replacements.Count <= 1 ? [] : Replacements.Take(Replacements.Count - 1).ToList();
+    public IReadOnlyList<ScriptAnnotation> OverriddenInCompileOrder =>
+        ReplacementsInCompileOrder.Count <= 1
+            ? []
+            : ReplacementsInCompileOrder.Take(ReplacementsInCompileOrder.Count - 1).ToList();
 
     /// <summary>
     /// The loser that no compiler diagnostic names.
@@ -99,10 +111,10 @@ public sealed class MethodContest
     /// warning anywhere: reading the log start to finish never names it.
     /// </remarks>
     public ScriptAnnotation? LoserNoWarningNames =>
-        Replacements.Count <= 1 ? null : Replacements[0];
+        ReplacementsInCompileOrder.Count <= 1 ? null : ReplacementsInCompileOrder[0];
 
     /// <summary>Whether more than one resolved source replaces this method.</summary>
-    public bool IsContested => Replacements.Count > 1;
+    public bool IsContested => ReplacementsInCompileOrder.Count > 1;
 
     /// <summary>
     /// Every reason this result could be wrong.
@@ -123,43 +135,4 @@ public sealed class MethodContest
 
     /// <summary>Whether anything about this result was left unresolved.</summary>
     public bool ResultIsProvisional => Limits.Count > 0;
-
-    /// <summary>
-    /// One sentence saying what happens to this method and what is not known
-    /// about it.
-    /// </summary>
-    public string Describe()
-    {
-        var parts = new List<string>();
-
-        if (Winner is null)
-        {
-            parts.Add($"{Method.Display} is not replaced by any source this reading resolved");
-        }
-        else if (IsContested)
-        {
-            parts.Add(
-                $"{Method.Display} is replaced by {Replacements.Count} sources, and "
-                + $"{Winner.Source.Display} wins because it is last in compile order");
-            parts.Add(
-                $"{Overridden.Count} replacement(s) are overridden and do nothing, of which "
-                + $"{LoserNoWarningNames!.Source.Display} is named by no compiler warning");
-        }
-        else
-        {
-            parts.Add($"{Method.Display} is replaced by {Winner.Source.Display}, uncontested");
-        }
-
-        if (Wraps.Count > 0)
-        {
-            parts.Add($"{Wraps.Count} wrap(s) are listed in compile order");
-        }
-
-        foreach (var limit in Limits)
-        {
-            parts.Add(limit.Explain(this));
-        }
-
-        return string.Join("; ", parts) + ".";
-    }
 }

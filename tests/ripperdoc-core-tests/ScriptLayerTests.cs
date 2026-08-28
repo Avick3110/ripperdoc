@@ -61,7 +61,7 @@ public class ScriptLayerTests
         var state = ScriptLayer.Read(layer.Root);
         var contest = state.ContestFor(Target)!;
 
-        Assert.Equal(["a.reds", "b.reds"], contest.Overridden.Select(a => a.Source.Path));
+        Assert.Equal(["a.reds", "b.reds"], contest.OverriddenInCompileOrder.Select(a => a.Source.Path));
         Assert.Equal("c.reds", contest.Winner!.Source.Path);
         Assert.Equal(2, state.SilentlyOverriddenReplacements.Count);
     }
@@ -91,7 +91,7 @@ public class ScriptLayerTests
         var contest = ScriptLayer.Read(layer.Root).ContestFor(Target)!;
 
         Assert.False(contest.IsContested);
-        Assert.Empty(contest.Overridden);
+        Assert.Empty(contest.OverriddenInCompileOrder);
         Assert.Null(contest.LoserNoWarningNames);
     }
 
@@ -110,7 +110,7 @@ public class ScriptLayerTests
         foreach (var root in new[] { before.Root, after.Root })
         {
             var contest = ScriptLayer.Read(root).ContestFor(Target)!;
-            Assert.Single(contest.Wraps);
+            Assert.Single(contest.WrapsInCompileOrder);
             Assert.NotNull(contest.Winner);
             Assert.False(contest.IsContested);
         }
@@ -128,7 +128,7 @@ public class ScriptLayerTests
 
         Assert.Equal(
             ["a_w1.reds", "b_w2.reds", "c_w3.reds"],
-            contest.Wraps.Select(a => a.Source.Path));
+            contest.WrapsInCompileOrder.Select(a => a.Source.Path));
     }
 
     [Fact]
@@ -219,89 +219,87 @@ public class ScriptLayerTests
         Assert.Contains(ScriptResolutionLimit.PluginScriptsNotSupplied, contest.Limits);
         Assert.Contains(
             "would take it from whatever this result names",
-            contest.Describe(),
+            ScriptResolutionLimit.PluginScriptsNotSupplied.Consequence,
             StringComparison.Ordinal);
     }
 
     [Fact]
-    public void TheSentenceCarriesTheCountsItComputes()
+    public void TheDerivedMembersAgreeWithTheCollectionsTheyComeFrom()
     {
-        // The description is a computed fact shown to a reader, so a check reads
-        // the same facts back out of it: the counts and the winner cannot drift
-        // from the collections they come from.
+        // Each of these is a computed fact a caller reads, so a check reads the
+        // same fact back out of the collection it is drawn from. They cannot
+        // drift apart without one of them naming a different source.
         using var layer = SyntheticScriptLayer.Of(
             ("a.reds", SyntheticScriptLayer.Replaces(Type, Method)),
             ("b.reds", SyntheticScriptLayer.Replaces(Type, Method)),
             ("c.reds", SyntheticScriptLayer.Wraps(Type, Method)));
 
         var contest = ScriptLayer.Read(layer.Root).ContestFor(Target)!;
-        var sentence = contest.Describe();
+        var replacements = contest.ReplacementsInCompileOrder;
 
-        Assert.Contains($"replaced by {contest.Replacements.Count} sources", sentence, StringComparison.Ordinal);
-        Assert.Contains($"{contest.Winner!.Source.Display} wins", sentence, StringComparison.Ordinal);
-        Assert.Contains($"{contest.Overridden.Count} replacement(s) are overridden", sentence, StringComparison.Ordinal);
-        Assert.Contains($"{contest.Wraps.Count} wrap(s)", sentence, StringComparison.Ordinal);
+        Assert.Equal(2, replacements.Count);
+        Assert.Same(replacements[^1], contest.Winner);
+        Assert.Same(replacements[0], contest.LoserNoWarningNames);
+        Assert.Equal(replacements.Take(replacements.Count - 1), contest.OverriddenInCompileOrder);
+        Assert.Single(contest.WrapsInCompileOrder);
     }
 
     [Fact]
-    public void TheSentenceNeverClaimsAnExecutionNesting()
+    public void NoTextThisEngineEmitsClaimsAnExecutionNesting()
     {
-        // The wrap order this engine reports is a compile order. The words that
-        // would turn it into a claim about run time are the ones a reader would
-        // most naturally supply, so no output sentence may contain them.
-        using var layer = SyntheticScriptLayer.Of(
-            ("a.reds", SyntheticScriptLayer.Wraps(Type, Method)),
-            ("b.reds", SyntheticScriptLayer.Wraps(Type, Method)));
+        // Held against the declared set rather than against whatever one
+        // fixture happens to produce. A guard whose population is a fixture
+        // sees the sentences that fixture reaches and none of the others.
+        var consequences = ScriptResolutionLimit.All
+            .Select(limit => limit.Consequence)
+            .ToList();
 
-        var sentence = ScriptLayer.Read(layer.Root).ContestFor(Target)!.Describe();
-
-        Assert.Contains("compile order", sentence, StringComparison.Ordinal);
-        foreach (var forbidden in NestingVocabulary.Forbidden)
+        Assert.NotEmpty(consequences);
+        Assert.All(consequences, consequence =>
         {
-            Assert.DoesNotContain(forbidden, sentence, StringComparison.OrdinalIgnoreCase);
-        }
+            Assert.False(string.IsNullOrWhiteSpace(consequence));
+            foreach (var forbidden in NestingVocabulary.Forbidden)
+            {
+                Assert.DoesNotContain(forbidden, consequence, StringComparison.OrdinalIgnoreCase);
+            }
+        });
     }
 
     [Fact]
-    public void TheWrapClauseStatesTheOrderAndStopsThere()
+    public void TheOrderTheAnnotationListsCarryIsStatedWhereACallerCannotMissIt()
     {
-        // Asserted as the exact clause rather than as more banned words. A word
-        // list cannot police prose: the clause this replaced carried "and not an
-        // execution order", which names the stronger reading in order to deny it
-        // and which no plausible list of forbidden words would have caught. An
-        // exact clause reds if anything is appended to it at all.
-        using var layer = SyntheticScriptLayer.Of(
-            ("a.reds", SyntheticScriptLayer.Wraps(Type, Method)),
-            ("b.reds", SyntheticScriptLayer.Wraps(Type, Method)));
+        // The order is the one thing about these lists a caller cannot recover
+        // from the data, and the reading this project has not measured is the
+        // one a reader would supply. So it is in the member's name, which a
+        // call site has to spell, rather than in prose a caller may never
+        // print. Read off the type, so the name and the claim cannot drift.
+        var lists = typeof(MethodContest)
+            .GetProperties()
+            .Where(property => property.PropertyType == typeof(IReadOnlyList<ScriptAnnotation>))
+            .Select(property => property.Name)
+            .ToList();
 
-        var contest = ScriptLayer.Read(layer.Root).ContestFor(Target)!;
-
-        Assert.Contains("2 wrap(s) are listed in compile order;", contest.Describe(), StringComparison.Ordinal);
+        Assert.NotEmpty(lists);
+        Assert.All(lists, name => Assert.Contains("InCompileOrder", name, StringComparison.Ordinal));
+        Assert.Contains(nameof(MethodContest.WrapsInCompileOrder), lists);
+        Assert.Contains(nameof(MethodContest.ReplacementsInCompileOrder), lists);
     }
 
     [Fact]
-    public void TheWrapClauseStopsThereWhenItIsTheLastThingSaid()
+    public void NothingOnTheResultAssemblesASentence()
     {
-        // The arm above pins the clause only where a limit follows it, and the
-        // semicolon doing the pinning is that limit's. With nothing after it the
-        // clause ends the sentence, and text appended to that shape would pass a
-        // guard written only against the other one - so this arm pins the
-        // terminal form against its own full stop.
-        using var layer = SyntheticScriptLayer.Of(
-            ("a.reds", SyntheticScriptLayer.Wraps(Type, Method)),
-            ("b.reds", SyntheticScriptLayer.Wraps(Type, Method)));
+        // The class this closes is prose asserting more than its parts. With no
+        // sentence there is nothing to assert with, and the check that says so
+        // reads the type rather than trusting that nobody adds one back.
+        var emitters = typeof(MethodContest)
+            .GetMethods()
+            .Where(method => method.DeclaringType == typeof(MethodContest)
+                && method.ReturnType == typeof(string)
+                && method.GetParameters().Length == 0)
+            .Select(method => method.Name)
+            .ToList();
 
-        // Supplied plugin sources are what empties the limit list; the file is
-        // inert so that it changes the posture and nothing else.
-        using var elsewhere = SyntheticScriptLayer.Of(
-            ("plugin-provided.reds", "public func NothingHere() -> Void {}\n"));
-
-        var contest = ScriptLayer
-            .Read(layer.Root, [Path.Combine(elsewhere.Root, "plugin-provided.reds")])
-            .ContestFor(Target)!;
-
-        Assert.False(contest.ResultIsProvisional);
-        Assert.Contains("2 wrap(s) are listed in compile order.", contest.Describe(), StringComparison.Ordinal);
+        Assert.Empty(emitters);
     }
 
     [Fact]
@@ -337,8 +335,11 @@ public class ScriptLayerTests
         Assert.All(state.Methods, contest =>
         {
             Assert.Contains(ScriptResolutionLimit.SourceTakenOnAnUnmeasuredRule, contest.Limits);
-            Assert.Contains("spelled with a capital", contest.Describe(), StringComparison.Ordinal);
         });
+        Assert.Contains(
+            "spelled with a capital",
+            ScriptResolutionLimit.SourceTakenOnAnUnmeasuredRule.Consequence,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -357,8 +358,11 @@ public class ScriptLayerTests
         Assert.All(state.Methods, contest =>
         {
             Assert.Contains(ScriptResolutionLimit.AnnotationCouldNotBeAttached, contest.Limits);
-            Assert.Contains("could not be resolved to a method", contest.Describe(), StringComparison.Ordinal);
         });
+        Assert.Contains(
+            "could not be resolved to a method",
+            ScriptResolutionLimit.AnnotationCouldNotBeAttached.Consequence,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -377,8 +381,6 @@ public class ScriptLayerTests
         Assert.All(state.Methods, contest =>
         {
             Assert.Contains(ScriptResolutionLimit.AnnotationCouldNotBeAttached, contest.Limits);
-            Assert.Contains(
-                "could not be resolved to a method", contest.Describe(), StringComparison.Ordinal);
         });
     }
 
@@ -410,10 +412,6 @@ public class ScriptLayerTests
         // same limit rather than going out flat.
         Assert.True(contest.ResultIsProvisional);
         Assert.Contains(ScriptResolutionLimit.PluginScriptsNotSupplied, contest.Limits);
-
-        var sentence = contest.Describe();
-        Assert.Contains("is not replaced by any source this reading resolved", sentence, StringComparison.Ordinal);
-        Assert.Contains("would take it from whatever this result names", sentence, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -430,8 +428,8 @@ public class ScriptLayerTests
 
         Assert.Equal("a_real.reds", contest.Winner!.Source.Path);
         Assert.False(contest.IsContested);
-        Assert.Empty(contest.Overridden);
-        Assert.Equal("b_gated.reds", Assert.Single(contest.Undetermined).Source.Path);
+        Assert.Empty(contest.OverriddenInCompileOrder);
+        Assert.Equal("b_gated.reds", Assert.Single(contest.UndeterminedInCompileOrder).Source.Path);
         Assert.Contains(ScriptResolutionLimit.GatedAnnotationPresent, contest.Limits);
     }
 
@@ -444,13 +442,10 @@ public class ScriptLayerTests
         var state = ScriptLayer.Read(layer.Root);
         var contest = state.ContestFor(Target)!;
 
-        Assert.Empty(contest.Wraps);
+        Assert.Empty(contest.WrapsInCompileOrder);
         Assert.Empty(state.Wrapped);
         Assert.Single(state.UndeterminedAnnotations);
-        Assert.Contains(
-            "annotation(s) on this method are behind a conditional-compilation gate",
-            contest.Describe(),
-            StringComparison.Ordinal);
+        Assert.Contains(ScriptResolutionLimit.GatedAnnotationPresent, contest.Limits);
     }
 
     [Fact]
@@ -466,7 +461,7 @@ public class ScriptLayerTests
 
         Assert.NotNull(contest);
         Assert.Null(contest.Winner);
-        Assert.Single(contest.Undetermined);
+        Assert.Single(contest.UndeterminedInCompileOrder);
         Assert.True(contest.ResultIsProvisional);
     }
 
@@ -483,7 +478,9 @@ public class ScriptLayerTests
         Assert.Single(state.WrapsWhoseBodyCouldNotBeRead);
         Assert.Contains(ScriptResolutionLimit.WrapBodyNotResolved, contest.Limits);
         Assert.Contains(
-            "could not read to the end", contest.Describe(), StringComparison.Ordinal);
+            "could not read to the end",
+            ScriptResolutionLimit.WrapBodyNotResolved.Consequence,
+            StringComparison.Ordinal);
     }
 
     [Fact]

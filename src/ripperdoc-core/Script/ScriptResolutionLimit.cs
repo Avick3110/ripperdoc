@@ -37,9 +37,8 @@ public sealed class ScriptResolutionLimit : IWitnessedKind
     /// </summary>
     public static readonly ScriptResolutionLimit PluginScriptsNotSupplied = new(
         contest => contest.Enumeration.PluginPosture == PluginScriptPosture.NotSupplied,
-        _ => "no runtime-extension plugin scripts were supplied, and those compile after every "
-            + "source here, so a plugin replacing this method would take it from whatever this "
-            + "result names",
+        "no runtime-extension plugin scripts were supplied, and those compile after every source "
+            + "here, so a plugin replacing this method would take it from whatever this result names",
         new ScriptLayerWitness(("a.reds", AWrap)));
 
     /// <summary>
@@ -54,10 +53,10 @@ public sealed class ScriptResolutionLimit : IWitnessedKind
     /// annotation is kept out of the contest and named instead.
     /// </remarks>
     public static readonly ScriptResolutionLimit GatedAnnotationPresent = new(
-        contest => contest.Undetermined.Count > 0,
-        contest => $"{contest.Undetermined.Count} annotation(s) on this method are behind a "
-            + "conditional-compilation gate whose value this engine does not decide, so they are "
-            + "left out of this result and any of them may in fact apply",
+        contest => contest.UndeterminedInCompileOrder.Count > 0,
+        "annotations on this method are behind a conditional-compilation gate whose value this "
+            + "engine does not decide, so they are left out of this result and any of them may in "
+            + "fact apply",
         new ScriptLayerWitness(("a.reds", AGate + AReplacement)));
 
     /// <summary>
@@ -68,10 +67,9 @@ public sealed class ScriptResolutionLimit : IWitnessedKind
     /// different thing from knowing it does not.
     /// </remarks>
     public static readonly ScriptResolutionLimit WrapBodyNotResolved = new(
-        contest => contest.Wraps.Any(annotation => annotation.BodyCouldNotBeRead),
-        contest => $"{contest.Wraps.Count(annotation => annotation.BodyCouldNotBeRead)} wrap(s) here "
-            + "have a body this engine could not read to the end, so whether they continue the chain "
-            + "is unknown rather than answered",
+        contest => contest.WrapsInCompileOrder.Any(annotation => annotation.BodyCouldNotBeRead),
+        "wraps here have a body this engine could not read to the end, so whether they continue "
+            + "the chain is unknown rather than answered",
         new ScriptLayerWitness(("a.reds", AWrapWhoseBodyNeverCloses)));
 
     /// <summary>
@@ -88,7 +86,7 @@ public sealed class ScriptResolutionLimit : IWitnessedKind
     /// </remarks>
     public static readonly ScriptResolutionLimit SourceTakenOnAnUnmeasuredRule = new(
         contest => contest.Enumeration.SourcesNotSpelledInLowerCase.Count > 0,
-        _ => "this reading took a source whose extension is spelled with a capital, which this engine "
+        "this reading took a source whose extension is spelled with a capital, which this engine "
             + "includes on its own choice rather than on a measured rule, and the compile set decides "
             + "every winner here",
         new ScriptLayerWitness(("a.RedS", AWrap)));
@@ -108,27 +106,35 @@ public sealed class ScriptResolutionLimit : IWitnessedKind
     public static readonly ScriptResolutionLimit AnnotationCouldNotBeAttached = new(
         contest => contest.Readings.Any(
             reading => reading.AnnotationsNotResolvedToAMethod.Count > 0),
-        _ => "somewhere in this reading an annotation could not be resolved to a method, so it names "
-            + "no method and this result cannot be shown to have seen every carrier",
+        "somewhere in this reading an annotation could not be resolved to a method, so it names no "
+            + "method and this result cannot be shown to have seen every carrier",
         new ScriptLayerWitness(("a.reds", AWrap), ("b.reds", AnAnnotationOverNothing)));
 
     private static readonly Lazy<IReadOnlyList<KindMember<ScriptResolutionLimit>>> Members =
         new(DeclaredKinds.Of<ScriptResolutionLimit>);
 
     private readonly Func<MethodContest, bool> _applies;
-    private readonly Func<MethodContest, string> _explain;
     private readonly ScriptLayerWitness _witness;
 
     private ScriptResolutionLimit(
         Func<MethodContest, bool> applies,
-        Func<MethodContest, string> explain,
+        string consequence,
         ScriptLayerWitness witness)
     {
         _applies = applies;
-        _explain = explain;
+        Consequence = consequence;
         _witness = witness;
         DeclaredKinds.Register(this);
     }
+
+    /// <summary>What this limit means for the result carrying it.</summary>
+    /// <remarks>
+    /// Invariant: it names no mod, no method and no count. Those belong to the
+    /// result rather than to the limit, and a caller that wants them has them
+    /// already - so the engine states what is unresolved and leaves the
+    /// sentence to whoever knows their reader.
+    /// </remarks>
+    public string Consequence { get; }
 
     /// <summary>Every limit this engine can report.</summary>
     public static IReadOnlyList<ScriptResolutionLimit> All =>
@@ -162,8 +168,6 @@ public sealed class ScriptResolutionLimit : IWitnessedKind
     bool IWitnessedKind.AppliesTo(MethodContest contest) => AppliesTo(contest);
 
     internal bool AppliesTo(MethodContest contest) => _applies(contest);
-
-    internal string Explain(MethodContest contest) => _explain(contest);
 
     // The witness sources. A method that is wrapped or replaced is what makes a
     // contest exist at all, so every witness carries one - a layer that

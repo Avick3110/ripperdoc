@@ -82,7 +82,7 @@ internal static class KindCompleteness
 internal sealed class UnwiredKindProbe : IWitnessedKind
 {
     public static readonly UnwiredKindProbe Wired = new(
-        contest => contest.Wraps.Count > 0,
+        contest => contest.WrapsInCompileOrder.Count > 0,
         new ScriptLayerWitness(("a.reds", AWrap)));
 
     public static readonly UnwiredKindProbe Unwired = new(

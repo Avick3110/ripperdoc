@@ -36,7 +36,7 @@ public sealed class ScriptLayer
 
     /// <summary>Methods that at least one resolved source wraps.</summary>
     public IReadOnlyList<MethodContest> Wrapped =>
-        Methods.Where(contest => contest.Wraps.Count > 0).ToList();
+        Methods.Where(contest => contest.WrapsInCompileOrder.Count > 0).ToList();
 
     /// <summary>
     /// Every replacement that is overridden and does nothing.
@@ -48,7 +48,7 @@ public sealed class ScriptLayer
     /// diagnostic at all.
     /// </remarks>
     public IReadOnlyList<ScriptAnnotation> SilentlyOverriddenReplacements =>
-        Contested.SelectMany(contest => contest.Overridden).ToList();
+        Contested.SelectMany(contest => contest.OverriddenInCompileOrder).ToList();
 
     /// <summary>
     /// Wraps read to hold no call to the method they wrap.
@@ -59,7 +59,7 @@ public sealed class ScriptLayer
     /// <see cref="WrapsWhoseBodyCouldNotBeRead" />.
     /// </remarks>
     public IReadOnlyList<ScriptAnnotation> WrapsThatDropTheChain =>
-        Methods.SelectMany(contest => contest.Wraps)
+        Methods.SelectMany(contest => contest.WrapsInCompileOrder)
             .Where(annotation => annotation.IsWrapThatDropsTheChain)
             .ToList();
 
@@ -67,7 +67,7 @@ public sealed class ScriptLayer
     /// Wraps whose body this engine could not read to the end.
     /// </summary>
     public IReadOnlyList<ScriptAnnotation> WrapsWhoseBodyCouldNotBeRead =>
-        Methods.SelectMany(contest => contest.Wraps)
+        Methods.SelectMany(contest => contest.WrapsInCompileOrder)
             .Where(annotation => annotation.BodyCouldNotBeRead)
             .ToList();
 
@@ -80,7 +80,7 @@ public sealed class ScriptLayer
     /// without deciding it.
     /// </remarks>
     public IReadOnlyList<ScriptAnnotation> UndeterminedAnnotations =>
-        Methods.SelectMany(contest => contest.Undetermined).ToList();
+        Methods.SelectMany(contest => contest.UndeterminedInCompileOrder).ToList();
 
     /// <summary>
     /// Every annotation this engine contends over and could not resolve to a

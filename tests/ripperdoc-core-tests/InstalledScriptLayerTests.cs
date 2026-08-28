@@ -84,9 +84,9 @@ public class InstalledScriptLayerTests
         Assert.All(state.Contested, contest =>
         {
             Assert.NotNull(contest.Winner);
-            Assert.Equal(contest.Replacements.Count - 1, contest.Overridden.Count);
+            Assert.Equal(contest.ReplacementsInCompileOrder.Count - 1, contest.OverriddenInCompileOrder.Count);
             Assert.NotNull(contest.LoserNoWarningNames);
-            Assert.DoesNotContain(contest.Winner, contest.Overridden);
+            Assert.DoesNotContain(contest.Winner, contest.OverriddenInCompileOrder);
         });
     }
 
@@ -98,7 +98,7 @@ public class InstalledScriptLayerTests
         Assert.All(
             state.Methods.Where(contest => contest.Winner is not null),
             contest => Assert.Equal(
-                contest.Replacements.Max(annotation => annotation.Source.Rank),
+                contest.ReplacementsInCompileOrder.Max(annotation => annotation.Source.Rank),
                 contest.Winner!.Source.Rank));
     }
 
@@ -119,11 +119,11 @@ public class InstalledScriptLayerTests
         {
             Assert.True(contest.ResultIsProvisional);
             Assert.Contains(ScriptResolutionLimit.PluginScriptsNotSupplied, contest.Limits);
-            Assert.Contains(
-                "would take it from whatever this result names",
-                contest.Describe(),
-                StringComparison.Ordinal);
         });
+        Assert.Contains(
+            "would take it from whatever this result names",
+            ScriptResolutionLimit.PluginScriptsNotSupplied.Consequence,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -138,10 +138,10 @@ public class InstalledScriptLayerTests
         Assert.All(state.UndeterminedAnnotations, annotation => Assert.True(annotation.IsGated));
         Assert.All(state.Methods, contest =>
         {
-            Assert.DoesNotContain(contest.Replacements, annotation => annotation.IsGated);
-            Assert.DoesNotContain(contest.Wraps, annotation => annotation.IsGated);
+            Assert.DoesNotContain(contest.ReplacementsInCompileOrder, annotation => annotation.IsGated);
+            Assert.DoesNotContain(contest.WrapsInCompileOrder, annotation => annotation.IsGated);
 
-            if (contest.Undetermined.Count > 0)
+            if (contest.UndeterminedInCompileOrder.Count > 0)
             {
                 Assert.Contains(ScriptResolutionLimit.GatedAnnotationPresent, contest.Limits);
             }
@@ -166,21 +166,27 @@ public class InstalledScriptLayerTests
     }
 
     [Fact]
-    public void NoReportedSentenceClaimsAnExecutionNesting()
+    public void NoLimitThisLayerReportsClaimsAnExecutionNesting()
     {
         var state = ScriptLayer.Read(ScriptDirectory);
 
-        // Every method's sentence, against the one list the tier (i) check reads.
-        // Two copies of the vocabulary drift, and the copy that drifts is the one
-        // over the layer nobody re-reads.
-        foreach (var contest in state.Methods)
+        // Against the one list the tier (i) check reads. Two copies of the
+        // vocabulary drift, and the copy that drifts is the one over the layer
+        // nobody re-reads. Taken from what this layer actually carries, so a
+        // limit the synthetic fixtures never reach is still held to it.
+        var reported = state.Methods
+            .SelectMany(contest => contest.Limits)
+            .Distinct()
+            .ToList();
+
+        Assert.NotEmpty(reported);
+        Assert.All(reported, limit =>
         {
-            var sentence = contest.Describe();
             foreach (var forbidden in NestingVocabulary.Forbidden)
             {
-                Assert.DoesNotContain(forbidden, sentence, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(forbidden, limit.Consequence, StringComparison.OrdinalIgnoreCase);
             }
-        }
+        });
     }
 
     private static string Report(ScriptLayer state)
@@ -195,7 +201,7 @@ public class InstalledScriptLayerTests
             $"wraps that drop the chain        {state.WrapsThatDropTheChain.Count}",
             $"wraps whose body was not read    {state.WrapsWhoseBodyCouldNotBeRead.Count}",
             $"undetermined (gated) annotations {state.UndeterminedAnnotations.Count}",
-            $"methods with a gated annotation  {state.Methods.Count(c => c.Undetermined.Count > 0)}",
+            $"methods with a gated annotation  {state.Methods.Count(c => c.UndeterminedInCompileOrder.Count > 0)}",
             $"annotations not resolved         {state.Readings.Sum(r => r.AnnotationsNotResolvedToAMethod.Count)}",
             $"sources not spelled .reds        {state.Enumeration.SourcesNotSpelledInLowerCase.Count}",
         };
