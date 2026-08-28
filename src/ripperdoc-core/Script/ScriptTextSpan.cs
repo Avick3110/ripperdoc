@@ -24,9 +24,19 @@ namespace Ripperdoc.Core.Script;
 /// taken once.
 /// </para>
 /// <para>
-/// The direction the pass fails in is what makes the gap survivable: an
-/// unmodelled shape leaves an annotation unresolved or undetermined rather than
-/// live, so what is lost is a report and never a wrong winner.
+/// The direction the pass fails in is measured for one of the two ways a shape
+/// can go unmodelled, and not for the other. An annotation whose
+/// <strong>argument</strong> shape this engine does not model is left
+/// unresolved rather than live and reaches the result as a limit, which is
+/// checked. An annotation sitting in a <strong>span category nobody
+/// declared</strong> is not: the pass has no branch for the span, copies it
+/// through, and the annotation stands as live code. A nested block comment and
+/// a single-quoted string each do this, and the second manufactures a contest
+/// whose winner takes a method it does not replace - the inverted answer this
+/// layer exists to prevent, reached from the reader's side. Both are measured
+/// and filed as issue 55; the general form is issue 45. So the gap costs a
+/// wrong winner and not only a missing report, and how often either shape
+/// occurs in a real layer is unmeasured.
 /// </para>
 /// </remarks>
 internal sealed class ScriptTextSpan
