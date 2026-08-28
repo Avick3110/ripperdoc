@@ -19,24 +19,32 @@ namespace Ripperdoc.Core.Script;
 /// </remarks>
 public sealed class MethodContest
 {
-    private readonly PluginScriptPosture _posture;
-    private readonly IReadOnlyList<ScriptResolutionLimit> _layerLimits;
-
     internal MethodContest(
         MethodIdentity method,
         IReadOnlyList<ScriptAnnotation> replacements,
         IReadOnlyList<ScriptAnnotation> wraps,
         IReadOnlyList<ScriptAnnotation> undetermined,
-        PluginScriptPosture posture,
-        IReadOnlyList<ScriptResolutionLimit> layerLimits)
+        ScriptEnumeration enumeration,
+        IReadOnlyList<ScriptFileReading> readings)
     {
         Method = method;
         Replacements = replacements;
         Wraps = wraps;
         Undetermined = undetermined;
-        _posture = posture;
-        _layerLimits = layerLimits;
+        Enumeration = enumeration;
+        Readings = readings;
     }
+
+    /// <summary>The compile order this result was resolved against.</summary>
+    /// <remarks>
+    /// Carried on the result because a limit is a statement about the reading
+    /// this result came out of, and some of them are properties of the whole
+    /// reading rather than of one method.
+    /// </remarks>
+    internal ScriptEnumeration Enumeration { get; }
+
+    /// <summary>Every source read, in compile order.</summary>
+    internal IReadOnlyList<ScriptFileReading> Readings { get; }
 
     /// <summary>The method these annotations target.</summary>
     public MethodIdentity Method { get; }
@@ -103,36 +111,15 @@ public sealed class MethodContest
     /// Computed from the result rather than from whether it names a winner. A
     /// method reported as unreplaced is displaceable by exactly the inputs a
     /// replaced one is, so it carries the same limits.
+    /// <para>
+    /// Every declared limit is asked, rather than a remembered few being added.
+    /// The limits belonging to the whole reading are not narrowed to the
+    /// contests they touch, because which contests those are is the part that
+    /// is unknown - each says so in its own test.
+    /// </para>
     /// </remarks>
-    public IReadOnlyList<ScriptResolutionLimit> Limits
-    {
-        get
-        {
-            var limits = new List<ScriptResolutionLimit>();
-
-            if (_posture == PluginScriptPosture.NotSupplied)
-            {
-                limits.Add(ScriptResolutionLimit.PluginScriptsNotSupplied);
-            }
-
-            if (Undetermined.Count > 0)
-            {
-                limits.Add(ScriptResolutionLimit.GatedAnnotationPresent);
-            }
-
-            if (Wraps.Any(annotation => annotation.BodyCouldNotBeRead))
-            {
-                limits.Add(ScriptResolutionLimit.WrapBodyNotResolved);
-            }
-
-            // Limits the whole reading carries. They are not narrowed to
-            // the contests they touch, because which contests those are is
-            // the part that is unknown.
-            limits.AddRange(_layerLimits);
-
-            return limits;
-        }
-    }
+    public IReadOnlyList<ScriptResolutionLimit> Limits =>
+        ScriptResolutionLimit.All.Where(limit => limit.AppliesTo(this)).ToList();
 
     /// <summary>Whether anything about this result was left unresolved.</summary>
     public bool ResultIsProvisional => Limits.Count > 0;
@@ -170,33 +157,9 @@ public sealed class MethodContest
 
         foreach (var limit in Limits)
         {
-            parts.Add(Explain(limit));
+            parts.Add(limit.Explain(this));
         }
 
         return string.Join("; ", parts) + ".";
     }
-
-    private string Explain(ScriptResolutionLimit limit) => limit switch
-    {
-        ScriptResolutionLimit.PluginScriptsNotSupplied =>
-            "no runtime-extension plugin scripts were supplied, and those compile after every "
-            + "source here, so a plugin replacing this method would take it from whatever this "
-            + "result names",
-        ScriptResolutionLimit.GatedAnnotationPresent =>
-            $"{Undetermined.Count} annotation(s) on this method are behind a conditional-compilation "
-            + "gate whose value this engine does not decide, so they are left out of this result and "
-            + "any of them may in fact apply",
-        ScriptResolutionLimit.WrapBodyNotResolved =>
-            $"{Wraps.Count(annotation => annotation.BodyCouldNotBeRead)} wrap(s) here have a body "
-            + "this engine could not read to the end, so whether they continue the chain is unknown "
-            + "rather than answered",
-        ScriptResolutionLimit.SourceTakenOnAnUnmeasuredRule =>
-            "this reading took a source whose extension is spelled with a capital, which this engine "
-            + "includes on its own choice rather than on a measured rule, and the compile set decides "
-            + "every winner here",
-        ScriptResolutionLimit.AnnotationCouldNotBeAttached =>
-            "somewhere in this reading an annotation could not be resolved to a method, so it names "
-            + "no method and this result cannot be shown to have seen every carrier",
-        _ => throw new ArgumentOutOfRangeException(nameof(limit), limit, "unhandled resolution limit"),
-    };
 }
