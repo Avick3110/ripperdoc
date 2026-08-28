@@ -23,10 +23,21 @@ namespace Ripperdoc.Core.Reporting;
 /// other, and comparing the two is the only way that difference is visible.
 /// </para>
 /// <para>
-/// An empty reading is refused rather than returned. Every question asked of a
-/// kind set is a completeness question, and an empty set answers all of them
-/// affirmatively - so a derivation that finds nothing must fail loudly rather
-/// than report that nothing is missing.
+/// An empty reflected reading is refused rather than returned. Every question
+/// asked of a kind set is a completeness question, and an empty set answers all
+/// of them affirmatively - so a derivation that finds nothing must fail loudly
+/// rather than report that nothing is missing. The refusal is
+/// <see cref="Of{TKind}" />'s alone; <see cref="Constructed{TKind}" /> reports
+/// what registered itself and returns an empty list when nothing did, which is
+/// safe only because it is never read except beside a reading that refuses.
+/// </para>
+/// <para>
+/// One shape sits outside both readings rather than in one of them: a member
+/// declared on a type derived from the kind set. Reflection is asked for the
+/// set's own declarations, and registration keys on the runtime type, so such a
+/// member is absent from each and the comparison stays green. Every kind set
+/// here is sealed, which is what prevents it, and that is the reason they are
+/// sealed rather than a coincidence.
 /// </para>
 /// <para>
 /// Reflection over static fields is lost to trimming, which is the hazard

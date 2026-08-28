@@ -21,10 +21,10 @@ namespace Ripperdoc.Core.Script;
 /// member of this type, and a sentence naming a mod says more than its parts
 /// as soon as one of them turns out not to hold - a result can be reported
 /// uncontested and carry, in the same breath, a gated annotation that would
-/// contest it. The order every annotation list is given in is in that list's
-/// name rather than in prose, because the order is the part a caller cannot
-/// recover from the data and the reading this project has not measured is the
-/// one a reader supplies unaided.
+/// contest it. The order every annotation list on this type is given in is in
+/// that list's name rather than in prose, because the order is the part a
+/// caller cannot recover from the data, and the reading this project has not
+/// measured is the one a reader supplies unaided.
 /// </para>
 /// </remarks>
 public sealed class MethodContest
@@ -53,7 +53,12 @@ public sealed class MethodContest
     /// </remarks>
     internal ScriptEnumeration Enumeration { get; }
 
-    /// <summary>Every source read, in compile order.</summary>
+    /// <summary>Every source read.</summary>
+    /// <remarks>
+    /// No order is claimed. Nothing here reads one: the tests over this list ask
+    /// whether any reading holds something, and a sequence stated and not held
+    /// is the prose claim this type exists to stop making.
+    /// </remarks>
     internal IReadOnlyList<ScriptFileReading> Readings { get; }
 
     /// <summary>The method these annotations target.</summary>
