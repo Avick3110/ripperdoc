@@ -398,6 +398,37 @@ public class ScriptLayerTests
     }
 
     [Fact]
+    public void AReadingWithNothingUnresolvedCarriesNoLimitAtAll()
+    {
+        // The negative arm over the whole declared set. The completeness check
+        // asks only whether each limit reaches some result, and a limit that
+        // fired on every reading would pass it while naming every result
+        // provisional. Asking the opposite question of all of them at once is
+        // what the per-limit arms cannot do as the set grows: a limit added
+        // later is in this population the day it is declared.
+        using var layer = SyntheticScriptLayer.Of(
+            ("a.reds", SyntheticScriptLayer.Wraps(Type, Method)),
+            ("b.reds", SyntheticScriptLayer.Wraps(Type, Method)));
+
+        // Supplied plugin sources are what empties the limit list; the file is
+        // inert so that it changes the posture and nothing else.
+        using var elsewhere = SyntheticScriptLayer.Of(
+            ("plugin-provided.reds", "public func NothingHere() -> Void {}\n"));
+
+        var contest = ScriptLayer
+            .Read(layer.Root, [Path.Combine(elsewhere.Root, "plugin-provided.reds")])
+            .ContestFor(Target)!;
+
+        Assert.False(
+            contest.ResultIsProvisional,
+            "These limits fired on a reading with nothing unresolved about it: "
+            + string.Join(", ", contest.Limits.Select(limit => limit.Name))
+            + ". A limit applying where nothing was left unread names a result "
+            + "provisional that is not, which is the same false claim as a sentence "
+            + "overstating what was read - and the completeness check cannot see it.");
+    }
+
+    [Fact]
     public void AMethodOnlyWrappedHasNoWinnerAndIsNotAContest()
     {
         using var layer = SyntheticScriptLayer.Of(("a.reds", SyntheticScriptLayer.Wraps(Type, Method)));
