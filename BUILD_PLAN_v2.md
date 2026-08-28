@@ -357,6 +357,8 @@ and its status: `OPEN`, `RUN <date> → result`, or `WAIVED <date>, Aaron,
 | 17 | The gate's grammar beyond a single `ModuleExists` — a braced form gating a group, nested gates, and what else may appear in a condition | Wave 4 conditional-compilation measurement. Every gate in the surveyed layer preceded exactly one declaration and no braced group appeared, so none was built; no cell carried two gates on one declaration | **OPEN** — rule 1 of the finding covers one gate over one declaration. The engine detects a gate lexically and treats what follows as undetermined, so an unmodelled form fails toward undetermined rather than toward a false live reading; a braced form would leave later declarations in the group read as live. Settled by compiles over each form |
 
 
+| 18 | Whether this engine's set of modelled source spans is what the compiler treats as not-code | Wave 4's reader, restated when the span set was declared. The pass models a line comment, a block comment, a string literal and an interpolation, and each declared span is checked against the pass; what no derivation inside this repository can find is a category nobody declared, because the set that would settle it is the compiler's own grammar | **OPEN** — the engine states the boundary on `ScriptTextSpan` rather than leaving it to be inferred from an absence, and an unmodelled shape leaves an annotation unresolved or undetermined rather than live, so what is lost is a report and never a wrong winner. Closed by the compiler-agreement measurement filed as [#45](https://github.com/Avick3110/ripperdoc/issues/45), which is blocked on the invocation shape rather than on a decision |
+
 **The ship gate is: this table empty, or every remaining line waived by name.**
 
 ## 11. Amendment history
