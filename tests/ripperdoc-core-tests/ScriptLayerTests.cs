@@ -250,17 +250,24 @@ public class ScriptLayerTests
         // Held against the declared set rather than against whatever one
         // fixture happens to produce. A guard whose population is a fixture
         // sees the sentences that fixture reaches and none of the others.
-        var consequences = ScriptResolutionLimit.All
-            .Select(limit => limit.Consequence)
+        //
+        // Both texts a limit carries to a reader, not the consequence alone: a
+        // name is emitted text, and this design makes names load-bearing by
+        // putting the order claim into them. What this does not reach is a
+        // sentence assembled anywhere else in the layer; nothing on the result
+        // assembles one, which is a separate check, and this population is
+        // these two strings per declared limit and no wider.
+        var emitted = ScriptResolutionLimit.All
+            .SelectMany(limit => new[] { limit.Consequence, limit.Name })
             .ToList();
 
-        Assert.NotEmpty(consequences);
-        Assert.All(consequences, consequence =>
+        Assert.NotEmpty(emitted);
+        Assert.All(emitted, text =>
         {
-            Assert.False(string.IsNullOrWhiteSpace(consequence));
+            Assert.False(string.IsNullOrWhiteSpace(text));
             foreach (var forbidden in NestingVocabulary.Forbidden)
             {
-                Assert.DoesNotContain(forbidden, consequence, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(forbidden, text, StringComparison.OrdinalIgnoreCase);
             }
         });
     }
@@ -290,7 +297,10 @@ public class ScriptLayerTests
     {
         // The class this closes is prose asserting more than its parts. With no
         // sentence there is nothing to assert with, and the check that says so
-        // reads the type rather than trusting that nobody adds one back.
+        // reads the type rather than trusting that nobody adds one back. It
+        // reads this one type: a sentence assembled on another type in the
+        // layer is outside it, and saying so is cheaper than a population
+        // nobody can derive.
         var emitters = typeof(MethodContest)
             .GetMethods()
             .Where(method => method.DeclaringType == typeof(MethodContest)
@@ -332,6 +342,10 @@ public class ScriptLayerTests
 
         var state = ScriptLayer.Read(layer.Root);
 
+        // Floored: "every result" over no results is green, and the reading
+        // yielding nothing is a failure this cell would otherwise report as a
+        // pass.
+        Assert.NotEmpty(state.Methods);
         Assert.All(state.Methods, contest =>
         {
             Assert.Contains(ScriptResolutionLimit.SourceTakenOnAnUnmeasuredRule, contest.Limits);
@@ -355,6 +369,10 @@ public class ScriptLayerTests
         var state = ScriptLayer.Read(layer.Root);
 
         Assert.Single(state.AnnotationsNotResolvedToAMethod);
+        // Floored: "every result" over no results is green, and the reading
+        // yielding nothing is a failure this cell would otherwise report as a
+        // pass.
+        Assert.NotEmpty(state.Methods);
         Assert.All(state.Methods, contest =>
         {
             Assert.Contains(ScriptResolutionLimit.AnnotationCouldNotBeAttached, contest.Limits);
@@ -378,6 +396,10 @@ public class ScriptLayerTests
         var state = ScriptLayer.Read(layer.Root);
 
         Assert.Equal(["b.reds:1"], state.AnnotationsNotResolvedToAMethod);
+        // Floored: "every result" over no results is green, and the reading
+        // yielding nothing is a failure this cell would otherwise report as a
+        // pass.
+        Assert.NotEmpty(state.Methods);
         Assert.All(state.Methods, contest =>
         {
             Assert.Contains(ScriptResolutionLimit.AnnotationCouldNotBeAttached, contest.Limits);
@@ -405,7 +427,10 @@ public class ScriptLayerTests
         // fired on every reading would pass it while naming every result
         // provisional. Asking the opposite question of all of them at once is
         // what the per-limit arms cannot do as the set grows: a limit added
-        // later is in this population the day it is declared.
+        // later is asked this question the day it is declared. What bounds the
+        // question is this one layer's shape - wrap-only, with plugin sources
+        // supplied - so a limit firing only where a method is replaced is
+        // outside anything this arm can see.
         using var layer = SyntheticScriptLayer.Of(
             ("a.reds", SyntheticScriptLayer.Wraps(Type, Method)),
             ("b.reds", SyntheticScriptLayer.Wraps(Type, Method)));

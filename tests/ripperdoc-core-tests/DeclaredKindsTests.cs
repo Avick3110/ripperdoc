@@ -1,4 +1,5 @@
 using Ripperdoc.Core.Reporting;
+using Ripperdoc.Core.Script;
 using Xunit;
 
 namespace Ripperdoc.Core.Tests;
@@ -72,6 +73,29 @@ public sealed class DeclaredKindsTests
             () => DeclaredKinds.Of<EmptySet>());
 
         Assert.Contains("broken derivation", refusal.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EveryKindSetThisProjectDeclaresIsSealed()
+    {
+        // The remark on DeclaredKinds says sealedness is what keeps a member
+        // declared on a derived type from sitting outside both readings, where
+        // the identity comparison stays green over an incomplete set. That was
+        // prose. This is the check.
+        //
+        // The population is named rather than derived, and is exactly as wide
+        // as the names in it: which types are passed to Of is not something the
+        // type system can be asked. A kind set added later and left out of this
+        // list is not covered, and that is a property of this check rather than
+        // a claim it is making about the project.
+        foreach (var set in new[] { typeof(ScriptResolutionLimit), typeof(ScriptTextSpan) })
+        {
+            Assert.True(
+                set.IsSealed,
+                set.Name + " is read as a kind set and is not sealed, so a member declared on a "
+                + "type derived from it would be absent from both readings while they went on "
+                + "agreeing.");
+        }
     }
 
     [Fact]
