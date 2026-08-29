@@ -133,6 +133,13 @@ public sealed class ScriptResolutionLimit : IWitnessedKind
     /// result rather than to the limit, and a caller that wants them has them
     /// already - so the engine states what is unresolved and leaves the
     /// sentence to whoever knows their reader.
+    /// <para>
+    /// One third of that is checked: a consequence carries no digit, which is
+    /// the count. The other two thirds are not, and there is no list of mod or
+    /// method names to check them against. What stands behind those is that a
+    /// limit is constructed with no access to a result, so it has nothing to
+    /// name - a weaker guarantee than a check, and named as one.
+    /// </para>
     /// </remarks>
     public string Consequence { get; }
 

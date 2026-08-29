@@ -24,8 +24,8 @@ namespace Ripperdoc.Core.Script;
 /// taken once.
 /// </para>
 /// <para>
-/// The direction the pass fails in is measured for one of the two ways a shape
-/// can go unmodelled, and not for the other. An annotation whose
+/// The direction the pass fails in is measured for one of the three ways a
+/// shape can go unmodelled, and not for the other two. An annotation whose
 /// <strong>argument</strong> shape this engine does not model is left
 /// unresolved rather than live and reaches the result as a limit, which is
 /// checked. An annotation sitting in a <strong>span category nobody
@@ -34,9 +34,20 @@ namespace Ripperdoc.Core.Script;
 /// a single-quoted string each do this, and the second manufactures a contest
 /// whose winner takes a method it does not replace - the inverted answer this
 /// layer exists to prevent, reached from the reader's side. Both are measured
-/// and filed as issue 55; the general form is issue 45. So the gap costs a
-/// wrong winner and not only a missing report, and how often either shape
-/// occurs in a real layer is unmeasured.
+/// and filed as issue 55; the general form is issue 45.
+/// </para>
+/// <para>
+/// The third way is a category declared here and checked only in the shape its
+/// own source carries. <see cref="StringLiteral" /> is modelled as far as the
+/// line it opens on, and a literal crossing a line hands its contents back as
+/// code - so a member of this set can be declared, handled, and still admit the
+/// shape the set exists to rule out. Each member below is checked against the
+/// pass in one shape, which is what "declared and handled" means here and is
+/// less than it sounds like. Measured, and filed as issue 55 with the rest.
+/// </para>
+/// <para>
+/// So the gap costs a wrong winner and not only a missing report, and how often
+/// any of the three shapes occurs in a real layer is unmeasured.
 /// </para>
 /// </remarks>
 internal sealed class ScriptTextSpan
@@ -52,6 +63,12 @@ internal sealed class ScriptTextSpan
         blanked => !blanked.Contains(AnAnnotation, StringComparison.Ordinal));
 
     /// <summary>A string literal, whose contents are not code.</summary>
+    /// <remarks>
+    /// Modelled as far as the line it opens on. A literal carried across a line
+    /// break is not modelled, and its contents are handed back as code - so this
+    /// member is checked in the shape its source carries and not in that one.
+    /// Measured, and filed with the rest of the reader's bound as issue 55.
+    /// </remarks>
     public static readonly ScriptTextSpan StringLiteral = new(
         "public func M() -> Void {\n  Log(\"" + AnAnnotation + "\");\n}\n",
         blanked => !blanked.Contains(AnAnnotation, StringComparison.Ordinal));

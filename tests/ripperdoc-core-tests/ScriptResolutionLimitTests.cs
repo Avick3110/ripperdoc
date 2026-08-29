@@ -75,13 +75,32 @@ public sealed class ScriptResolutionLimitTests
     [Fact]
     public void TheReportedSetIsOrderedTheSameWayOnEveryReading()
     {
-        Assert.Equal(
-            ScriptResolutionLimit.All.Select(limit => limit.Name).ToList(),
-            ScriptResolutionLimit.All.Select(limit => limit.Name).ToList());
+        // One assertion, not two: comparing the set against itself cannot fail
+        // under any defect, because both readings project one cached list.
         Assert.Equal(
             ScriptResolutionLimit.All.Select(limit => limit.Name).ToList(),
             ScriptResolutionLimit.All.Select(limit => limit.Name).OrderBy(
                 name => name, StringComparer.Ordinal).ToList());
+    }
+
+    [Fact]
+    public void NoLimitsConsequenceCarriesACount()
+    {
+        // One half of the invariant the consequence declares - no mod, no
+        // method, no count - is mechanically checkable, and this is that half.
+        // A count is exactly what the deleted sentence interpolated, so a digit
+        // reappearing here is that sentence returning one limit at a time.
+        //
+        // The other two halves are not checked and are not claimed to be: no
+        // list of mod or method names exists to check against. What stands
+        // behind them instead is that a limit is built with no access to a
+        // result, so there is nothing for it to name.
+        Assert.All(
+            ScriptResolutionLimit.All,
+            limit => Assert.False(
+                limit.Consequence.Any(char.IsDigit),
+                limit.Name + " carries a digit in its consequence, which is a count: "
+                + limit.Consequence));
     }
 
     [Fact]

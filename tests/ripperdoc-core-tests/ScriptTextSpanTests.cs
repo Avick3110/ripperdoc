@@ -48,6 +48,11 @@ public sealed class ScriptTextSpanTests
     {
         // A derivation coming back short would leave the cell above green by
         // finding nothing wrong with members it never read.
+        //
+        // Compared by count where the limits are compared by identity. Count is
+        // sufficient only because this set is sealed - every reflected member is
+        // then necessarily a constructed one - and that sealedness is itself
+        // checked rather than assumed.
         Assert.NotEmpty(ScriptTextSpan.All);
         Assert.Equal(
             DeclaredKinds.Constructed<ScriptTextSpan>().Count,

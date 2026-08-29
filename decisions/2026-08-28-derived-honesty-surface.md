@@ -137,6 +137,21 @@ may never print.
   occurs in a real layer is not. So the gap costs a wrong winner and not only a
   missing report, which is the whole reason it is named here rather than
   summarised as a lost report.
+- **A guard's stated scope is not tied to its actual population, and nothing
+  here changes that.** This design ties a kind's declaration to its production,
+  and the review of it then found the same shape one level up: a guard walks a
+  subset of what the sentence describing it claims - "every text it does emit"
+  over consequences alone, "every result" over a population that can be empty,
+  a category declared as handled and checked in one shape. Every instance was
+  answered the same way, by narrowing the sentence to what the guard walks and
+  widening the two populations that were cheap and clearly right. None was
+  answered by machinery.
+  **Promotion condition, pre-stated:** if guard-stated-scope against
+  actual-population recurs as a class in a later engagement, the derivation
+  design for it is chartered then. Recorded rather than built, per
+  `CLAUDE.md` §5 #10 - the threshold principle wants a second incident, and
+  building the guard-of-the-guard now invites the regress it would have to stop
+  somewhere anyway.
 - **A witness proves a kind is reachable through the engine, not that the engine
   produces it when it should.** That second thing is what the per-behaviour
   checks do, one per kind, and it is not derivable from anything.
