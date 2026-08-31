@@ -183,6 +183,12 @@ public sealed class ScriptLayer
             }
         }
 
+        // Computed once for the reading and shared by every contest of it. The
+        // answer is a property of the whole reading, so a contest asking it of
+        // itself would walk every reading again for each method.
+        var annotationUnresolvedSomewhereInTheReading = new Lazy<bool>(
+            () => readings.Any(reading => reading.AnnotationsNotResolvedToAMethod.Count > 0));
+
         var byMethod = new Dictionary<MethodIdentity, MethodContest>();
         foreach (var method in replacements.Keys.Concat(wraps.Keys).Concat(undetermined.Keys).Distinct())
         {
@@ -192,7 +198,7 @@ public sealed class ScriptLayer
                 wraps.TryGetValue(method, out var w) ? w : [],
                 undetermined.TryGetValue(method, out var u) ? u : [],
                 enumeration,
-                readings);
+                annotationUnresolvedSomewhereInTheReading);
         }
 
         return new ScriptLayer(enumeration, readings, byMethod);

@@ -35,14 +35,14 @@ public sealed class MethodContest
         IReadOnlyList<ScriptAnnotation> wraps,
         IReadOnlyList<ScriptAnnotation> undetermined,
         ScriptEnumeration enumeration,
-        IReadOnlyList<ScriptFileReading> readings)
+        Lazy<bool> annotationUnresolvedSomewhereInTheReading)
     {
         Method = method;
         ReplacementsInCompileOrder = replacements;
         WrapsInCompileOrder = wraps;
         UndeterminedInCompileOrder = undetermined;
         Enumeration = enumeration;
-        Readings = readings;
+        AnnotationUnresolvedSomewhereInTheReading = annotationUnresolvedSomewhereInTheReading;
     }
 
     /// <summary>The compile order this result was resolved against.</summary>
@@ -53,13 +53,18 @@ public sealed class MethodContest
     /// </remarks>
     internal ScriptEnumeration Enumeration { get; }
 
-    /// <summary>Every source read.</summary>
+    /// <summary>
+    /// Whether an annotation somewhere in the reading this result came out of
+    /// could not be resolved to a method.
+    /// </summary>
     /// <remarks>
-    /// No order is claimed. Nothing here reads one: the tests over this list ask
-    /// whether any reading holds something, and a sequence stated and not held
-    /// is the prose claim this type exists to stop making.
+    /// One object for the whole layer, handed to every contest of it rather
+    /// than derived per contest. The question is about the reading and not
+    /// about this method, and a contest deriving its own answer would be a
+    /// second site for one fact - so the sharing is what a check can assert by
+    /// identity, which two agreeing answers would not be.
     /// </remarks>
-    internal IReadOnlyList<ScriptFileReading> Readings { get; }
+    internal Lazy<bool> AnnotationUnresolvedSomewhereInTheReading { get; }
 
     /// <summary>The method these annotations target.</summary>
     public MethodIdentity Method { get; }
@@ -135,9 +140,18 @@ public sealed class MethodContest
     /// is unknown - each says so in its own test.
     /// </para>
     /// </remarks>
-    public IReadOnlyList<ScriptResolutionLimit> Limits =>
-        ScriptResolutionLimit.All.Where(limit => limit.AppliesTo(this)).ToList();
+    public IReadOnlyList<ScriptResolutionLimit> Limits => Applying.ToList();
 
     /// <summary>Whether anything about this result was left unresolved.</summary>
-    public bool ResultIsProvisional => Limits.Count > 0;
+    /// <remarks>
+    /// Asked of the same sequence the list is built from, and asked without
+    /// building it. Two sites each deciding for themselves which limits apply
+    /// is how they come apart.
+    /// </remarks>
+    public bool ResultIsProvisional => Applying.Any();
+
+    // Deferred on purpose: the caller that only wants to know whether anything
+    // applies stops at the first one that does.
+    private IEnumerable<ScriptResolutionLimit> Applying =>
+        ScriptResolutionLimit.All.Where(limit => limit.AppliesTo(this));
 }
