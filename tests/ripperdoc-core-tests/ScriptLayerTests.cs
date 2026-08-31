@@ -1,3 +1,4 @@
+using System.Reflection;
 using Ripperdoc.Core.Script;
 using Xunit;
 
@@ -18,6 +19,12 @@ public class ScriptLayerTests
     private const string Method = "TargetMethod";
 
     private static MethodIdentity Target => new(Type, Method);
+
+    // Every member the type declares, whatever its accessibility. The two
+    // guards below say they read the type; a default binding reads the part of
+    // it a stranger can see, and this assembly is not a stranger.
+    private const BindingFlags Declared =
+        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
 
     [Fact]
     public void TheLastReplacementInCompileOrderWins()
@@ -312,8 +319,12 @@ public class ScriptLayerTests
         // one a reader would supply. So it is in the member's name, which a
         // call site has to spell, rather than in prose a caller may never
         // print. Read off the type, so the name and the claim cannot drift.
+        //
+        // Every list the type declares, not only the ones a stranger can see:
+        // this assembly is a friend of that one, so a list added for a reporter
+        // here would be reached without ever being public.
         var lists = typeof(MethodContest)
-            .GetProperties()
+            .GetProperties(Declared)
             .Where(property => property.PropertyType == typeof(IReadOnlyList<ScriptAnnotation>))
             .Select(property => property.Name)
             .ToList();
@@ -333,8 +344,12 @@ public class ScriptLayerTests
         // reads this one type: a sentence assembled on another type in the
         // layer is outside it, and saying so is cheaper than a population
         // nobody can derive.
+        //
+        // Within that type it reads every method declared, not only the public
+        // ones. An internal reporter is the shape a reintroduced sentence takes
+        // first, because this assembly is already a friend of that one.
         var emitters = typeof(MethodContest)
-            .GetMethods()
+            .GetMethods(Declared)
             .Where(method => method.DeclaringType == typeof(MethodContest)
                 && method.ReturnType == typeof(string)
                 && method.GetParameters().Length == 0)
