@@ -273,6 +273,38 @@ public class ScriptLayerTests
     }
 
     [Fact]
+    public void TheLayerWideArmIsOneObjectEveryContestOfTheLayerHolds()
+    {
+        // Asserted by identity, not by agreement. Two contests each deriving
+        // the fact for themselves would agree on every layer that could be
+        // built here while walking every reading once per method, so equal
+        // answers say nothing about whether the derivation is shared. What
+        // this asserts is that there is one of it.
+        using var layer = SyntheticScriptLayer.Of(
+            ("a.reds", SyntheticScriptLayer.Wraps(Type, "MethodA")),
+            ("b.reds", SyntheticScriptLayer.Wraps(Type, "MethodB")),
+            ("c.reds", SyntheticScriptLayer.Wraps(Type, "MethodC")));
+
+        var contests = ScriptLayer.Read(layer.Root).Methods;
+
+        Assert.Equal(3, contests.Count);
+        Assert.All(
+            contests,
+            contest => Assert.Same(
+                contests[0].AnnotationUnresolvedSomewhereInTheReading,
+                contest.AnnotationUnresolvedSomewhereInTheReading));
+
+        // One per layer, which is what makes the line above mean sharing
+        // rather than a single object standing for every reading ever taken.
+        using var elsewhere = SyntheticScriptLayer.Of(
+            ("a.reds", SyntheticScriptLayer.Wraps(Type, "MethodA")));
+
+        Assert.NotSame(
+            contests[0].AnnotationUnresolvedSomewhereInTheReading,
+            ScriptLayer.Read(elsewhere.Root).Methods[0].AnnotationUnresolvedSomewhereInTheReading);
+    }
+
+    [Fact]
     public void TheOrderTheAnnotationListsCarryIsStatedWhereACallerCannotMissIt()
     {
         // The order is the one thing about these lists a caller cannot recover

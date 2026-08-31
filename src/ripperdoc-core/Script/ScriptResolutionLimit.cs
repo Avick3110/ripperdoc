@@ -104,8 +104,7 @@ public sealed class ScriptResolutionLimit : IWitnessedKind
     /// the reported line is where a reader settles which.
     /// </remarks>
     public static readonly ScriptResolutionLimit AnnotationCouldNotBeAttached = new(
-        contest => contest.Readings.Any(
-            reading => reading.AnnotationsNotResolvedToAMethod.Count > 0),
+        contest => contest.AnnotationUnresolvedSomewhereInTheReading.Value,
         "somewhere in this reading an annotation could not be resolved to a method, so it names no "
             + "method and this result cannot be shown to have seen every carrier",
         new ScriptLayerWitness(("a.reds", AWrap), ("b.reds", AnAnnotationOverNothing)));
