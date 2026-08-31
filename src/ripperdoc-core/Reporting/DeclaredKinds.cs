@@ -32,6 +32,14 @@ namespace Ripperdoc.Core.Reporting;
 /// safe only because it is never read except beside a reading that refuses.
 /// </para>
 /// <para>
+/// A reading short by less than all of it is refused on the same ground and
+/// needs its own refusal, because the count check cannot see it: a declaration
+/// read before its own initialiser has run holds no member, and a set read
+/// back that way comes back the right length with holes in it. Nothing
+/// re-enters a kind set here today, and the refusal is what keeps that from
+/// being the reason the derivation is trusted.
+/// </para>
+/// <para>
 /// One shape sits outside both readings rather than in one of them: a member
 /// declared on a type derived from the kind set. Reflection is asked for the
 /// set's own declarations, and registration keys on the runtime type, so such a
@@ -75,7 +83,8 @@ internal static class DeclaredKinds
     /// </summary>
     /// <typeparam name="TKind">The kind set.</typeparam>
     /// <exception cref="InvalidOperationException">
-    /// The type declares no member of its own type.
+    /// The type declares no member of its own type, or one of its declarations
+    /// read back holding no member of the set.
     /// </exception>
     /// <remarks>
     /// Ordered by name rather than by declaration, because a result carrying
@@ -91,7 +100,13 @@ internal static class DeclaredKinds
         var declared = typeof(TKind)
             .GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
             .Where(field => field.FieldType == typeof(TKind))
-            .Select(field => new KindMember<TKind>(field.Name, (TKind)field.GetValue(null)!))
+            .Select(field => field.GetValue(null) is TKind value
+                ? new KindMember<TKind>(field.Name, value)
+                : throw new InvalidOperationException(
+                    $"'{field.Name}' on {typeof(TKind).FullName} read back as no member of the "
+                    + "set. A reading taken while the declarations are still being initialised "
+                    + "comes back short with its count intact, which is the broken derivation "
+                    + "the empty-set refusal below exists to name."))
             .OrderBy(member => member.Name, StringComparer.Ordinal)
             .ToList();
 

@@ -76,6 +76,36 @@ public sealed class DeclaredKindsTests
     }
 
     [Fact]
+    public void AReadingTakenWhileTheDeclarationsAreStillRunningIsRefused()
+    {
+        // The reading the count check cannot see. Three fields are found and
+        // three members counted, so the empty-set refusal passes it through
+        // while two of the three hold nothing - and for a set whose members
+        // are cached the reading that came back short is the one every later
+        // caller gets.
+        //
+        // The re-entrant read is caught inside the set rather than let out of
+        // it, so the state under test stays in this check instead of failing
+        // whatever touches the type next.
+        _ = ReEntrantSet.Third;
+
+        Assert.Null(ReEntrantSet.MidInitialisationRead);
+        var refusal = Assert.IsType<InvalidOperationException>(
+            ReEntrantSet.FailureFromTheMidInitialisationRead);
+
+        Assert.Contains(typeof(ReEntrantSet).FullName!, refusal.Message, StringComparison.Ordinal);
+
+        // Which of the two unassigned fields reflection reaches first is not
+        // contractual. That the one named is not the field which did hold a
+        // member is: a refusal naming First would be reporting a fault other
+        // than the one it found.
+        Assert.DoesNotContain("'First'", refusal.Message, StringComparison.Ordinal);
+        Assert.Single(
+            new[] { "'Second'", "'Third'" }
+                .Where(name => refusal.Message.Contains(name, StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void EveryKindSetThisProjectDeclaresIsSealed()
     {
         // The remark on DeclaredKinds says sealedness is what keeps a member
@@ -132,6 +162,35 @@ public sealed class DeclaredKindsTests
         private SetWithAMemberBehindAProperty() => DeclaredKinds.Register(this);
 
         public static SetWithAMemberBehindAProperty BehindAProperty => Hidden;
+    }
+
+    private sealed class ReEntrantSet
+    {
+        public static readonly ReEntrantSet First = new(readsItselfBack: false);
+        public static readonly ReEntrantSet Second = new(readsItselfBack: true);
+        public static readonly ReEntrantSet Third = new(readsItselfBack: false);
+
+        internal static IReadOnlyList<KindMember<ReEntrantSet>>? MidInitialisationRead;
+        internal static Exception? FailureFromTheMidInitialisationRead;
+
+        private ReEntrantSet(bool readsItselfBack)
+        {
+            DeclaredKinds.Register(this);
+
+            if (!readsItselfBack)
+            {
+                return;
+            }
+
+            try
+            {
+                MidInitialisationRead = DeclaredKinds.Of<ReEntrantSet>();
+            }
+            catch (Exception failure)
+            {
+                FailureFromTheMidInitialisationRead = failure;
+            }
+        }
     }
 
     private sealed class EmptySet
