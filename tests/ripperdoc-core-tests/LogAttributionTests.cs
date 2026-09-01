@@ -252,6 +252,26 @@ public sealed class LogAttributionTests : IDisposable
     }
 
     /// <summary>
+    /// A stamp written in decimal digits outside the ASCII ten is refused
+    /// rather than thrown out of the read.
+    /// </summary>
+    /// <remarks>
+    /// The patterns match every Unicode decimal and only the ASCII ten parse,
+    /// so such a stamp reaches the field read. What the entry points document
+    /// for a head they cannot place is an unattributed log, and an exception
+    /// escaping the read is not that.
+    /// </remarks>
+    [Theory]
+    [InlineData("[٢٠٢٦-٠١-٠٢ ٠٣:٠٤:٠٥.678] a plugin is starting...")]
+    [InlineData("[２０２６-０１-０２ ０３:０４:０５.678] a plugin is starting...")]
+    [InlineData("[INFO - Thu, ٠٢ Jan ٢٠٢٦ ٠٣:٠٤:٠٥ +0100] Compiling files in <scripts>:")]
+    [InlineData("٢٠٢٦-٠١-٠٢T٠٣:٠٤:٠٥.678\tINFO\tstarted\n")]
+    public void AStampInDigitsThisReaderCannotParseIsRefused(string head)
+    {
+        Assert.False(LogAttribution.Read("foreign-digits.log", head).IsAttributed);
+    }
+
+    /// <summary>
     /// A valid stamp on either side of a refused one is still read.
     /// </summary>
     /// <remarks>

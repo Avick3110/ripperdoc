@@ -100,17 +100,34 @@ public sealed class LogTimestampGrammar : IWitnessedGrammar
     /// </remarks>
     private static DateTime? Instant(Match match)
     {
-        var month = match.Groups["mo"].Success
+        var monthRead = match.Groups["mo"].Success
             ? Number(match, "mo")
             : Array.IndexOf(Months, match.Groups["mon"].Value) + 1;
+
+        var yearRead = Number(match, "y");
+        var dayRead = Number(match, "d");
+        var hourRead = Number(match, "h");
+        var minuteRead = Number(match, "mi");
+        var secondRead = Number(match, "s");
+
+        // The patterns match every Unicode decimal and only the ASCII ten
+        // parse, so a stamp written in another script reaches here with fields
+        // this reader has no number for. It is skipped on the same grounds an
+        // out-of-range one is: a log placed at nothing beats a read that throws.
+        if (monthRead is not { } month
+            || yearRead is not { } year
+            || dayRead is not { } day
+            || hourRead is not { } hour
+            || minuteRead is not { } minute
+            || secondRead is not { } second)
+        {
+            return null;
+        }
 
         if (month is < 1 or > 12)
         {
             return null;
         }
-
-        var day = Number(match, "d");
-        var year = Number(match, "y");
 
         // Bounded before the day, because DateTime.DaysInMonth throws on a year
         // outside them rather than returning something this can compare against.
@@ -124,10 +141,6 @@ public sealed class LogTimestampGrammar : IWitnessedGrammar
             return null;
         }
 
-        var hour = Number(match, "h");
-        var minute = Number(match, "mi");
-        var second = Number(match, "s");
-
         // Every field is two digits by the pattern and nothing narrower, so a
         // log carrying a malformed stamp reaches here. Constructing from one
         // would throw out of a read.
@@ -139,6 +152,12 @@ public sealed class LogTimestampGrammar : IWitnessedGrammar
         return new DateTime(year, month, day, hour, minute, second, DateTimeKind.Unspecified);
     }
 
-    private static int Number(Match match, string group) =>
-        int.Parse(match.Groups[group].Value, CultureInfo.InvariantCulture);
+    private static int? Number(Match match, string group) =>
+        int.TryParse(
+            match.Groups[group].Value,
+            NumberStyles.None,
+            CultureInfo.InvariantCulture,
+            out var value)
+            ? value
+            : null;
 }
