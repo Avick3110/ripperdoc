@@ -170,9 +170,12 @@ public sealed class OrderingGraphTests
     /// One cycle reachable from several starting mods is reported once.
     /// </summary>
     /// <remarks>
-    /// Without this the reported count is a property of the order the walk
-    /// happened to take rather than of the rules, and a caller counting cycles
-    /// would report a number that changes when an unrelated mod is added.
+    /// The two extra mods each point into the cycle without joining it, so a
+    /// walk that forgot which mods it had finished with would enter the same
+    /// cycle again from each of them. The count would then be a property of the
+    /// order the walk happened to take rather than of the rules, and a caller
+    /// counting cycles would report a number that moves when an unrelated mod
+    /// is added.
     /// </remarks>
     [Fact]
     public void OneCycleReachableFromSeveralStartsIsReportedOnce()
