@@ -84,10 +84,19 @@ public sealed class InstalledManagerLaneTests(ITestOutputHelper output)
     /// a mod, or named as unclaimed, or named as outside the game directory.
     /// </summary>
     /// <remarks>
-    /// The exhaustiveness claim over real input. Its numbers are reported; what
-    /// is asserted is that the three outcomes cover every source the log names,
-    /// because an error falling out of all three is the silent bucket the lane
-    /// exists to refuse.
+    /// <para>
+    /// Its numbers are reported. What is asserted is that the three outcomes
+    /// cover every source the log names, because an error falling out of all
+    /// three is the silent bucket the lane exists to refuse.
+    /// </para>
+    /// <para>
+    /// That cover is an identity over how the reading routes a path, so it
+    /// holds whatever the reading decides and cannot on its own tell a working
+    /// join from a collapsed one. The two assertions beside it can: a record
+    /// with no target path, or one paired with a log from a different
+    /// deployment, files every source under "outside the game directory" and
+    /// reports nothing while every count still balances.
+    /// </para>
     /// </remarks>
     [Fact]
     public void EverySourceTheLogNamesIsAccountedForExactlyOnce()
@@ -120,6 +129,20 @@ public sealed class InstalledManagerLaneTests(ITestOutputHelper output)
             reading.Errors.Count,
             reading.Suspects.Sum(suspect => suspect.Errors.Count)
             + reading.Errors.Count(error => !attributed.Contains(error.SourcePath)));
+
+        Assert.False(
+            string.IsNullOrWhiteSpace(record.TargetPath),
+            "the record names no directory it deployed into, so nothing the compiler names can "
+            + "be resolved against it and every error would be reported as outside the game "
+            + "directory");
+
+        Assert.False(
+            named.Count > 0 && reading.SourcesOutsideTheGameDirectory.Count == named.Count,
+            $"every one of the {named.Count} sources this log names sits outside the directory "
+            + "the record deployed into, so this pair attributes nothing. Either the record and "
+            + "the log describe different deployments, or the record's target path is not the "
+            + "one the compiler wrote its paths against - a gap to surface, not a number to "
+            + "print");
     }
 
     /// <summary>
@@ -127,10 +150,21 @@ public sealed class InstalledManagerLaneTests(ITestOutputHelper output)
     /// reason on every mod.
     /// </summary>
     /// <remarks>
-    /// The wanted side is taken from the record itself here rather than from the
-    /// manager's state, so what this exercises is the partition's exhaustiveness
-    /// against a real deployed set of real size. Reading the wanted set from the
-    /// manager is a separate input this tier does not have.
+    /// <para>
+    /// The wanted side is taken from the record itself here rather than from
+    /// the manager's state, because reading the wanted set from the manager is
+    /// a separate input this tier does not have. That substitution decides what
+    /// this covers: every mod is both wanted and deployed by construction, so
+    /// the arm exercised is <see cref="PartitionBucket.Deployed" /> at real
+    /// size, and the other three are unreachable here rather than passing.
+    /// </para>
+    /// <para>
+    /// Which is why the buckets are asserted and not only counted. Given these
+    /// inputs the whole set must come back deployed, so a partition that
+    /// answered the other way - or dropped a mod - lands in a bucket this says
+    /// must be empty. A count that merely balanced across the four would stay
+    /// green either way.
+    /// </para>
     /// </remarks>
     [Fact]
     public void ThePartitionOverTheRecordsOwnModsIsExhaustive()
@@ -151,6 +185,12 @@ public sealed class InstalledManagerLaneTests(ITestOutputHelper output)
         Assert.Equal(known.Count, partition.Mods.Count);
         Assert.Equal(partition.Mods.Count, Enum.GetValues<PartitionBucket>().Sum(partition.Count));
         Assert.All(partition.Mods, mod => Assert.False(string.IsNullOrWhiteSpace(mod.Reason)));
+
+        Assert.True(partition.RecordWasRead);
+        Assert.Equal(known.Count, partition.Count(PartitionBucket.Deployed));
+        Assert.Equal(0, partition.Count(PartitionBucket.Missing));
+        Assert.Equal(0, partition.Count(PartitionBucket.Unresolvable));
+        Assert.Equal(0, partition.Count(PartitionBucket.Unclaimed));
     }
 
     private static DeploymentRecord Record() =>
