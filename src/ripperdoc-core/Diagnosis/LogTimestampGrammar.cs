@@ -112,6 +112,13 @@ public sealed class LogTimestampGrammar : IWitnessedGrammar
         var day = Number(match, "d");
         var year = Number(match, "y");
 
+        // Bounded before the day, because DateTime.DaysInMonth throws on a year
+        // outside them rather than returning something this can compare against.
+        if (year < 1 || year > 9999)
+        {
+            return null;
+        }
+
         if (day < 1 || day > DateTime.DaysInMonth(year, month))
         {
             return null;
