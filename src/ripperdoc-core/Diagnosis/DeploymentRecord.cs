@@ -112,6 +112,61 @@ public sealed record DeploymentRecord(
         }
     }
 
+    /// <summary>
+    /// Which mod supplied each deployed path.
+    /// </summary>
+    /// <returns>The mod that supplied each path this record claims.</returns>
+    /// <exception cref="DiagnosisReadException">
+    /// The record attributes one path to more than one mod.
+    /// </exception>
+    /// <remarks>
+    /// Two entries claiming one path put the answer at the mercy of which one a
+    /// dictionary happened to keep, so this refuses rather than picks. Entries
+    /// that agree on the mod are not a contest: they resolve to one answer
+    /// however many times they appear, and refusing them would reject a record
+    /// that attributes correctly.
+    /// </remarks>
+    public IReadOnlyDictionary<string, string> ClaimsByPath()
+    {
+        var contested = Files
+            .GroupBy(file => Normalised(file.RelativePath), StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group =>
+                group.Select(file => file.SourceMod).Distinct(StringComparer.Ordinal).Count() > 1);
+
+        if (contested is not null)
+        {
+            throw new DiagnosisReadException(
+                $"The deployment record attributes '{contested.Key}' to more than one mod - "
+                + string.Join(
+                    ", ",
+                    contested.Select(file => $"'{file.SourceMod}'")
+                        .Distinct(StringComparer.Ordinal)
+                        .Order(StringComparer.Ordinal))
+                + ". Nothing here can say which of them supplied it, and picking one would "
+                + "attribute that file's compile errors to a mod on the strength of an ordering.");
+        }
+
+        var claims = new Dictionary<string, string>(Files.Count, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var file in Files)
+        {
+            claims[Normalised(file.RelativePath)] = file.SourceMod;
+        }
+
+        return claims;
+    }
+
+    /// <summary>
+    /// The separator the join reads paths under.
+    /// </summary>
+    /// <param name="path">A path as its writer spelled it.</param>
+    /// <returns>The same path under one separator.</returns>
+    /// <remarks>
+    /// The record and the compiler are two writers on one machine and they do
+    /// not agree on the separator, so the join is done under one of them.
+    /// </remarks>
+    internal static string Normalised(string path) => path.Replace('\\', '/');
+
     private static string Text(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()!

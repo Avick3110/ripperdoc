@@ -239,6 +239,72 @@ public sealed class CompileFailureReadingTests : IDisposable
         Assert.Equal("alpha-1-0", Assert.Single(reading.Suspects).ModId);
     }
 
+    /// <summary>
+    /// A record attributing one path to two mods is refused by name.
+    /// </summary>
+    /// <remarks>
+    /// The join would otherwise keep whichever entry a dictionary happened to
+    /// keep, and name that mod as the suspect. Which of the two is named would
+    /// be an artefact of ordering, so the reading refuses and says which path
+    /// and which mods.
+    /// </remarks>
+    [Fact]
+    public void ARecordAttributingOnePathToTwoModsIsRefused()
+    {
+        var record = Record(
+            ("alpha-1-0", "r6/scripts/alpha/a.reds"),
+            ("beta-2-0", "r6/scripts/alpha/A.reds"));
+
+        var refusal = Assert.Throws<DiagnosisReadException>(
+            () => Read(Error("UNRESOLVED_METHOD", "C:/game/r6/scripts/alpha/a.reds", 80, 1), record));
+
+        Assert.Contains("r6/scripts/alpha/a.reds", refusal.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("alpha-1-0", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("beta-2-0", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A path the record claims twice for the same mod is not a contest.
+    /// </summary>
+    /// <remarks>
+    /// The other arm of the refusal. Repeated entries that agree resolve to one
+    /// answer however many times they appear, and refusing them would reject a
+    /// record that attributes correctly.
+    /// </remarks>
+    [Fact]
+    public void ARepeatedEntryAgreeingOnItsModIsRead()
+    {
+        var reading = Read(
+            Error("UNRESOLVED_METHOD", "C:/game/r6/scripts/alpha/a.reds", 80, 1),
+            Record(
+                ("alpha-1-0", "r6/scripts/alpha/a.reds"),
+                ("alpha-1-0", "r6/scripts/alpha/a.reds")));
+
+        Assert.Equal("alpha-1-0", Assert.Single(reading.Suspects).ModId);
+    }
+
+    /// <summary>
+    /// A reading with no directory to resolve the record's paths against is
+    /// refused rather than attributing nothing.
+    /// </summary>
+    /// <remarks>
+    /// An empty directory is a prefix every path fails, so every error would be
+    /// filed as outside the game directory and no mod named - a reading that
+    /// says nothing while looking like one that found nothing.
+    /// </remarks>
+    [Fact]
+    public void AReadingWithNoGameDirectoryIsRefused()
+    {
+        var record = Record(("alpha-1-0", "r6/scripts/alpha/a.reds"));
+        var log = new AttributedLog("a.log", null, null);
+        var text = Error("UNRESOLVED_METHOD", "C:/game/r6/scripts/alpha/a.reds", 80, 1);
+
+        Assert.Throws<ArgumentException>(
+            () => CompileFailureReading.Read(log, text, record, string.Empty));
+        Assert.Throws<ArgumentException>(
+            () => CompileFailureReading.Read(log, text, record, "   "));
+    }
+
     /// <summary>No entry point takes a null.</summary>
     [Fact]
     public void TheReaderRefusesAMissingArgument()
