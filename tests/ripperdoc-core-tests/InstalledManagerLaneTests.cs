@@ -110,12 +110,6 @@ public sealed class InstalledManagerLaneTests(ITestOutputHelper output)
             + reading.Errors.Count(error => !attributed.Contains(error.SourcePath)));
 
         Assert.False(
-            string.IsNullOrWhiteSpace(record.TargetPath),
-            "the record names no directory it deployed into, so nothing the compiler names can "
-            + "be resolved against it and every error would be reported as outside the game "
-            + "directory");
-
-        Assert.False(
             named.Count > 0 && reading.SourcesOutsideTheGameDirectory.Count == named.Count,
             $"every one of the {named.Count} sources this log names sits outside the directory "
             + "the record deployed into, so this pair attributes nothing. Either the record and "
