@@ -51,6 +51,26 @@ public sealed class LogAttributionTests : IDisposable
     }
 
     /// <summary>
+    /// Every grammar that built itself is one the reflected reading reaches.
+    /// </summary>
+    [Fact]
+    public void EveryGrammarConstructedIsOneTheReflectedReadingReaches()
+    {
+        // The two readings of the same declarations, compared by identity. A
+        // grammar written in a shape reflection does not reach sits in one
+        // reading and not the other, and every check over the set - the witness
+        // cell above included - walks the reflected one.
+        var reflected = DeclaredKinds.Of<LogTimestampGrammar>().Select(member => member.Kind);
+        var constructed = DeclaredKinds.Constructed<LogTimestampGrammar>();
+
+        Assert.Equal(constructed.Count, DeclaredKinds.Of<LogTimestampGrammar>().Count);
+        foreach (var grammar in constructed)
+        {
+            Assert.Contains(grammar, reflected, ReferenceEqualityComparer.Instance);
+        }
+    }
+
+    /// <summary>
     /// The completeness check names a grammar that cannot read its own witness,
     /// and does not name its neighbour.
     /// </summary>
