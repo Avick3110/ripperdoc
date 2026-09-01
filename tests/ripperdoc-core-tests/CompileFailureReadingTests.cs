@@ -215,6 +215,33 @@ public sealed class CompileFailureReadingTests : IDisposable
     }
 
     /// <summary>
+    /// An error line whose position this reader cannot construct is counted
+    /// rather than thrown out of the read.
+    /// </summary>
+    /// <remarks>
+    /// The digits are matched by the pattern and bounded by nothing, so both
+    /// shapes reach the reader. A log carrying one is a log this reader has no
+    /// shape for, which is the outcome the count exists to carry; an exception
+    /// out of a read ends the diagnosis instead of reporting it.
+    /// </remarks>
+    [Theory]
+    [InlineData("99999999999", "1")]
+    [InlineData("1", "99999999999")]
+    [InlineData("٣٤", "1")]
+    [InlineData("1", "٣٤")]
+    public void AnErrorLineWhosePositionCannotBeConstructedIsCounted(string line, string column)
+    {
+        var reading = Read(
+            $"[ERROR - Thu, 02 Jan 2026 03:04:05 +0100] [SYNTAX] At {Game}/r6/scripts/alpha/a.reds"
+            + $":{line}:{column}:\n",
+            Record(("alpha-1-0", "r6/scripts/alpha/a.reds")));
+
+        Assert.Empty(reading.Errors);
+        Assert.Empty(reading.Suspects);
+        Assert.Equal(1, reading.ErrorLinesNotRead);
+    }
+
+    /// <summary>
     /// A log its writer still holds open is placed and read whole.
     /// </summary>
     /// <remarks>

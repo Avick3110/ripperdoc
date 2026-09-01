@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace Ripperdoc.Core.Diagnosis;
@@ -146,13 +147,22 @@ public sealed partial class CompileFailureReading
         {
             var match = ErrorLine().Match(line);
 
-            if (match.Success)
+            // The digit groups are bounded by nothing, and the pattern's \d
+            // reaches every Unicode decimal rather than the ASCII ones, so a
+            // position too large for the type or written in another script
+            // reaches this. Constructing from one throws out of a read, which
+            // ends a diagnosis rather than reporting it - so a position that
+            // cannot be constructed makes the line one this reader did not
+            // understand, which is a count it already carries.
+            if (match.Success
+                && Position(match, "line") is { } lineNumber
+                && Position(match, "column") is { } columnNumber)
             {
                 errors.Add(new CompileError(
                     match.Groups["code"].Value,
                     match.Groups["path"].Value,
-                    int.Parse(match.Groups["line"].Value),
-                    int.Parse(match.Groups["column"].Value)));
+                    lineNumber,
+                    columnNumber));
             }
             else if (AnyErrorLine().IsMatch(line))
             {
@@ -200,6 +210,15 @@ public sealed partial class CompileFailureReading
             [.. unclaimed],
             unread);
     }
+
+    private static int? Position(Match match, string group) =>
+        int.TryParse(
+            match.Groups[group].Value,
+            NumberStyles.None,
+            CultureInfo.InvariantCulture,
+            out var value)
+            ? value
+            : null;
 
     // The level is matched rather than captured and dropped. A diagnostic the
     // compiler did not raise as an error carries the same shape after its
