@@ -121,8 +121,22 @@ public static class LogAttribution
     private static FileStream Open(string path) => new(
         path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
 
-    private static string Decoded(byte[] bytes, int length) =>
-        Encoding.UTF8.GetString(bytes, 0, length);
+    // The decoder does not drop a byte-order mark, and one left in place sits
+    // at offset zero - ahead of a stamp on the opening line, which a grammar
+    // anchored to the start of a line then cannot match. A log would be
+    // unattributable on account of three bytes that carry no timestamp.
+    private static string Decoded(byte[] bytes, int length)
+    {
+        var preamble = Encoding.UTF8.Preamble;
+
+        if (length >= preamble.Length && bytes.AsSpan(0, preamble.Length).SequenceEqual(preamble))
+        {
+            return Encoding.UTF8.GetString(
+                bytes, preamble.Length, length - preamble.Length);
+        }
+
+        return Encoding.UTF8.GetString(bytes, 0, length);
+    }
 
     private static string Head(string path)
     {

@@ -1,3 +1,4 @@
+using System.Text;
 using Ripperdoc.Core.Diagnosis;
 using Ripperdoc.Core.Reporting;
 using Xunit;
@@ -129,6 +130,35 @@ public sealed class LogAttributionTests : IDisposable
 
         Assert.Equal(new DateTime(2026, 1, 2, 3, 4, 5), log.Instant);
         Assert.Equal(nameof(LogTimestampGrammar.LineLeading), log.Grammar);
+    }
+
+    /// <summary>
+    /// A byte-order mark ahead of the first line does not cost the log its
+    /// stamp.
+    /// </summary>
+    /// <remarks>
+    /// A mark left in the decoded text sits at offset zero, ahead of a stamp on
+    /// the opening line, and a grammar anchored to the start of a line cannot
+    /// match past it. The log would be unattributable on account of three bytes
+    /// carrying no timestamp. The same content without the mark is read here
+    /// too, so the row that passes is not passing for some other reason.
+    /// </remarks>
+    [Fact]
+    public void AByteOrderMarkDoesNotHideTheFirstStamp()
+    {
+        const string Line = "2026-01-02T03:04:05.678\tINFO\tstarted\n";
+
+        var marked = Path.Combine(_directory, "marked.log");
+        var plain = Path.Combine(_directory, "plain.log");
+
+        File.WriteAllBytes(marked, [.. Encoding.UTF8.Preamble, .. Encoding.UTF8.GetBytes(Line)]);
+        File.WriteAllBytes(plain, Encoding.UTF8.GetBytes(Line));
+
+        var expected = new DateTime(2026, 1, 2, 3, 4, 5);
+
+        Assert.Equal(expected, LogAttribution.Of(marked).Instant);
+        Assert.Equal(nameof(LogTimestampGrammar.LineLeading), LogAttribution.Of(marked).Grammar);
+        Assert.Equal(expected, LogAttribution.Of(plain).Instant);
     }
 
     /// <summary>
