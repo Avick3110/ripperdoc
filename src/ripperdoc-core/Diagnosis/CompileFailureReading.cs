@@ -84,6 +84,12 @@ public sealed partial class CompileFailureReading
     /// <returns>The reading.</returns>
     /// <exception cref="ArgumentNullException">Any argument is null.</exception>
     /// <exception cref="IOException">The log could not be read.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="gameDirectory" /> is empty or only whitespace.
+    /// </exception>
+    /// <exception cref="DiagnosisReadException">
+    /// The record attributes one deployed path to more than one mod.
+    /// </exception>
     public static CompileFailureReading Of(string logPath, DeploymentRecord record, string gameDirectory)
     {
         ArgumentNullException.ThrowIfNull(logPath);
@@ -101,6 +107,12 @@ public sealed partial class CompileFailureReading
     /// <param name="gameDirectory">The directory the record's paths are relative to.</param>
     /// <returns>The reading.</returns>
     /// <exception cref="ArgumentNullException">Any argument is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="gameDirectory" /> is empty or only whitespace.
+    /// </exception>
+    /// <exception cref="DiagnosisReadException">
+    /// The record attributes one deployed path to more than one mod.
+    /// </exception>
     public static CompileFailureReading Read(
         AttributedLog log,
         string text,
@@ -111,6 +123,21 @@ public sealed partial class CompileFailureReading
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(record);
         ArgumentNullException.ThrowIfNull(gameDirectory);
+
+        // A record whose target path this reader could not find parses with an
+        // empty one, and an empty one is a prefix every path fails: every error
+        // would be filed as outside the game directory and no mod named at all.
+        // That is a reading that says nothing while looking like one that found
+        // nothing, so it is refused where it would be produced.
+        if (string.IsNullOrWhiteSpace(gameDirectory))
+        {
+            throw new ArgumentException(
+                "The directory the record's paths are relative to is empty, so no source the "
+                + "compiler names could be resolved against it and every error would be reported "
+                + "as outside the game directory. A record carrying no target path cannot "
+                + "attribute a compile failure.",
+                nameof(gameDirectory));
+        }
 
         var errors = new List<CompileError>();
         var unread = 0;
@@ -133,17 +160,16 @@ public sealed partial class CompileFailureReading
             }
         }
 
-        var claims = record.Files.ToDictionary(
-            file => Normalised(file.RelativePath), file => file.SourceMod, StringComparer.OrdinalIgnoreCase);
+        var claims = record.ClaimsByPath();
 
-        var prefix = Normalised(gameDirectory).TrimEnd('/') + "/";
+        var prefix = DeploymentRecord.Normalised(gameDirectory).TrimEnd('/') + "/";
         var byMod = new SortedDictionary<string, List<CompileError>>(StringComparer.Ordinal);
         var outside = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var unclaimed = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var error in errors)
         {
-            var path = Normalised(error.SourcePath);
+            var path = DeploymentRecord.Normalised(error.SourcePath);
 
             if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
@@ -174,8 +200,6 @@ public sealed partial class CompileFailureReading
             [.. unclaimed],
             unread);
     }
-
-    private static string Normalised(string path) => path.Replace('\\', '/');
 
     // The level is matched rather than captured and dropped. A diagnostic the
     // compiler did not raise as an error carries the same shape after its
