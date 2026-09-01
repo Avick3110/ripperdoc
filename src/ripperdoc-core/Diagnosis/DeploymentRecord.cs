@@ -32,18 +32,46 @@ public sealed record DeploymentRecord(
     /// The record is present and could not be read.
     /// </exception>
     /// <remarks>
+    /// <para>
     /// Absence returns null and is not an error: a directory with no record is
     /// the ordinary state of one the manager has purged, or never managed. What
     /// callers must not do is treat that null as an empty deployment - the
     /// difference between "nothing is deployed" and "nothing here can say what
     /// is deployed" is the whole of it.
+    /// </para>
+    /// <para>
+    /// The record is opened once and the open's own not-found report is the
+    /// absence signal. Asking whether the file exists and then reading it is
+    /// two operations against a file another process owns, and between them the
+    /// manager can purge the deployment or replace the record - which is the
+    /// state this reader is most likely to be run in, not a remote one.
+    /// </para>
     /// </remarks>
     public static DeploymentRecord? In(string gameDirectory)
     {
         ArgumentNullException.ThrowIfNull(gameDirectory);
 
         var path = Path.Combine(gameDirectory, FileName);
-        return File.Exists(path) ? Parse(File.ReadAllText(path), path) : null;
+
+        try
+        {
+            // The share the sibling log reader takes, for the same reason: the
+            // owner of these files is a manager that may be mid-deploy, and a
+            // reader stricter than the writer refuses files it could have read.
+            using var file = new FileStream(
+                path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var text = new StreamReader(file);
+
+            return Parse(text.ReadToEnd(), path);
+        }
+        catch (FileNotFoundException)
+        {
+            return null;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
