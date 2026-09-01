@@ -88,7 +88,8 @@ public sealed partial class CompileFailureReading
     {
         ArgumentNullException.ThrowIfNull(logPath);
 
-        return Read(LogAttribution.Of(logPath), File.ReadAllText(logPath), record, gameDirectory);
+        var (log, text) = LogAttribution.PlacedWithText(logPath);
+        return Read(log, text, record, gameDirectory);
     }
 
     /// <summary>
