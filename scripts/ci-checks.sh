@@ -63,6 +63,17 @@ mod_archives_variable="RIPPERDOC_MOD_ARCHIVES_PATH"
 # what holds of any layer and report the numbers rather than asserting them.
 scripts_variable="RIPPERDOC_SCRIPTS_PATH"
 
+# The diagnosis lane reads a deployment manager's own record of what it put in
+# the game directory, beside a compiler log from a boot that ran against that
+# deployment. One tier over two inputs rather than two tiers, because neither
+# says anything on its own: the record is what joins a deployed file to the mod
+# that supplied it, and a log paired with a different deployment attributes
+# errors to whatever that other one happened to hold. Its subject changes
+# whenever its owner deploys, so its checks assert what holds of any pair and
+# report the numbers rather than asserting them.
+deployment_record_variable="RIPPERDOC_DEPLOYMENT_RECORD_PATH"
+compiler_log_variable="RIPPERDOC_COMPILER_LOG_PATH"
+
 # Tier (iii) reads type information generated from the user's own game install.
 # It is the input the dependency-drift audit needs, and no runner has one - the
 # dump is derived from the publisher's binary and is no more this project's to
@@ -121,7 +132,7 @@ run "build"                  dotnet build ripperdoc.sln --nologo -v minimal
 # A filter that matches nothing exits 0, so without the last flag a mistyped
 # filter would print PASS having run no checks at all - the failure mode where
 # verification machinery fails toward green.
-run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase&Tier!=InstalledTweakLayer&Tier!=InstalledModArchives&Tier!=RttiDump&Tier!=DeniedDirectory&Tier!=InstalledScriptLayer" -- RunConfiguration.TreatNoTestsAsError=true
+run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase&Tier!=InstalledTweakLayer&Tier!=InstalledModArchives&Tier!=RttiDump&Tier!=DeniedDirectory&Tier!=InstalledScriptLayer&Tier!=InstalledManagerLane" -- RunConfiguration.TreatNoTestsAsError=true
 
 # A denied listing is a real condition on a real machine and the only way to
 # build one here is icacls, so this tier runs on Windows and is announced by
@@ -230,6 +241,21 @@ elif [ ! -d "$scripts_path" ]; then
   skip "installed-script-layer checks" "$scripts_variable names a path with no directory at it - tier (ii) has nothing to read"
 else
   run "installed-script-layer checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=InstalledScriptLayer" -- RunConfiguration.TreatNoTestsAsError=true
+fi
+
+deployment_record_path="$(printenv "$deployment_record_variable" || true)"
+compiler_log_path="$(printenv "$compiler_log_variable" || true)"
+
+if [ -z "$deployment_record_path" ]; then
+  skip "installed-manager-lane checks" "needs a real deployment manager's record of what it deployed - tier (ii), local only; set $deployment_record_variable to one to run it"
+elif [ ! -f "$deployment_record_path" ]; then
+  skip "installed-manager-lane checks" "$deployment_record_variable names a path with no file at it - tier (ii) has nothing to read"
+elif [ -z "$compiler_log_path" ]; then
+  skip "installed-manager-lane checks" "needs a compiler log from a boot that ran against that deployment as well - set $compiler_log_variable to one to run this tier. A record on its own attributes nothing, because attribution starts from an error naming a source"
+elif [ ! -f "$compiler_log_path" ]; then
+  skip "installed-manager-lane checks" "$compiler_log_variable names a path with no file at it, and errors cannot be attributed without the log that reports them"
+else
+  run "installed-manager-lane checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=InstalledManagerLane" -- RunConfiguration.TreatNoTestsAsError=true
 fi
 
 rtti_dump_path="$(printenv "$rtti_dump_variable" || true)"

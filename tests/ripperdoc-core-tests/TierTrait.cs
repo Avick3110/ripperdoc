@@ -51,6 +51,20 @@ public static class TierTrait
     public const string InstalledScriptLayer = "InstalledScriptLayer";
 
     /// <summary>
+    /// Checks that read a real deployment manager's record of what it deployed,
+    /// beside a compiler log from the same deployment.
+    /// </summary>
+    /// <remarks>
+    /// One tier over two inputs rather than two tiers, because the two are only
+    /// meaningful together: a record pairs with the log of a boot that ran
+    /// against it, and a log read against a different deployment attributes
+    /// errors to whatever that other deployment happened to hold. Its subject
+    /// changes whenever its owner deploys, so its checks assert what holds of
+    /// any pair and report the numbers rather than asserting them.
+    /// </remarks>
+    public const string InstalledManagerLane = "InstalledManagerLane";
+
+    /// <summary>
     /// Checks that need a directory the running user is refused.
     /// </summary>
     /// <remarks>
