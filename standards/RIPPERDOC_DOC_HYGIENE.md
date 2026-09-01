@@ -31,11 +31,18 @@ changes what it describes. Not the next commit, not at the end of the branch.
 If a LIVING document contradicts the code, **the document is the bug**, because
 the whole point of the class is that it can be trusted without checking.
 
-**ARCHIVE — immutable from its first commit.** Corrections go in a **new**
-document that supersedes, never in an edit. A superseding document says what it
-supersedes and why; the superseded one stays exactly as written, because the
-record of what we believed at the time is the thing that makes the record worth
-keeping.
+**ARCHIVE — immutable.** Corrections go in a **new** document that supersedes,
+never in an edit. A superseding document says what it supersedes and why; the
+superseded one stays exactly as written, because the record of what we believed
+at the time is the thing that makes the record worth keeping.
+
+**Immutability begins when the document lands.** A tracked ARCHIVE document is
+immutable from the moment its branch merges to `main`. While that branch is
+unmerged the document is still being authored: correcting it in place is
+drafting, not mutation, and it is *preferred* over a supersession, which would
+ship two records in one pull request where one corrects the other. A
+document outside the tracked tree — the `dev/` corpus — has no landing gate, so
+there immutability begins at its first commit.
 
 **The one exception: `[ARCHIVE typo-fix]`.** A commit may fix a typo, a broken
 link, or a formatting slip in an ARCHIVE document if it **adds and removes no
@@ -68,7 +75,9 @@ ARCHIVE in a stated transition**:
 
 1. The final-state edits — including the class-line change — land in **one
    commit**, and that commit says it is the transition.
-2. The document is **frozen from the next commit onward**.
+2. The document is **frozen at §1's onset** — for a tracked document, when the
+   transition commit lands; outside the tracked tree, from the next commit
+   onward.
 3. Later work writes a **new** document. It does not reopen the old one.
 
 Doing it this way means there is never a period where a document's class is
@@ -85,7 +94,7 @@ follows, so that "may I edit this?" always has an answer:
 | `LIVING` | LIVING | unchanged |
 | `DRAFT` | LIVING | in flight, edited in place, has not been ratified yet |
 | `FINAL` | ARCHIVE | issued and binding; a correction supersedes |
-| `findings` | ARCHIVE | a dated measurement; ARCHIVE from its first commit |
+| `findings` | ARCHIVE | a dated measurement; ARCHIVE class from the start, never a ratification step away from it |
 
 `DRAFT` and `FINAL` carried real meaning for the charter corpus and for
 engagement kickoffs, and are kept for those. They are **not** a third and
