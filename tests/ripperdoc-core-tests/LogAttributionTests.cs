@@ -58,8 +58,7 @@ public sealed class LogAttributionTests : IDisposable
     {
         // The two readings of the same declarations, compared by identity. A
         // grammar written in a shape reflection does not reach sits in one
-        // reading and not the other, and every check over the set - the witness
-        // cell above included - walks the reflected one.
+        // reading and not the other.
         var reflected = DeclaredKinds.Of<LogTimestampGrammar>().Select(member => member.Kind);
         var constructed = DeclaredKinds.Constructed<LogTimestampGrammar>();
 

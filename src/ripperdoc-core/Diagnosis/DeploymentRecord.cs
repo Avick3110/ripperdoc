@@ -91,9 +91,7 @@ public sealed record DeploymentRecord(
             {
                 // Present is not enough: an entry holding an empty path or an
                 // empty mod is the same deployed file nothing would attribute,
-                // and it survives further than a missing one does. An empty mod
-                // reaches a reading as a suspect named by nothing, which is an
-                // accusation no reader can act on or refute.
+                // and it survives further than a missing one does.
                 if (entry.ValueKind != JsonValueKind.Object
                     || entry.TryGetProperty("relPath", out var relative) is false
                     || entry.TryGetProperty("source", out var mod) is false
