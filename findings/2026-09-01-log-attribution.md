@@ -138,12 +138,23 @@ deployment target, and the deployment record claims **all 34** — zero source
 files the record does not account for. Joining each to its record entry's
 `source` yields **12 distinct mods**.
 
-**The compiler independently names the culprits, and the two agree exactly.**
-When compilation fails, the log's trailer lists the mods it blames. That list
-holds **12** entries, and it is **set-equal** to the 12 implicated by path
-attribution: zero named by the compiler and not found, zero found and not named.
-Two instruments, same answer — and ours additionally resolves each to a manager
-mod id, which the compiler's list cannot do because it names script directories.
+**The compiler independently names culprits, and the two lists are the same
+size.** When compilation fails, the log's trailer lists the mods it blames.
+That list holds **12** entries; path attribution implicates **12** mods.
+
+**What is not established is that they are the same 12.** The two lists are in
+different namespaces — the compiler names the script directory a source sits
+in, ours names the manager mod id — so they cannot be compared as written, and
+comparing them needs a join that is itself the thing under test. Joining
+trailer entries to attributed mods through the record's script directories
+resolves **11 of the 12**; the twelfth names a directory the record attributes
+to more than one mod, which that join cannot decide. So the honest statement is
+that two instruments produced the same count and eleven agreeing pairs, and
+that the twelfth pair is unresolved by any route measured here. Closing it is
+`BUILD_PLAN_v2` §10 row 20.
+
+Nothing downstream rests on the stronger reading: the engine never consults the
+trailer, and attribution runs from the error paths and the record alone.
 
 **Correction to a count in this project's own private record**, made here rather
 than by editing an archive: that trailer holds twelve entries, not thirteen.
@@ -158,9 +169,12 @@ boots.
 different naming scheme, is not measured — which is exactly why the rule is
 "parse the body" rather than "special-case the one that rotates".
 
-**The trailer cross-check exists only for failing compiles.** A successful
-compile writes no trailer, so on a clean boot the path attribution has no second
-instrument to agree with. Its correctness there rests on the failing case.
+**The trailer cross-check exists only for failing compiles, and it is partial.**
+A successful compile writes no trailer, so on a clean boot the path attribution
+has no second instrument to agree with. On the failing case the two instruments
+agree on the count and on eleven of the twelve pairs, with the twelfth
+unresolved (`BUILD_PLAN_v2` §10 row 20) — so what
+the second instrument corroborates is most of one reading, not all of it.
 
 **The set of timestamp grammars is this reader's, not the frameworks'.** Three
 were declared and each is exercised by the corpus. A framework writing a fourth
