@@ -217,14 +217,6 @@ public sealed class LogAttributionTests : IDisposable
     /// A stamp whose fields are out of range is refused rather than thrown out
     /// of the read.
     /// </summary>
-    /// <remarks>
-    /// Each field is a fixed digit count under the pattern and nothing
-    /// narrower, so every one of these reaches the reader. A log carrying one
-    /// is a log this engine cannot place, which is a reportable outcome; an
-    /// exception out of a read is not. There is a row per field the reader
-    /// bounds, because a field left unbounded is not visible in the rows that
-    /// cover the others.
-    /// </remarks>
     [Theory]
     [InlineData("[2026-13-02 03:04:05.678] month")]
     [InlineData("[2026-01-32 03:04:05.678] day")]

@@ -32,12 +32,6 @@ public sealed class InstalledManagerLaneTests(ITestOutputHelper output)
     /// The record parses, and every entry it holds carries both a path and a
     /// mod.
     /// </summary>
-    /// <remarks>
-    /// True of any record by the reader's own refusal, so what this adds is that
-    /// a real one goes through it at all - the shapes the reader refuses were
-    /// chosen from one manager's output and a second manager version writing
-    /// something else would surface here rather than in a diagnosis.
-    /// </remarks>
     [Fact]
     public void TheRecordIsReadAndItsEntriesAreWholeAsRead()
     {
@@ -83,21 +77,6 @@ public sealed class InstalledManagerLaneTests(ITestOutputHelper output)
     /// Every error the log reports is accounted for exactly once - attributed to
     /// a mod, or named as unclaimed, or named as outside the game directory.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Its numbers are reported. What is asserted is that the three outcomes
-    /// cover every source the log names, because an error falling out of all
-    /// three is the silent bucket the lane exists to refuse.
-    /// </para>
-    /// <para>
-    /// That cover is an identity over how the reading routes a path, so it
-    /// holds whatever the reading decides and cannot on its own tell a working
-    /// join from a collapsed one. The two assertions beside it can: a record
-    /// with no target path, or one paired with a log from a different
-    /// deployment, files every source under "outside the game directory" and
-    /// reports nothing while every count still balances.
-    /// </para>
-    /// </remarks>
     [Fact]
     public void EverySourceTheLogNamesIsAccountedForExactlyOnce()
     {
@@ -149,23 +128,6 @@ public sealed class InstalledManagerLaneTests(ITestOutputHelper output)
     /// The partition over the record's own deployed side is exhaustive, with a
     /// reason on every mod.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The wanted side is taken from the record itself here rather than from
-    /// the manager's state, because reading the wanted set from the manager is
-    /// a separate input this tier does not have. That substitution decides what
-    /// this covers: every mod is both wanted and deployed by construction, so
-    /// the arm exercised is <see cref="PartitionBucket.Deployed" /> at real
-    /// size, and the other three are unreachable here rather than passing.
-    /// </para>
-    /// <para>
-    /// Which is why the buckets are asserted and not only counted. Given these
-    /// inputs the whole set must come back deployed, so a partition that
-    /// answered the other way - or dropped a mod - lands in a bucket this says
-    /// must be empty. A count that merely balanced across the four would stay
-    /// green either way.
-    /// </para>
-    /// </remarks>
     [Fact]
     public void ThePartitionOverTheRecordsOwnModsIsExhaustive()
     {

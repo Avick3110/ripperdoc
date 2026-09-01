@@ -48,14 +48,6 @@ public sealed class OrderingGraph
     /// <summary>
     /// The cycles found, each as the path that closes it.
     /// </summary>
-    /// <remarks>
-    /// <strong>Non-empty means cyclic. It is not an enumeration of every
-    /// cycle.</strong> The walk reports one path per edge closing back onto it
-    /// and does not re-enter a node it has finished with, so two cycles meeting
-    /// at a shared node can yield one path rather than two. What follows for a
-    /// caller is that resolving what is reported here is not shown to leave the
-    /// graph acyclic: the check has to be run again to say that.
-    /// </remarks>
     public IReadOnlyList<OrderingCycle> Cycles { get; }
 
     /// <summary>The homes whose rules are in this graph.</summary>
