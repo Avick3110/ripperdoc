@@ -137,7 +137,6 @@ public sealed class OrderingGraph
     {
         var state = new Dictionary<string, int>(StringComparer.Ordinal);
         var found = new List<OrderingCycle>();
-        var reported = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var start in nodes)
         {
@@ -172,13 +171,7 @@ public sealed class OrderingGraph
                     var cycle = path.GetRange(from, path.Count - from);
                     cycle.Add(next);
 
-                    // One cycle can be entered from several starts. Reporting it
-                    // once per route would make the count a property of the walk
-                    // rather than of the rules.
-                    if (reported.Add(string.Join(" -> ", cycle)))
-                    {
-                        found.Add(new OrderingCycle(cycle));
-                    }
+                    found.Add(new OrderingCycle(cycle));
                 }
                 else if (colour == 0)
                 {
