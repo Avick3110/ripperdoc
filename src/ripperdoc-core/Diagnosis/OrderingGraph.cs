@@ -1,7 +1,7 @@
 namespace Ripperdoc.Core.Diagnosis;
 
 /// <summary>
-/// The precedence graph the ordering rules describe, and the cycles in it.
+/// The precedence graph the ordering rules describe, and cycles found in it.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -45,7 +45,17 @@ public sealed class OrderingGraph
         EdgeCount = edgeCount;
     }
 
-    /// <summary>Every cycle found, each as the path that closes it.</summary>
+    /// <summary>
+    /// The cycles found, each as the path that closes it.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Non-empty means cyclic. It is not an enumeration of every
+    /// cycle.</strong> The walk reports one path per edge closing back onto it
+    /// and does not re-enter a node it has finished with, so two cycles meeting
+    /// at a shared node can yield one path rather than two. What follows for a
+    /// caller is that resolving what is reported here is not shown to leave the
+    /// graph acyclic: the check has to be run again to say that.
+    /// </remarks>
     public IReadOnlyList<OrderingCycle> Cycles { get; }
 
     /// <summary>The homes whose rules are in this graph.</summary>
@@ -69,7 +79,7 @@ public sealed class OrderingGraph
     /// </summary>
     /// <param name="read">The rule sets available.</param>
     /// <param name="notRead">The homes that could not be read, with reasons.</param>
-    /// <returns>The graph, and the cycles in it.</returns>
+    /// <returns>The graph, and the cycles found in it.</returns>
     /// <exception cref="ArgumentNullException">Either argument is null.</exception>
     public static OrderingGraph Over(
         IReadOnlyList<OrderingRuleSet> read,
