@@ -89,11 +89,18 @@ public sealed record DeploymentRecord(
 
             foreach (var entry in files.EnumerateArray())
             {
+                // Present is not enough: an entry holding an empty path or an
+                // empty mod is the same deployed file nothing would attribute,
+                // and it survives further than a missing one does. An empty mod
+                // reaches a reading as a suspect named by nothing, which is an
+                // accusation no reader can act on or refute.
                 if (entry.ValueKind != JsonValueKind.Object
                     || entry.TryGetProperty("relPath", out var relative) is false
                     || entry.TryGetProperty("source", out var mod) is false
                     || relative.ValueKind != JsonValueKind.String
-                    || mod.ValueKind != JsonValueKind.String)
+                    || mod.ValueKind != JsonValueKind.String
+                    || string.IsNullOrWhiteSpace(relative.GetString())
+                    || string.IsNullOrWhiteSpace(mod.GetString()))
                 {
                     throw new DiagnosisReadException(
                         $"'{source}' holds an entry without both a path and a source mod. An entry "

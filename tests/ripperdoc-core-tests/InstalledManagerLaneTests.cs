@@ -42,11 +42,6 @@ public sealed class InstalledManagerLaneTests(ITestOutputHelper output)
         output.WriteLine($"distinct mods     : {Mods(record).Count}");
 
         Assert.NotEmpty(record.Files);
-        Assert.All(record.Files, file =>
-        {
-            Assert.False(string.IsNullOrWhiteSpace(file.RelativePath));
-            Assert.False(string.IsNullOrWhiteSpace(file.SourceMod));
-        });
     }
 
     /// <summary>

@@ -210,9 +210,28 @@ public sealed class DeploymentPartitionTests : IDisposable
     [InlineData("""{ "files": [ { "relPath": "a" } ] }""")]
     [InlineData("""{ "files": [ { "source": "alpha" } ] }""")]
     [InlineData("""{ "files": [ { "relPath": "a", "source": 7 } ] }""")]
+    [InlineData("""{ "files": [ { "relPath": "", "source": "alpha" } ] }""")]
+    [InlineData("""{ "files": [ { "relPath": "   ", "source": "alpha" } ] }""")]
+    [InlineData("""{ "files": [ { "relPath": "a", "source": "" } ] }""")]
+    [InlineData("""{ "files": [ { "relPath": "a", "source": "   " } ] }""")]
     public void ARecordThatCannotBeReadIsRefused(string json)
     {
         Assert.Throws<DiagnosisReadException>(() => DeploymentRecord.Parse(json, "a record"));
+    }
+
+    /// <summary>
+    /// An entry carrying both a path and a mod is read, so the refusal above
+    /// turns on what the entry holds rather than on the shape of the record.
+    /// </summary>
+    [Fact]
+    public void AnEntryWithBothAPathAndAModIsRead()
+    {
+        var record = DeploymentRecord.Parse(
+            """{ "files": [ { "relPath": "r6/scripts/a.reds", "source": "alpha" } ] }""",
+            "a record");
+
+        Assert.Equal("r6/scripts/a.reds", Assert.Single(record.Files).RelativePath);
+        Assert.Equal("alpha", record.Files[0].SourceMod);
     }
 
     /// <summary>Neither entry point takes a null.</summary>
