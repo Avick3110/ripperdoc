@@ -228,6 +228,6 @@ public sealed class DeploymentPartitionTests : IDisposable
     private static ManagerMod Mod(string id) => new(id, Enabled: true, Kind: "");
 
     private static DeploymentRecord Record(params (string Mod, string Path)[] files) =>
-        new("hardlink_activator", "a-game",
+        new("hardlink_activator", "a-game", "/game",
             [.. files.Select(file => new DeployedFile(file.Path, file.Mod))]);
 }
