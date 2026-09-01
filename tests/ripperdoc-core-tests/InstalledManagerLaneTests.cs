@@ -122,6 +122,14 @@ public sealed class InstalledManagerLaneTests(ITestOutputHelper output)
             + "the log describe different deployments, or the record's target path is not the "
             + "one the compiler wrote its paths against - a gap to surface, not a number to "
             + "print");
+
+        Assert.False(
+            named.Count > 0 && reading.SourcesTheRecordDoesNotClaim.Count == named.Count,
+            $"every one of the {named.Count} sources this log names sits under the directory the "
+            + "record deployed into and is claimed by no entry in it, so this pair attributes "
+            + "nothing. Either the record and the log describe different deployments, or the "
+            + "record spells its entries in a way this join does not resolve against the paths "
+            + "the compiler wrote - a gap to surface, not a number to print");
     }
 
     /// <summary>
