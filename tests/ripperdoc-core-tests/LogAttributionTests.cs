@@ -188,10 +188,12 @@ public sealed class LogAttributionTests : IDisposable
     /// of the read.
     /// </summary>
     /// <remarks>
-    /// Each field is two digits under the pattern and nothing narrower, so
-    /// every one of these reaches the reader. A log carrying one is a log this
-    /// engine cannot place, which is a reportable outcome; an exception out of
-    /// a read is not.
+    /// Each field is a fixed digit count under the pattern and nothing
+    /// narrower, so every one of these reaches the reader. A log carrying one
+    /// is a log this engine cannot place, which is a reportable outcome; an
+    /// exception out of a read is not. There is a row per field the reader
+    /// bounds, because a field left unbounded is not visible in the rows that
+    /// cover the others.
     /// </remarks>
     [Theory]
     [InlineData("[2026-13-02 03:04:05.678] month")]
@@ -200,6 +202,8 @@ public sealed class LogAttributionTests : IDisposable
     [InlineData("[2026-01-02 25:04:05.678] hour")]
     [InlineData("[2026-01-02 03:64:05.678] minute")]
     [InlineData("[2026-01-02 03:04:65.678] second")]
+    [InlineData("[0000-01-02 03:04:05.678] year")]
+    [InlineData("[INFO - Thu, 02 Jan 0000 03:04:05 +0100] year, long form")]
     [InlineData("[INFO - Thu, 02 Xxx 2026 03:04:05 +0100] month name")]
     public void AStampOutOfRangeIsRefused(string head)
     {
