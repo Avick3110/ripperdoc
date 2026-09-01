@@ -173,6 +173,48 @@ public sealed class CompileFailureReadingTests : IDisposable
     }
 
     /// <summary>
+    /// A diagnostic the compiler did not raise as an error implicates nobody.
+    /// </summary>
+    /// <remarks>
+    /// Same shape after the level, so a reader that ignored the level would
+    /// name a mod as the suspect of a compile failure on the strength of a
+    /// warning. It is not counted as an unread error line either, because it
+    /// is not an error line.
+    /// </remarks>
+    [Fact]
+    public void ADiagnosticBelowErrorImplicatesNoMod()
+    {
+        var reading = Read(
+            "[WARN - Thu, 02 Jan 2026 03:04:05 +0100] [DEPRECATED] "
+            + "At C:/game/r6/scripts/alpha/a.reds:80:1:\n",
+            Record(("alpha-1-0", "r6/scripts/alpha/a.reds")));
+
+        Assert.Empty(reading.Suspects);
+        Assert.Empty(reading.Errors);
+        Assert.Equal(0, reading.ErrorLinesNotRead);
+    }
+
+    /// <summary>
+    /// An error line this reader cannot parse is counted whatever case its
+    /// level is spelled in.
+    /// </summary>
+    /// <remarks>
+    /// The two patterns are case-folded together. Were only one of them, a
+    /// level spelled the other way would be neither understood nor counted as
+    /// not understood - the silent outcome the count exists to prevent.
+    /// </remarks>
+    [Fact]
+    public void AnUnreadableErrorLineIsCountedWhateverCaseItsLevelCarries()
+    {
+        var reading = Read(
+            "[error - Thu, 02 Jan 2026 03:04:05 +0100] a shape this reader does not match\n",
+            Record(("alpha-1-0", "r6/scripts/alpha/a.reds")));
+
+        Assert.Empty(reading.Errors);
+        Assert.Equal(1, reading.ErrorLinesNotRead);
+    }
+
+    /// <summary>
     /// A log its writer still holds open is placed and read whole.
     /// </summary>
     /// <remarks>

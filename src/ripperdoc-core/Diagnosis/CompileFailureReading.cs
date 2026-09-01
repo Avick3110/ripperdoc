@@ -177,11 +177,19 @@ public sealed partial class CompileFailureReading
 
     private static string Normalised(string path) => path.Replace('\\', '/');
 
+    // The level is matched rather than captured and dropped. A diagnostic the
+    // compiler did not raise as an error carries the same shape after its
+    // level, so a reader ignoring the level turns a warning into a suspect -
+    // and a suspect is an accusation against a named mod.
     [GeneratedRegex(
-        @"^\[(?<level>\w+) - [^\]]*\] \[(?<code>\w+)\] At (?<path>.+?):(?<line>\d+):(?<column>\d+):",
-        RegexOptions.CultureInvariant)]
+        @"^\[ERROR - [^\]]*\] \[(?<code>\w+)\] At (?<path>.+?):(?<line>\d+):(?<column>\d+):",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex ErrorLine();
 
-    [GeneratedRegex(@"^\[ERROR", RegexOptions.CultureInvariant)]
+    // Case-folded alongside it, so the two cannot disagree about what an error
+    // line is. A level spelled differently would otherwise be read by neither -
+    // neither understood nor counted as not understood, which is the one
+    // outcome the count exists to prevent.
+    [GeneratedRegex(@"^\[ERROR", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex AnyErrorLine();
 }
