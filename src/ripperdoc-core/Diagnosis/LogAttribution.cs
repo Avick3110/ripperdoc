@@ -85,10 +85,48 @@ public static class LogAttribution
         return new AttributedLog(fileName, earliest?.Instant, grammar);
     }
 
+    /// <summary>
+    /// Places a log and hands back its whole text, from a single read.
+    /// </summary>
+    /// <param name="path">The log to read.</param>
+    /// <returns>The log as placed, and every byte of it decoded.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="path" /> is null.</exception>
+    /// <exception cref="IOException">The file could not be read.</exception>
+    /// <remarks>
+    /// One read rather than two, for a caller that needs both. A second open
+    /// would have to be granted separately - and the file may rotate between
+    /// them, which would pair one boot's instant with another boot's text: the
+    /// misattribution this whole lane exists to refuse.
+    /// </remarks>
+    internal static (AttributedLog Log, string Text) PlacedWithText(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+
+        using var file = Open(path);
+        using var whole = new MemoryStream();
+        file.CopyTo(whole);
+
+        var bytes = whole.GetBuffer();
+        var length = (int)whole.Length;
+
+        return (
+            Read(Path.GetFileName(path), Decoded(bytes, Math.Min(length, HeadBytes))),
+            Decoded(bytes, length));
+    }
+
+    // A log a running game holds open is the ordinary case rather than the
+    // exception, which is why the share is permissive. Every read of a log goes
+    // through here, so the one that needs the whole file cannot quietly ask for
+    // a stricter share than the one that needs its head.
+    private static FileStream Open(string path) => new(
+        path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+    private static string Decoded(byte[] bytes, int length) =>
+        Encoding.UTF8.GetString(bytes, 0, length);
+
     private static string Head(string path)
     {
-        using var file = new FileStream(
-            path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var file = Open(path);
 
         var buffer = new byte[HeadBytes];
         var filled = 0;
@@ -104,9 +142,7 @@ public static class LogAttribution
             filled += read;
         }
 
-        // A log a running game holds open is the ordinary case rather than the
-        // exception, which is why the share is permissive and the read is
-        // bounded by what the file gives rather than by its reported length.
-        return Encoding.UTF8.GetString(buffer, 0, filled);
+        // Bounded by what the file gives rather than by its reported length.
+        return Decoded(buffer, filled);
     }
 }

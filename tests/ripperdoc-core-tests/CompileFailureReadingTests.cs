@@ -11,9 +11,26 @@ namespace Ripperdoc.Core.Tests;
 /// attribution turns on is the path an error names and the record entry that
 /// claims it, so nothing real is needed to reproduce a row.
 /// </remarks>
-public sealed class CompileFailureReadingTests
+public sealed class CompileFailureReadingTests : IDisposable
 {
     private const string Game = "C:/game";
+
+    private readonly string _directory =
+        Path.Combine(Path.GetTempPath(), "ripperdoc-compile-tests-" + Guid.NewGuid().ToString("N"));
+
+    public CompileFailureReadingTests() => Directory.CreateDirectory(_directory);
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_directory, recursive: true);
+        }
+        catch (IOException)
+        {
+            // A leftover temp directory is not worth failing a check over.
+        }
+    }
 
     /// <summary>
     /// An error is joined to the mod the record says supplied the file it names.
@@ -152,6 +169,31 @@ public sealed class CompileFailureReadingTests
             new DeploymentRecord("hardlink_activator", "a-game", Game,
                 [new DeployedFile("r6/scripts/alpha/a.reds", "alpha-1-0")]));
 
+        Assert.Equal("alpha-1-0", Assert.Single(reading.Suspects).ModId);
+    }
+
+    /// <summary>
+    /// A log its writer still holds open is placed and read whole.
+    /// </summary>
+    /// <remarks>
+    /// The head and the whole text come from one read under one share, so the
+    /// half that needs the whole file cannot ask for a stricter share than the
+    /// half that needs its opening. A reading that placed the log and then
+    /// could not read it would fail on the state this lane is pointed at - a
+    /// game that is running, holding its own compiler log.
+    /// </remarks>
+    [Fact]
+    public void ALogItsWriterStillHoldsOpenIsReadWhole()
+    {
+        var path = Path.Combine(_directory, "compiler_rCURRENT.log");
+        File.WriteAllText(path, Error("UNRESOLVED_METHOD", "C:/game/r6/scripts/alpha/a.reds", 80, 1));
+
+        using var writer = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.Read);
+
+        var reading = CompileFailureReading.Of(
+            path, Record(("alpha-1-0", "r6/scripts/alpha/a.reds")), Game);
+
+        Assert.Equal("LongForm", reading.Log.Grammar);
         Assert.Equal("alpha-1-0", Assert.Single(reading.Suspects).ModId);
     }
 
