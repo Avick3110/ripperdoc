@@ -22,11 +22,22 @@ namespace Ripperdoc.Core.Tests;
 [Trait(TierTrait.Name, TierTrait.InstalledManagerLane)]
 public sealed class InstalledManagerLaneTests(ITestOutputHelper output)
 {
-    private static readonly string? RecordPath =
-        Environment.GetEnvironmentVariable("RIPPERDOC_DEPLOYMENT_RECORD_PATH");
+    /// <summary>
+    /// The variable naming the deployment record, derived from the brand rather
+    /// than spelled out, so a rebrand cannot leave a stale name here.
+    /// </summary>
+    internal static string RecordVariableName =>
+        Branding.Name.ToUpperInvariant() + "_DEPLOYMENT_RECORD_PATH";
 
-    private static readonly string? LogPath =
-        Environment.GetEnvironmentVariable("RIPPERDOC_COMPILER_LOG_PATH");
+    /// <summary>The variable naming the compiler log, derived the same way.</summary>
+    internal static string LogVariableName =>
+        Branding.Name.ToUpperInvariant() + "_COMPILER_LOG_PATH";
+
+    private static string RecordPath =>
+        Named(RecordVariableName, "a deployment manager's own record of what it deployed");
+
+    private static string LogPath =>
+        Named(LogVariableName, "a compiler log from a boot that ran against that deployment");
 
     /// <summary>
     /// The record parses, and every entry it holds carries both a path and a
@@ -55,7 +66,7 @@ public sealed class InstalledManagerLaneTests(ITestOutputHelper output)
     [Fact]
     public void TheCompilerLogIsPlacedByItsOwnContents()
     {
-        var log = LogAttribution.Of(LogPath!);
+        var log = LogAttribution.Of(LogPath);
 
         output.WriteLine($"log             : {log.FileName}");
         output.WriteLine($"grammar         : {log.Grammar}");
@@ -76,7 +87,7 @@ public sealed class InstalledManagerLaneTests(ITestOutputHelper output)
     public void EverySourceTheLogNamesIsAccountedForExactlyOnce()
     {
         var record = Record();
-        var reading = CompileFailureReading.Of(LogPath!, record, record.TargetPath);
+        var reading = CompileFailureReading.Of(LogPath, record, record.TargetPath);
 
         var attributed = reading.Suspects.SelectMany(suspect => suspect.Errors)
             .Select(error => error.SourcePath)
@@ -152,8 +163,33 @@ public sealed class InstalledManagerLaneTests(ITestOutputHelper output)
         Assert.Equal(0, partition.Count(PartitionBucket.Unclaimed));
     }
 
+    /// <summary>
+    /// The path a variable names, or a refusal that names this tier and both of
+    /// its inputs.
+    /// </summary>
+    /// <remarks>
+    /// The gate script's skips are written from outside; this is the same
+    /// announcement from inside, for the runs that do not come through it. Both
+    /// variables are named whichever one is missing, because the tier needs the
+    /// pair - a record on its own attributes nothing, and a log read against a
+    /// different deployment attributes to whatever that one held.
+    /// </remarks>
+    private static string Named(string variable, string what)
+    {
+        var path = Environment.GetEnvironmentVariable(variable);
+
+        return string.IsNullOrWhiteSpace(path)
+            ? throw new InvalidOperationException(
+                $"The {TierTrait.InstalledManagerLane} checks read {what}, which no runner has. "
+                + $"Set {variable} to one to run them. This tier needs both of its inputs: "
+                + $"{RecordVariableName} and {LogVariableName}. The gate script announces the "
+                + "tier as skipped, by name, when it cannot run it - an absent input is never "
+                + "reported as a pass.")
+            : path;
+    }
+
     private static DeploymentRecord Record() =>
-        DeploymentRecord.Parse(File.ReadAllText(RecordPath!), RecordPath!);
+        DeploymentRecord.Parse(File.ReadAllText(RecordPath), RecordPath);
 
     private static IReadOnlyList<string> Mods(DeploymentRecord record) =>
         [.. record.Files.Select(file => file.SourceMod).Distinct(StringComparer.Ordinal)];
