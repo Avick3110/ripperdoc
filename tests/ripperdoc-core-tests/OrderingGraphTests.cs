@@ -190,6 +190,38 @@ public sealed class OrderingGraphTests
     }
 
     /// <summary>
+    /// Two cycles meeting at a shared mod are reported as cyclic, not as two
+    /// cycles.
+    /// </summary>
+    /// <remarks>
+    /// The limit stated on <see cref="OrderingGraph.Cycles" />, held to a graph
+    /// that exhibits it: a and d are joined by two disjoint middles, which is
+    /// two elementary cycles, and the walk finishes with d before the second is
+    /// walked into. The verdict is right and the enumeration is partial, so a
+    /// caller acting on what it is handed has to run the check again rather
+    /// than treat the list as everything wrong with the graph.
+    ///
+    /// It is asserted rather than reported because the claim beside it says the
+    /// list is not an enumeration. A walk that later enumerated every cycle
+    /// would red here, and that is the point: the claim would have to change in
+    /// the same commit.
+    /// </remarks>
+    [Fact]
+    public void TwoCyclesThroughOneModAreReportedAsCyclicRatherThanAsTwo()
+    {
+        var graph = Graph(
+            new OrderingRule("a", "b", OrderingRuleKind.Before),
+            new OrderingRule("a", "c", OrderingRuleKind.Before),
+            new OrderingRule("b", "d", OrderingRuleKind.Before),
+            new OrderingRule("c", "d", OrderingRuleKind.Before),
+            new OrderingRule("d", "a", OrderingRuleKind.Before));
+
+        var cycle = Assert.Single(graph.Cycles);
+        Assert.Equal(cycle.Path[0], cycle.Path[^1]);
+        Assert.Equal(["a", "b", "d", "a"], cycle.Path);
+    }
+
+    /// <summary>
     /// The same rules give the same path however they are ordered on the way
     /// in.
     /// </summary>
