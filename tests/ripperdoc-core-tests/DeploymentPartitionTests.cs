@@ -171,6 +171,22 @@ public sealed class DeploymentPartitionTests : IDisposable
         Assert.Null(DeploymentRecord.In(_directory));
     }
 
+    /// <summary>
+    /// A game directory that is not there reads as none, the same as one that
+    /// is there and carries no record.
+    /// </summary>
+    /// <remarks>
+    /// Beside the row above, so the two ways a record can be absent are checked
+    /// separately: the reader opens the file once and lets the open's own
+    /// not-found report be the absence signal, and a missing directory and a
+    /// missing file are two different reports.
+    /// </remarks>
+    [Fact]
+    public void AGameDirectoryThatIsNotThereReadsAsNone()
+    {
+        Assert.Null(DeploymentRecord.In(Path.Combine(_directory, "no-such-directory")));
+    }
+
     /// <summary>A record on disk is read, with its method and game carried.</summary>
     [Fact]
     public void ARecordOnDiskIsRead()
