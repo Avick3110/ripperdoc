@@ -7,13 +7,15 @@ namespace Ripperdoc.Core.Diagnosis;
 /// </summary>
 /// <param name="Method">How it put the files there, in the manager's own word.</param>
 /// <param name="GameId">The game the record is for, in the manager's own word.</param>
+/// <param name="TargetPath">The directory it deployed into, as the manager recorded it.</param>
 /// <param name="Files">Every file it claims to have deployed, with its source mod.</param>
 /// <remarks>
 /// The method is carried rather than interpreted. It decides whether a deployed
 /// file shares storage with its staged original, which a later reading may want
 /// and this one has no measurement about.
 /// </remarks>
-public sealed record DeploymentRecord(string Method, string GameId, IReadOnlyList<DeployedFile> Files)
+public sealed record DeploymentRecord(
+    string Method, string GameId, string TargetPath, IReadOnlyList<DeployedFile> Files)
 {
     /// <summary>The file name the manager writes this record under.</summary>
     public const string FileName = "vortex.deployment.json";
@@ -102,7 +104,11 @@ public sealed record DeploymentRecord(string Method, string GameId, IReadOnlyLis
                 deployed.Add(new DeployedFile(relative.GetString()!, mod.GetString()!));
             }
 
-            return new DeploymentRecord(Text(root, "deploymentMethod"), Text(root, "gameId"), deployed);
+            return new DeploymentRecord(
+                Text(root, "deploymentMethod"),
+                Text(root, "gameId"),
+                Text(root, "targetPath"),
+                deployed);
         }
     }
 
