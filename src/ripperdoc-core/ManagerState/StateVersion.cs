@@ -9,13 +9,28 @@ namespace Ripperdoc.Core.ManagerState;
 /// <param name="Manifest">The manifest file the directory points at.</param>
 /// <param name="Tables">The table files still live, in the order they are read.</param>
 /// <param name="Logs">The write-ahead logs the manifest names.</param>
+/// <param name="LogsNotListed">
+/// Why the directory's logs could not be listed, or null where they were.
+/// </param>
 /// <remarks>
-/// Read rather than guessed at from the directory listing. A table the manifest
-/// has dropped stays on disk until the manager deletes it, so a reader taking
-/// every table it can see resurrects whatever the dropped one held.
+/// <para>
+/// Which files hold state is read rather than guessed at from the directory
+/// listing. A table the manifest has dropped stays on disk until the manager
+/// deletes it, so a reader taking every table it can see resurrects whatever
+/// the dropped one held.
+/// </para>
+/// <para>
+/// The logs are the exception, and the directory is listed to refuse rather
+/// than to read: a writer opens its next log before the edit naming it is
+/// written, so a log numbered above the named one means the newest writes may
+/// be somewhere this reader would pass over.
+/// </para>
 /// </remarks>
 internal sealed record StateVersion(
-    string Manifest, IReadOnlyList<string> Tables, IReadOnlyList<string> Logs)
+    string Manifest,
+    IReadOnlyList<string> Tables,
+    IReadOnlyList<string> Logs,
+    string? LogsNotListed)
 {
     /// <summary>The file naming the manifest in force.</summary>
     internal const string PointerName = "CURRENT";
@@ -176,10 +191,61 @@ internal sealed record StateVersion(
             [.. new[] { logs.Current, logs.Previous }
                 .Where(number => number is not (null or 0)).Select(number => number!.Value)
                 .Distinct().Order()
-                .Select(number => Path.Combine(directory, Name(number, LogExtension)))]);
+                .Select(number => Path.Combine(directory, Name(number, LogExtension)))],
+            Unnamed(directory, logs));
     }
 
     private static string Name(ulong number, string extension) => $"{number:D6}{extension}";
+
+    /// <remarks>
+    /// The one place this reader looks at the directory rather than at what the
+    /// manifest names, and it looks in order to refuse. The format's own
+    /// recovery reads every log at or above the number the manifest records,
+    /// because a writer opens its next log before the edit naming it is
+    /// written; reading only the named logs can therefore miss the newest
+    /// writes with nothing to show for it.
+    /// </remarks>
+    private static string? Unnamed(string directory, LogNumbers logs)
+    {
+        var named = Math.Max(logs.Current ?? 0, logs.Previous ?? 0);
+        List<string> present;
+
+        try
+        {
+            present = [.. System.IO.Directory.EnumerateFiles(directory, "*" + LogExtension)];
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // A directory this process may read files in but not list is one
+            // where the question cannot be asked. Saying so beats a refusal
+            // that blames the state, and beats a silence that would read as a
+            // check that passed.
+            return "whether a write-ahead log the manifest does not name is present could not be "
+                + $"established: this directory could not be listed ({error.Message.TrimEnd('.')}). "
+                + "The logs the manifest names were read; a newer one left by an interrupted "
+                + "flush would not have been seen.";
+        }
+
+        foreach (var path in present.Order(StringComparer.Ordinal))
+        {
+            var file = Path.GetFileName(path);
+
+            if (!ulong.TryParse(Path.GetFileNameWithoutExtension(path), out var number)
+                || number <= named)
+            {
+                continue;
+            }
+
+            throw new StateReadException(
+                $"'{file}' is a write-ahead log the manifest does not name, and it is numbered "
+                + $"above the newest log the manifest does name ('{Name(named, LogExtension)}'). "
+                + "The state may have been left mid-flush, in which case its newest writes are in "
+                + "a file this reader would have passed over - so this is a state it cannot read "
+                + "whole rather than one it can read in part.");
+        }
+
+        return null;
+    }
 
     /// <remarks>
     /// The edits are applied in order and the last one wins, because a log a

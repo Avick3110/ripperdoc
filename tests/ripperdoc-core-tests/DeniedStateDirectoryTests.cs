@@ -124,6 +124,30 @@ public sealed class DeniedStateDirectoryTests : IDisposable
             "there and could not be read", refusal.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A directory whose listing is refused still reads, and says that the
+    /// unnamed-log question could not be asked.
+    /// </summary>
+    /// <remarks>
+    /// The reading looks at the listing only to refuse on a log the manifest
+    /// does not name. Where the listing itself is refused the question cannot
+    /// be asked, and a caveat is what keeps that from reading as a check that
+    /// passed.
+    /// </remarks>
+    [Fact]
+    public void AStateDirectoryThatCannotBeListedIsReadAndSaysTheQuestionWasNotAsked()
+    {
+        root = scratch.Write();
+        Deny(root, "(W)");
+
+        var state = StateDatabase.In(root, Prefixes)!;
+
+        Assert.Equal(2, state.Values.Count);
+        Assert.Contains(
+            state.Caveats,
+            caveat => caveat.Contains("could not be listed", StringComparison.Ordinal));
+    }
+
     /// <remarks>
     /// The refusal is confirmed rather than assumed: a process holding a
     /// privilege that walks through it would leave these checks asserting
