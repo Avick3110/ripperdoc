@@ -72,6 +72,19 @@ public sealed record DeploymentRecord(
         {
             return null;
         }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // Absence is the two catches above and nothing else. A denial or a
+            // sharing violation escaping raw would leave a caller that asked
+            // for a record holding a platform exception instead of an answer,
+            // and take down whatever else that caller had already read.
+            throw new DiagnosisReadException(
+                $"'{path}' is there and could not be read: {error.Message.TrimEnd('.')}. "
+                + "Nothing here can say which mod supplied which deployed file, which is not "
+                + "the same as a directory carrying no record. Check that this process may "
+                + "read the file and that the manager is not holding it.",
+                error);
+        }
     }
 
     /// <summary>

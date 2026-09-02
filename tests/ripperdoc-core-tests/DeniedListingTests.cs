@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Ripperdoc.Core.Archive;
 using Xunit;
 
@@ -19,17 +18,13 @@ public sealed class DeniedListingTests : IDisposable
     private readonly string _directory =
         Path.Combine(Path.GetTempPath(), "ripperdoc-denied-tests-" + Guid.NewGuid().ToString("N"));
 
-    private readonly List<string> _denied = [];
+    private readonly DeniedPaths _denied = new();
 
     public DeniedListingTests() => Directory.CreateDirectory(_directory);
 
     public void Dispose()
     {
-        // The denials come off before the tree does, or the tree stays.
-        foreach (var path in _denied)
-        {
-            Icacls(path, "/remove:d", Environment.UserName);
-        }
+        _denied.Dispose();
 
         try
         {
@@ -115,8 +110,7 @@ public sealed class DeniedListingTests : IDisposable
     /// <inheritdoc cref="Deny" path="/remarks" />
     private void DenyFile(string path)
     {
-        Icacls(path, "/deny", $"{Environment.UserName}:(R)");
-        _denied.Add(path);
+        _denied.Deny(path, "(R)");
 
         Assert.Throws<UnauthorizedAccessException>(() => File.ReadAllLines(path));
     }
@@ -131,28 +125,9 @@ public sealed class DeniedListingTests : IDisposable
     /// </remarks>
     private void Deny(string path)
     {
-        Icacls(path, "/deny", $"{Environment.UserName}:(RX)");
-        _denied.Add(path);
+        _denied.Deny(path, "(RX)");
 
         Assert.Throws<UnauthorizedAccessException>(
             () => Directory.EnumerateFileSystemEntries(path).ToList());
-    }
-
-    private static void Icacls(string path, params string[] arguments)
-    {
-        var start = new ProcessStartInfo("icacls.exe")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-
-        start.ArgumentList.Add(path);
-        foreach (var argument in arguments)
-        {
-            start.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(start);
-        process?.WaitForExit();
     }
 }

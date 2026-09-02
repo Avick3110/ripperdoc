@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Ripperdoc.Core.ManagerState;
 using Xunit;
 
@@ -15,11 +14,6 @@ namespace Ripperdoc.Core.Tests;
 /// reader that created, truncated or appended to anything would be refused
 /// here, and reads green only because it does none of those.
 /// </para>
-/// <para>
-/// The <c>icacls</c> plumbing is this file's own rather than shared with the
-/// sibling tier. Two sites is a copy; a third would be the point to extract
-/// one.
-/// </para>
 /// </remarks>
 [Trait(TierTrait.Name, TierTrait.DeniedDirectory)]
 public sealed class DeniedStateDirectoryTests : IDisposable
@@ -27,7 +21,7 @@ public sealed class DeniedStateDirectoryTests : IDisposable
     private static readonly string[] Prefixes = ["persistent###mods###"];
 
     private readonly SyntheticStateDatabase scratch = new();
-    private readonly List<(string Path, string Right)> denied = [];
+    private readonly DeniedPaths denied = new();
 
     private string root = string.Empty;
 
@@ -36,12 +30,7 @@ public sealed class DeniedStateDirectoryTests : IDisposable
 
     public void Dispose()
     {
-        // The denials come off before the tree does, or the tree stays.
-        foreach (var (path, _) in denied)
-        {
-            Icacls(path, "/remove:d", Environment.UserName);
-        }
-
+        denied.Dispose();
         scratch.Dispose();
     }
 
@@ -155,8 +144,7 @@ public sealed class DeniedStateDirectoryTests : IDisposable
     /// </remarks>
     private void Deny(string path, string right)
     {
-        Icacls(path, "/deny", $"{Environment.UserName}:{right}");
-        denied.Add((path, right));
+        denied.Deny(path, right);
 
         if (right == "(W)")
         {
@@ -167,19 +155,5 @@ public sealed class DeniedStateDirectoryTests : IDisposable
         {
             Assert.Throws<UnauthorizedAccessException>(() => File.ReadAllBytes(path));
         }
-    }
-
-    private static void Icacls(string path, params string[] arguments)
-    {
-        var start = new ProcessStartInfo("icacls") { RedirectStandardOutput = true };
-        start.ArgumentList.Add(path);
-
-        foreach (var argument in arguments)
-        {
-            start.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(start)!;
-        process.WaitForExit();
     }
 }

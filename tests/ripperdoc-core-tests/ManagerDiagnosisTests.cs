@@ -217,6 +217,37 @@ public sealed class ManagerDiagnosisTests : IDisposable
             "carries no deployment record", diagnosis.WhyNoPartition!, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A record no other process will share is refused by name, and takes down
+    /// neither the state reading nor the ordering already read.
+    /// </summary>
+    /// <remarks>
+    /// A sharing violation rather than a denial, so the arm is driven on every
+    /// platform. Its denied-tier sibling drives the same arm through an ACL.
+    /// </remarks>
+    [Fact]
+    public void ARecordThatCannotBeOpenedIsRefusedRatherThanEscapingRaw()
+    {
+        using var scratch = State();
+        var record = Path.Combine(gameDirectory, DeploymentRecord.FileName);
+        File.WriteAllText(record, """{"files":[]}""");
+
+        using var held = new FileStream(record, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        Assert.Throws<DiagnosisReadException>(() => DeploymentRecord.In(gameDirectory));
+
+        var diagnosis = ManagerDiagnosis.Of(scratch.Write(), Game, gameDirectory);
+
+        Assert.Null(diagnosis.Record);
+        Assert.Null(diagnosis.Partition);
+        Assert.Contains("could not be read", diagnosis.WhyNoPartition!, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "carries no deployment record", diagnosis.WhyNoPartition!, StringComparison.Ordinal);
+
+        // The half a raw throw took down with it.
+        Assert.NotNull(diagnosis.State);
+    }
+
     [Fact]
     public void TheInUseCaveatTravelsWithTheDiagnosis()
     {
