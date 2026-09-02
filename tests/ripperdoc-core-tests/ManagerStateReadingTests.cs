@@ -187,10 +187,6 @@ public sealed class ManagerStateReadingTests
             .Ordering.HomesNotRead.Select(home => home.Reason).Aggregate(string.Empty, (a, b) => a + b);
 
     /// <summary>
-    /// A state shaped like a manager's, built out of the key shapes the
-    /// characterisation published. Every id here is invented.
-    /// </summary>
-    /// <summary>
     /// A file spelling two installed mods answer to identifies neither, and is
     /// named so a caller can see that it decided nothing.
     /// </summary>
@@ -240,6 +236,10 @@ public sealed class ManagerStateReadingTests
         return scratch;
     }
 
+    /// <summary>
+    /// A state shaped like a manager's, built out of the key shapes the
+    /// characterisation published. Every id here is invented.
+    /// </summary>
     private static SyntheticStateDatabase Bench(
         bool recordTheActiveProfile = true,
         string activeProfile = Active,
