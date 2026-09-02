@@ -88,6 +88,13 @@ internal sealed class SyntheticStateDatabase : IDisposable
     internal byte[]? CompressedBodyOfFirstBlock { get; set; }
 
     /// <summary>
+    /// How many bytes more than its own the first data block's last entry
+    /// declares its value to be, so that the value runs into the restart
+    /// array behind it.
+    /// </summary>
+    internal int OverstateTheLastValueLengthOfFirstBlockBy { get; set; }
+
+    /// <summary>
     /// Adds a table file holding these keys, at sequence numbers below anything
     /// added after it.
     /// </summary>
@@ -305,9 +312,10 @@ internal sealed class SyntheticStateDatabase : IDisposable
                 return;
             }
 
-            var content = DataBlock(block);
+            var corrupt = isFirst && index.Count == 0;
+            var content = DataBlock(block, corrupt);
             var offset = file.Count;
-            var size = PutBlock(file, content, isFirst && index.Count == 0);
+            var size = PutBlock(file, content, corrupt);
 
             index.Add((InternalKey(block[^1]), offset, size));
             block.Clear();
@@ -357,10 +365,11 @@ internal sealed class SyntheticStateDatabase : IDisposable
         return [.. file];
     }
 
-    private byte[] DataBlock(List<Entry> entries) =>
+    private byte[] DataBlock(List<Entry> entries, bool corrupt) =>
         Restarts(
             [.. entries.Select(InternalKey)],
-            [.. entries.Select(entry => Encoding.UTF8.GetBytes(entry.Value ?? string.Empty))]);
+            [.. entries.Select(entry => Encoding.UTF8.GetBytes(entry.Value ?? string.Empty))],
+            corrupt ? OverstateTheLastValueLengthOfFirstBlockBy : 0);
 
     private static byte[] InternalKey(Entry entry)
     {
@@ -379,7 +388,7 @@ internal sealed class SyntheticStateDatabase : IDisposable
     /// wrote every key whole would leave the reader's key-rebuilding arm
     /// unexercised by every fixture in the suite.
     /// </remarks>
-    private byte[] Restarts(List<byte[]> keys, List<byte[]> values)
+    private byte[] Restarts(List<byte[]> keys, List<byte[]> values, int overstateLastValueBy = 0)
     {
         var content = new List<byte>();
         var points = new List<uint>();
@@ -406,7 +415,9 @@ internal sealed class SyntheticStateDatabase : IDisposable
 
             PutVarInt(content, (ulong)shared);
             PutVarInt(content, (ulong)(keys[i].Length - shared));
-            PutVarInt(content, (ulong)values[i].Length);
+            PutVarInt(
+                content,
+                (ulong)(values[i].Length + (i == keys.Count - 1 ? overstateLastValueBy : 0)));
             content.AddRange(keys[i].AsSpan(shared));
             content.AddRange(values[i]);
             previous = keys[i];
