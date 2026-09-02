@@ -65,6 +65,20 @@ public static class TierTrait
     public const string InstalledManagerLane = "InstalledManagerLane";
 
     /// <summary>
+    /// Checks that read a real deployment manager's own state directory.
+    /// </summary>
+    /// <remarks>
+    /// A distinct input from the lane above rather than a second use of it: the
+    /// state is what the manager wanted and the record is what it deployed, and
+    /// a machine can have either without the other - a manager installed and
+    /// never deployed, or a game directory whose manager has been removed. Its
+    /// subject changes whenever its owner installs a mod, so its checks assert
+    /// what holds of any state and report the numbers rather than asserting
+    /// them.
+    /// </remarks>
+    public const string InstalledManagerState = "InstalledManagerState";
+
+    /// <summary>
     /// Checks that need a directory the running user is refused.
     /// </summary>
     /// <remarks>

@@ -74,6 +74,15 @@ scripts_variable="RIPPERDOC_SCRIPTS_PATH"
 deployment_record_variable="RIPPERDOC_DEPLOYMENT_RECORD_PATH"
 compiler_log_variable="RIPPERDOC_COMPILER_LOG_PATH"
 
+# The state tier reads the manager's own state directory, which is what it
+# WANTED rather than what it deployed - a distinct input from the pair above,
+# because a machine can have a manager that has never deployed, or a game
+# directory whose manager is gone. Which game of that state to read is the
+# tier's second input and is not a path; the staging root and any curated
+# list's manifest are found from the state itself rather than named here.
+manager_state_variable="RIPPERDOC_MANAGER_STATE_PATH"
+manager_game_variable="RIPPERDOC_MANAGER_GAME_ID"
+
 # Tier (iii) reads type information generated from the user's own game install.
 # It is the input the dependency-drift audit needs, and no runner has one - the
 # dump is derived from the publisher's binary and is no more this project's to
@@ -132,7 +141,7 @@ run "build"                  dotnet build ripperdoc.sln --nologo -v minimal
 # A filter that matches nothing exits 0, so without the last flag a mistyped
 # filter would print PASS having run no checks at all - the failure mode where
 # verification machinery fails toward green.
-run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase&Tier!=InstalledTweakLayer&Tier!=InstalledModArchives&Tier!=RttiDump&Tier!=DeniedDirectory&Tier!=InstalledScriptLayer&Tier!=InstalledManagerLane" -- RunConfiguration.TreatNoTestsAsError=true
+run "tests"                  dotnet test  ripperdoc.sln --nologo -v minimal --filter "Tier!=ShippedDatabase&Tier!=InstalledTweakLayer&Tier!=InstalledModArchives&Tier!=RttiDump&Tier!=DeniedDirectory&Tier!=InstalledScriptLayer&Tier!=InstalledManagerLane&Tier!=InstalledManagerState" -- RunConfiguration.TreatNoTestsAsError=true
 
 # A denied listing is a real condition on a real machine and the only way to
 # build one here is icacls, so this tier runs on Windows and is announced by
@@ -256,6 +265,24 @@ elif [ ! -f "$compiler_log_path" ]; then
   skip "installed-manager-lane checks" "$compiler_log_variable names a path with no file at it, and errors cannot be attributed without the log that reports them"
 else
   run "installed-manager-lane checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=InstalledManagerLane" -- RunConfiguration.TreatNoTestsAsError=true
+fi
+
+manager_state_path="$(printenv "$manager_state_variable" || true)"
+manager_game_id="$(printenv "$manager_game_variable" || true)"
+
+if [ -z "$manager_state_path" ]; then
+  skip "installed-manager-state checks" "needs a deployment manager's own state directory - tier (ii), local only; set $manager_state_variable to one, or to a verified copy of one, to run it"
+elif [ ! -d "$manager_state_path" ]; then
+  skip "installed-manager-state checks" "$manager_state_variable names a path with no directory at it - tier (ii) has nothing to read"
+elif [ ! -f "$manager_state_path/CURRENT" ]; then
+  # A directory without the pointer is not a state database, and the reader
+  # reports that as an absence rather than a failure - so the tier would run and
+  # red on an input that is simply not one. Announced instead.
+  skip "installed-manager-state checks" "$manager_state_variable names a directory with no CURRENT in it, so it holds no state database - tier (ii) has nothing to read"
+elif [ -z "$manager_game_id" ]; then
+  skip "installed-manager-state checks" "needs to be told which game of that state to read as well - set $manager_game_variable to the manager's own word for a game. A state holds several games and reading the wrong one reports another game's mods"
+else
+  run "installed-manager-state checks" dotnet test ripperdoc.sln --nologo -v minimal --filter "Tier=InstalledManagerState" -- RunConfiguration.TreatNoTestsAsError=true
 fi
 
 rtti_dump_path="$(printenv "$rtti_dump_variable" || true)"
