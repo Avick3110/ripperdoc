@@ -223,6 +223,30 @@ public sealed partial class StateDatabaseTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A pointer holding a character no file name may hold is refused by the
+    /// pointer guard, not by the platform when the name is opened.
+    /// </summary>
+    /// <remarks>
+    /// A NUL is outside a file name on every platform, so this arm runs
+    /// everywhere. The neighbour is the well-formed pointer every other check
+    /// reads through.
+    /// </remarks>
+    [Fact]
+    public void APointerHoldingACharacterNoFileNameMayIsRefusedByName()
+    {
+        using var scratch = Populated();
+        scratch.PointerText = "MANIFEST-000003\0";
+
+        var refusal = Assert.Throws<StateReadException>(
+            () => StateDatabase.In(scratch.Write(), Prefixes));
+
+        Assert.Contains(
+            "this reader models it as holding one file name in that same directory",
+            refusal.Message,
+            StringComparison.Ordinal);
+    }
+
     private static void Spoil(SyntheticStateDatabase scratch, string marker)
     {
         switch (marker)
