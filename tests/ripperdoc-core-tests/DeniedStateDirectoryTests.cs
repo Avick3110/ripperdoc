@@ -86,6 +86,44 @@ public sealed class DeniedStateDirectoryTests : IDisposable
         Assert.Contains("may read it", refusal.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The manifest the pointer names, there and unreadable, is refused by name
+    /// rather than taken for a directory holding no state.
+    /// </summary>
+    [Fact]
+    public void AManifestThatCannotBeReadIsRefusedRatherThanTakenForAbsent()
+    {
+        root = scratch.Write();
+        var named = File.ReadAllText(Path.Combine(root, StateVersion.PointerName)).Trim();
+        Deny(Path.Combine(root, named), "(R)");
+
+        var refusal = Assert.Throws<StateReadException>(() => StateDatabase.In(root, Prefixes));
+
+        Assert.Contains(
+            $"names '{named}'", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "there and could not be read", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A file the manifest names, there and unreadable, is refused by name
+    /// rather than read past as though what it held were absent.
+    /// </summary>
+    [Fact]
+    public void AFileTheManifestNamesThatCannotBeReadIsRefusedRatherThanReadPast()
+    {
+        root = scratch.Write();
+        var table = Directory.EnumerateFiles(root, "*.ldb").Single();
+        Deny(table, "(R)");
+
+        var refusal = Assert.Throws<StateReadException>(() => StateDatabase.In(root, Prefixes));
+
+        Assert.Contains(
+            Path.GetFileName(table), refusal.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "there and could not be read", refusal.Message, StringComparison.Ordinal);
+    }
+
     /// <remarks>
     /// The refusal is confirmed rather than assumed: a process holding a
     /// privilege that walks through it would leave these checks asserting

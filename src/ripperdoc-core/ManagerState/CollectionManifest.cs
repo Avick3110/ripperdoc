@@ -116,6 +116,14 @@ public sealed class CollectionManifest
         {
             return null;
         }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            throw new StateReadException(
+                $"'{path}' is there and could not be read: {error.Message.TrimEnd('.')}. The "
+                + "manager stages a curated list here, so this is a manifest this reader is "
+                + "refused rather than a list that declares no rules.",
+                error);
+        }
 
         JsonDocument document;
 
