@@ -49,7 +49,14 @@ public sealed class StateDatabase
     /// <summary>The directory this was read from.</summary>
     public string Directory { get; }
 
-    /// <summary>Every file read, as the version manifest named them.</summary>
+    /// <summary>
+    /// Every file the version manifest named as holding state, in the order
+    /// they were read.
+    /// </summary>
+    /// <remarks>
+    /// The pointer and the manifest itself are read to arrive at this list and
+    /// are not in it. They say where the state is; they do not hold any.
+    /// </remarks>
     public IReadOnlyList<string> FilesRead { get; }
 
     /// <summary>How many distinct keys the files hold.</summary>

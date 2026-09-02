@@ -282,6 +282,30 @@ public sealed class StateDatabaseTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The files named are the ones the manifest said hold state, and the two
+    /// that were read to find them are not among them.
+    /// </summary>
+    [Fact]
+    public void TheFilesNamedAreTheOnesTheManifestSaidHoldState()
+    {
+        using var scratch = new SyntheticStateDatabase();
+        scratch.Table(("persistent###mods###a", "1"));
+        scratch.Table(("persistent###mods###b", "2"));
+        scratch.Log(("persistent###mods###c", "3"));
+
+        var directory = scratch.Write();
+        var state = StateDatabase.In(directory, Prefixes)!;
+
+        Assert.Equal(3, state.FilesRead.Count);
+        Assert.Equal(2, state.FilesRead.Count(name => name.EndsWith(".ldb", StringComparison.Ordinal)));
+        Assert.Single(state.FilesRead, name => name.EndsWith(".log", StringComparison.Ordinal));
+        Assert.DoesNotContain(StateVersion.PointerName, state.FilesRead);
+        Assert.DoesNotContain(
+            state.FilesRead,
+            name => name.StartsWith("MANIFEST", StringComparison.Ordinal));
+    }
+
     private static void Nothing(
         ReadOnlySpan<byte> key, ulong sequence, bool isValue, ReadOnlySpan<byte> value)
     {
