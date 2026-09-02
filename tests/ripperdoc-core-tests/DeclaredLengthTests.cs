@@ -6,7 +6,7 @@ namespace Ripperdoc.Core.Tests;
 
 /// <summary>
 /// The one place a declared length is held against the bytes there are, and
-/// the check that it is the one place.
+/// the scan holding the reader's own source to it in the spellings it reads.
 /// </summary>
 public sealed partial class DeclaredLengthTests
 {
@@ -76,19 +76,32 @@ public sealed partial class DeclaredLengthTests
     }
 
     /// <summary>
-    /// No file in the reader slices a buffer by a computed length except the
-    /// primitive's own, so a site added later cannot carry the wrap without
-    /// failing here.
+    /// No file in the reader spells a buffer view, a slice or a copy by a
+    /// computed length except the primitive's own, so a site added later in one
+    /// of those spellings cannot carry the wrap without failing here.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// An identity check over the source rather than a behavioural one: a
     /// behavioural arm per site passes on the day a new site arrives without
     /// one. Each file is scanned whole, so a call whose arguments begin on the
-    /// next line is the same call. The forms held are a slice call with
-    /// arguments, a span, memory or segment constructed over a buffer, a copy
-    /// naming an offset, and a range with a computed endpoint; a range whose
-    /// endpoints are literals, or count a literal from the end, names a fixed
-    /// trailer rather than a declared length.
+    /// next line is the same call.
+    /// </para>
+    /// <para>
+    /// The spellings held are a slice call with arguments, a span, memory or
+    /// segment constructed over a buffer, a copy naming an offset, and a range
+    /// with a computed endpoint; a range whose endpoints are literals, or count
+    /// a literal from the end, names a fixed trailer rather than a declared
+    /// length.
+    /// </para>
+    /// <para>
+    /// <strong>What the scan does not see, and this check therefore does not
+    /// claim:</strong> a read taking a buffer and an index rather than a view
+    /// of it, an allocation sized by a declared length, a string operation over
+    /// an already-decoded value, and enumerable slicing. A site written in one
+    /// of those spellings compiles and passes here, and is held by an arm of
+    /// its own or by nothing.
+    /// </para>
     /// </remarks>
     [Fact]
     public void EverySliceByAComputedLengthInTheReaderIsThePrimitives()

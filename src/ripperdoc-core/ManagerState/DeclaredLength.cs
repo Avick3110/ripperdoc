@@ -15,8 +15,9 @@ namespace Ripperdoc.Core.ManagerState;
 /// </para>
 /// <para>
 /// One site, so that "every declared length is refused by name" is a property
-/// of the code rather than a habit. Nothing else in this namespace slices a
-/// buffer by a computed length; a check holds the source to that.
+/// of the code rather than a habit. Nothing else in this namespace spells a
+/// buffer view, a slice or a copy by a computed length; a check holds the
+/// source to that, in the spellings it reads and no wider.
 /// </para>
 /// </remarks>
 internal static class DeclaredLength
