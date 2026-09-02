@@ -28,18 +28,26 @@ internal static class Snappy
         var at = 0;
         var declared = VarInt.ReadLength(source, ref at, $"{what}'s compressed length preamble");
         var ceiling = Ceiling(source.Length - at);
+        var most = Math.Min(ceiling, Array.MaxLength);
 
         // The preamble is the block's own word for how much it holds, and a
         // block is allocated on that word. The format bounds it: a copy
         // producing up to 64 bytes takes at least 3 (the two-byte copy
         // produces at most 11), and a literal never produces more than it
         // consumes - so the compressed bytes cap what they can stand for.
-        if (declared > ceiling)
+        // The platform bounds it again: a block the ceiling admits is still
+        // held to what one array can hold, which the ceiling passes over a
+        // large enough block.
+        if (declared > most)
         {
             throw new StateReadException(
-                $"{what} declares {declared} decompressed bytes, and its {source.Length - at} "
-                + $"compressed bytes can produce at most {ceiling}. The preamble is corrupt, or "
-                + "the block is not compressed the way this reader models.");
+                $"{what} declares {declared} decompressed bytes, and "
+                + (most == ceiling
+                    ? $"its {source.Length - at} compressed bytes can produce at most {ceiling}. "
+                        + "The preamble is corrupt, or the block is not compressed the way this "
+                        + "reader models."
+                    : $"this reader can hold at most {Array.MaxLength} in one block. The preamble "
+                        + "is corrupt, or the block is larger than this reader models."));
         }
 
         var output = new byte[declared];

@@ -416,6 +416,39 @@ public sealed partial class StateDatabaseTests
     }
 
     /// <summary>
+    /// A preamble the ceiling admits and no array can hold is refused by
+    /// name, and the refusal says which of the two bounds refused it.
+    /// </summary>
+    /// <remarks>
+    /// The ceiling reaches the array maximum only over a block of a hundred
+    /// megabytes, which is what this check allocates. Its neighbour is the
+    /// same preamble over a block small enough for the ceiling to refuse.
+    /// </remarks>
+    [Fact]
+    public void APreambleTheCeilingAdmitsAndNoArrayCanHoldIsRefusedByName()
+    {
+        byte[] preamble = [0xFF, 0xFF, 0xFF, 0xFF, 0x07];
+        var wide = new byte[100_663_300];
+        preamble.CopyTo(wide, 0);
+
+        var byTheArray = Assert.Throws<StateReadException>(
+            () => Snappy.Decompress(wide, "a block"));
+        var byTheCeiling = Assert.Throws<StateReadException>(
+            () => Snappy.Decompress([.. preamble, 0, 0, 0], "a block"));
+
+        Assert.Contains(
+            "a block declares 2147483647 decompressed bytes, and this reader can hold at most "
+            + $"{Array.MaxLength} in one block",
+            byTheArray.Message,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "a block declares 2147483647 decompressed bytes, and its 3 compressed bytes can "
+            + "produce at most 64",
+            byTheCeiling.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A block declaring one byte over its ceiling is refused by the ceiling,
     /// and the figures the refusal carries are the ceiling's own.
     /// </summary>
