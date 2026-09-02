@@ -108,11 +108,13 @@ public sealed partial class StateDatabaseTests
     [Fact]
     public void ARecordSplitAcrossBlocksIsReadWhole()
     {
-        var long_ = new string('v', 70_000);
+        var pastOneBlock = new string('v', 70_000);
         using var scratch = new SyntheticStateDatabase();
-        scratch.Log(("persistent###mods###a", long_));
+        scratch.Log(("persistent###mods###a", pastOneBlock));
 
-        Assert.Equal(long_, StateDatabase.In(scratch.Write(), Prefixes)!.Text("persistent###mods###a"));
+        Assert.Equal(
+            pastOneBlock,
+            StateDatabase.In(scratch.Write(), Prefixes)!.Text("persistent###mods###a"));
     }
 
     /// <summary>
@@ -437,10 +439,12 @@ public sealed partial class StateDatabaseTests
     public void ABlockAtTheHighestRatioTheFixturesCompressorReachesReads()
     {
         using var scratch = new SyntheticStateDatabase();
-        var long_ = new string('v', 70_000);
-        scratch.Table(("persistent###mods###a", long_));
+        var oneByteRepeated = new string('v', 70_000);
+        scratch.Table(("persistent###mods###a", oneByteRepeated));
 
-        Assert.Equal(long_, StateDatabase.In(scratch.Write(), Prefixes)!.Text("persistent###mods###a"));
+        Assert.Equal(
+            oneByteRepeated,
+            StateDatabase.In(scratch.Write(), Prefixes)!.Text("persistent###mods###a"));
     }
 
     /// <summary>
