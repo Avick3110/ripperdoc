@@ -50,6 +50,12 @@ internal static class Snappy
                         + "is corrupt, or the block is larger than this reader models."));
         }
 
+        // What the two bounds narrow, and what they leave. 64 produced per 3
+        // consumed is a little over 21 times, so the ceiling admits a word far
+        // larger than the block carrying it, and the platform bound stops only
+        // at what one array can hold - which is more memory than a constrained
+        // machine has. A declared limit rather than a guard: below it the size
+        // of the allocation is the block's own word for it.
         var output = new byte[declared];
         var written = 0;
 
