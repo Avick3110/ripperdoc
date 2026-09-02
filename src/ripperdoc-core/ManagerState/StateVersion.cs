@@ -94,25 +94,12 @@ internal sealed record StateVersion(
                 error);
         }
 
-        var named = Encoding.UTF8.GetString(pointer).Trim();
-
-        // The platform's own notion of a file name, rather than a list of
-        // separators: a drive-relative name carries no separator and still
-        // leaves the directory, because Path.Combine returns a rooted second
-        // argument verbatim; and a character no file name may hold passes the
-        // separator test and is refused only when the name is opened, by the
-        // platform rather than by this reader.
-        if (named.Length == 0
-            || Path.GetFileName(named) != named
-            || named.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-        {
-            throw new StateReadException(
-                $"'{PointerName}' in '{directory}' names '{named}', and this reader models it as "
-                + "holding one file name in that same directory. Nothing here can say which "
-                + "manifest is in force.");
-        }
-
-        return Read(directory, named);
+        return Read(
+            directory,
+            PlainFileName.Named(
+                Encoding.UTF8.GetString(pointer).Trim(),
+                $"'{PointerName}' in '{directory}'",
+                "the manifest in force"));
     }
 
     /// <summary>
@@ -148,13 +135,14 @@ internal sealed record StateVersion(
         }
     }
 
-    private static StateVersion Read(string directory, string named)
+    private static StateVersion Read(string directory, PlainFileName manifest)
     {
+        var named = manifest.Name;
         byte[] bytes;
 
         try
         {
-            bytes = StateFile.ReadAllBytes(Path.Combine(directory, named));
+            bytes = StateFile.ReadAllBytes(PlainFileName.Under(directory, manifest));
         }
         catch (Exception error)
             when (error is FileNotFoundException or DirectoryNotFoundException)

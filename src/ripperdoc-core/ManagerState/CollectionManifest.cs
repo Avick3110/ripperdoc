@@ -28,6 +28,9 @@ public sealed class CollectionManifest
     /// <summary>The name the manager writes a curated list's manifest under.</summary>
     public const string FileName = "collection.json";
 
+    private static readonly PlainFileName Manifest =
+        PlainFileName.Named(FileName, "this reader", "a curated list's manifest");
+
     private CollectionManifest(
         string path,
         int declaredMods,
@@ -84,10 +87,15 @@ public sealed class CollectionManifest
     /// <param name="state">The manager's state for the game.</param>
     /// <returns>The paths, empty where the state stages no curated list.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="state" /> is null.</exception>
+    /// <exception cref="StateReadException">
+    /// The state gives a staged list an id that is not one plain file name.
+    /// </exception>
     /// <remarks>
     /// Both halves of the path come out of the state: the staging root from the
     /// setting that records it, the container from the mod the manager gives a
-    /// kind of its own. Nothing here searches the disk for a file of that name.
+    /// kind of its own. The container is a name the state supplied and is asked
+    /// about before it is joined, like every other. Nothing here searches the
+    /// disk for a file of that name.
     /// </remarks>
     public static IReadOnlyList<string> PathsIn(ManagerStateReading state)
     {
@@ -102,7 +110,12 @@ public sealed class CollectionManifest
         [
             .. state.Wanted
                 .Where(mod => mod.Kind.Equals("collection", StringComparison.Ordinal))
-                .Select(mod => System.IO.Path.Combine(root, mod.Id, FileName))
+                .Select(mod => PlainFileName.Under(
+                    PlainFileName.Under(
+                        root,
+                        PlainFileName.Named(
+                            mod.Id, "the manager's state", "a staged list's own directory")),
+                    Manifest))
                 .Order(StringComparer.Ordinal),
         ];
     }

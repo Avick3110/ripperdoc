@@ -315,6 +315,51 @@ public sealed class ManagerDiagnosisTests : IDisposable
         Assert.Single(diagnosis.Ordering.HomesRead);
     }
 
+    /// <summary>
+    /// A staged list whose id is not a file name names the manifest as a home
+    /// not read, with the state's own reading intact beside it.
+    /// </summary>
+    /// <remarks>
+    /// The id is the last half of the path a manifest would be at, and the
+    /// state is where it comes from. Joined unasked, a NUL leaves the reader as
+    /// the platform's own exception and takes the whole reading down with it.
+    /// </remarks>
+    [Fact]
+    public void AStagedListWhoseIdIsNotAFileNameNamesTheManifestAsAHomeNotRead()
+    {
+        using var scratch = State();
+        scratch.Table(($"persistent###mods###{Game}###mod-\0list###type", "\"collection\""));
+
+        var diagnosis = ManagerDiagnosis.Of(scratch.Write(), Game, gameDirectory);
+
+        var unread = Assert.Single(diagnosis.Ordering.HomesNotRead);
+
+        Assert.Equal("a curated list's manifest", unread.Home);
+        Assert.Contains(
+            "the manager's state names a staged list's own directory 'mod-\0list'",
+            unread.Reason,
+            StringComparison.Ordinal);
+        Assert.Contains("one plain file name", unread.Reason, StringComparison.Ordinal);
+        Assert.NotNull(diagnosis.State);
+        Assert.Single(diagnosis.Ordering.HomesRead);
+    }
+
+    /// <summary>
+    /// A staged list whose id is a file name still says where its manifest
+    /// would be, so the refusal above is about the id and not about the join.
+    /// </summary>
+    [Fact]
+    public void AStagedListWhoseIdIsAFileNameStillNamesWhereItsManifestWouldBe()
+    {
+        using var scratch = State();
+
+        var reading = ManagerStateReading.Of(scratch.Write(), Game)!;
+
+        Assert.Equal(
+            Path.Combine(staging, Container, CollectionManifest.FileName),
+            Assert.Single(CollectionManifest.PathsIn(reading)));
+    }
+
     [Fact]
     public void TheInUseCaveatTravelsWithTheDiagnosis()
     {
