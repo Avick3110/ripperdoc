@@ -153,6 +153,27 @@ public sealed class ManagerDiagnosisTests : IDisposable
         Assert.DoesNotContain("no manifest in it", unread.Reason, StringComparison.Ordinal);
     }
 
+    /// <remarks>
+    /// A directory standing where the manifest belongs is a file the platform
+    /// refuses to open rather than one that is not there, which is the same
+    /// door a permission or a share denies - and it needs no privilege to set
+    /// up, so the arm runs wherever the suite does.
+    /// </remarks>
+    [Fact]
+    public void AManifestThatCannotBeOpenedIsRefusedRatherThanTakenForAbsent()
+    {
+        using var scratch = State();
+        Directory.CreateDirectory(
+            Path.Combine(staging, Container, CollectionManifest.FileName));
+
+        var diagnosis = ManagerDiagnosis.Of(scratch.Write(), Game, gameDirectory);
+
+        var unread = Assert.Single(diagnosis.Ordering.HomesNotRead);
+
+        Assert.Contains("could not be read", unread.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("no manifest in it", unread.Reason, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// A refused read becomes the reason its home is named as unread, rather
     /// than a home that quietly held nothing.

@@ -114,6 +114,15 @@ internal sealed record StateVersion(
                 + "report whatever that file held as absent.",
                 error);
         }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            throw new StateReadException(
+                $"'{Manifest}' says '{Path.GetFileName(path)}' holds part of the state and it is "
+                + $"there and could not be read: {error.Message.TrimEnd('.')}. Reading the rest "
+                + "would report whatever that file held as absent, on the strength of a "
+                + "permission rather than of what the manager wrote.",
+                error);
+        }
     }
 
     private static StateVersion Read(string directory, string named)
@@ -131,6 +140,15 @@ internal sealed record StateVersion(
                 $"'{PointerName}' names '{named}' and there is no such file in '{directory}'. "
                 + "The pointer and the manifest it names disagree, so nothing here can say which "
                 + "files hold the state - which is a damaged directory, not an empty one.",
+                error);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            throw new StateReadException(
+                $"'{PointerName}' names '{named}' in '{directory}' and it is there and could not "
+                + $"be read: {error.Message.TrimEnd('.')}. The manifest is what says which files "
+                + "hold the state, so a directory whose manifest this reader is refused holds a "
+                + "state it cannot see rather than no state at all.",
                 error);
         }
 
