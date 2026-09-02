@@ -145,7 +145,16 @@ public sealed class ManagerDiagnosis
     private static void ReadManifests(
         ManagerStateReading state, List<OrderingRuleSet> read, List<UnreadRuleSet> notRead)
     {
-        var paths = CollectionManifest.PathsIn(state);
+        var paths = Read(
+            () => CollectionManifest.PathsIn(state),
+            "a curated list's manifest",
+            notRead,
+            out _);
+
+        if (paths is null)
+        {
+            return;
+        }
 
         if (paths.Count == 0)
         {

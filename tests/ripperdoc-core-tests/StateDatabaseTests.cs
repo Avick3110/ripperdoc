@@ -217,15 +217,16 @@ public sealed partial class StateDatabaseTests
 
         Assert.Contains(
             OperatingSystem.IsWindows()
-                ? "this reader models it as holding one file name in that same directory"
+                ? "models the manifest in force as one plain file name in the directory it is "
+                  + "read under"
                 : $"there is no such file in '{directory}'",
             refusal.Message,
             StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// A pointer holding a character no file name may hold is refused by the
-    /// pointer guard, not by the platform when the name is opened.
+    /// A pointer holding a character no file name may hold is refused where the
+    /// name is asked about, not by the platform when it is opened.
     /// </summary>
     /// <remarks>
     /// A NUL is outside a file name on every platform, so this arm runs
@@ -242,7 +243,7 @@ public sealed partial class StateDatabaseTests
             () => StateDatabase.In(scratch.Write(), Prefixes));
 
         Assert.Contains(
-            "this reader models it as holding one file name in that same directory",
+            "models the manifest in force as one plain file name in the directory it is read under",
             refusal.Message,
             StringComparison.Ordinal);
     }
