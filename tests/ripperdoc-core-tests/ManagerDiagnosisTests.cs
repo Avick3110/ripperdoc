@@ -116,6 +116,10 @@ public sealed class ManagerDiagnosisTests : IDisposable
         Assert.Equal(
             diagnosis.Partition.Mods.Count,
             diagnosis.Partition.Count(PartitionBucket.Unresolvable));
+        Assert.All(
+            diagnosis.Partition.Mods,
+            mod => Assert.Contains(
+                "carries no deployment record", mod.Reason, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -169,9 +173,10 @@ public sealed class ManagerDiagnosisTests : IDisposable
         Assert.Contains(
             diagnosis.Caveats,
             caveat => caveat.Contains("could not be read", StringComparison.Ordinal));
-        Assert.Equal(
-            diagnosis.Partition!.Mods.Count,
-            diagnosis.Partition.Count(PartitionBucket.Unresolvable));
+        Assert.Null(diagnosis.Partition);
+        Assert.Contains("could not be read", diagnosis.WhyNoPartition!, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "carries no deployment record", diagnosis.WhyNoPartition!, StringComparison.Ordinal);
     }
 
     [Fact]
