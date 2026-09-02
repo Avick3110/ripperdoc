@@ -298,6 +298,33 @@ public sealed partial class StateDatabaseTests
     }
 
     /// <summary>
+    /// A footer naming a block that ends exactly at the end of the file, so
+    /// that its trailer lies past it, is refused by name rather than indexed
+    /// past.
+    /// </summary>
+    [Fact]
+    public void ATrailerLyingPastTheEndOfTheFileIsRefusedByName()
+    {
+        var footer = new byte[TableFile.FooterSize];
+        var at = 0;
+
+        Varint(footer, ref at, 0);
+        Varint(footer, ref at, 0);
+        Varint(footer, ref at, 0);
+        Varint(footer, ref at, TableFile.FooterSize);
+        BitConverter.GetBytes(TableFile.Magic).CopyTo(footer, TableFile.FooterSize - 8);
+
+        var refusal = Assert.Throws<StateReadException>(
+            () => TableFile.ReadInto(footer, "000001.ldb", Nothing));
+
+        Assert.Contains(
+            "'000001.ldb' names a block's trailer of 5 bytes at byte 48, which is not within the "
+            + "48 bytes there are",
+            refusal.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A compressed literal declaring more bytes than a length can hold is
     /// refused by name rather than turned into a negative one.
     /// </summary>
