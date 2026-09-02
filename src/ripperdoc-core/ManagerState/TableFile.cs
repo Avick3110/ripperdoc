@@ -40,7 +40,8 @@ internal static class TableFile
                 + "there is no table here to read. The file is truncated.");
         }
 
-        var footer = data.AsSpan(data.Length - FooterSize);
+        var footer = DeclaredLength.At(
+            data, data.Length - FooterSize, FooterSize, $"'{what}'", "a footer");
 
         if (BitConverter.ToUInt64(footer[^8..]) != Magic)
         {
@@ -106,19 +107,17 @@ internal static class TableFile
 
     private static byte[] Block(byte[] data, int offset, int length, string what)
     {
-        if (offset < 0 || length < 0
-            || (long)offset + length + BlockTrailerSize > data.Length)
-        {
-            throw new StateReadException(
-                $"'{what}' names a block of {length} bytes at byte {offset}, which runs past the "
-                + "end of the file. It is truncated, or the offsets in it are not this reader's "
-                + "to read.");
-        }
+        var block = DeclaredLength.At(data, offset, length, $"'{what}'", "a block");
+        var trailer = DeclaredLength.At(
+            data, offset + length, BlockTrailerSize, $"'{what}'", "a block's trailer");
+        var compression = trailer[0];
+        var stored = BitConverter.ToUInt32(trailer[1..]);
 
-        var compression = data[offset + length];
-        var stored = BitConverter.ToUInt32(data, offset + length + 1);
+        // A block's checksum covers its bytes and then the byte saying how they
+        // are compressed, which sit together in the file.
+        var covered = DeclaredLength.At(data, offset, length + 1, $"'{what}'", "a block");
 
-        if (Checksum.Unmask(stored) != Checksum.Of(data.AsSpan(offset, length + 1)))
+        if (Checksum.Unmask(stored) != Checksum.Of(covered))
         {
             throw new StateReadException(
                 $"'{what}' holds a block at byte {offset} whose checksum does not match its own "
@@ -128,9 +127,8 @@ internal static class TableFile
 
         return compression switch
         {
-            Uncompressed => data.AsSpan(offset, length).ToArray(),
-            SnappyCompressed => Snappy.Decompress(
-                data.AsSpan(offset, length), $"the block at byte {offset} of '{what}'"),
+            Uncompressed => block.ToArray(),
+            SnappyCompressed => Snappy.Decompress(block, $"the block at byte {offset} of '{what}'"),
             _ => throw new StateReadException(
                 $"'{what}' holds a block at byte {offset} compressed by method {compression}, and "
                 + $"this reader models only {Uncompressed} (none) and {SnappyCompressed} "
@@ -185,11 +183,11 @@ internal static class TableFile
             }
 
             var key = new byte[shared + fresh];
-            previous.AsSpan(0, shared).CopyTo(key);
-            block.AsSpan(at, fresh).CopyTo(key.AsSpan(shared));
-            at += fresh;
+            DeclaredLength.At(previous, 0, shared, $"'{what}'", "a shared key prefix").CopyTo(key);
+            DeclaredLength.Next(span, ref at, fresh, $"'{what}'", "a key")
+                .CopyTo(DeclaredLength.At(key, shared, fresh, $"'{what}'", "a key"));
 
-            yield return (key, block.AsMemory(at, valueLength));
+            yield return (key, DeclaredLength.Memory(block, at, valueLength, $"'{what}'", "a value"));
 
             at += valueLength;
             previous = key;

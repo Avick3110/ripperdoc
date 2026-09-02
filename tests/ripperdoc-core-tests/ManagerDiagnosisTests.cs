@@ -248,6 +248,52 @@ public sealed class ManagerDiagnosisTests : IDisposable
         Assert.NotNull(diagnosis.State);
     }
 
+    public static TheoryData<string, string> OutsideTheModelledSubset => new()
+    {
+        { "batch key length", "names a key of" },
+        { "version edit length", "names a value of" },
+        { "decompressed length", "decompressed bytes" },
+    };
+
+    /// <summary>
+    /// Input outside the modelled subset names the state as a home not read,
+    /// and takes down neither the record nor the ordering built without it.
+    /// </summary>
+    /// <remarks>
+    /// The half a raw platform exception took down with it: the composition
+    /// catches the reader's own refusal and nothing else, so a site that
+    /// raised anything else escaped past every home already read.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(OutsideTheModelledSubset))]
+    public void InputOutsideTheModelledSubsetNamesTheStateAsAHomeNotRead(string marker, string saying)
+    {
+        using var scratch = State();
+        Record(("mods/a.archive", "mod-a"));
+
+        switch (marker)
+        {
+            case "batch key length":
+                // The state above is all tables; a batch needs a log to be in.
+                scratch.Log(($"persistent###mods###{Game}###mod-b###attributes###fileId", "102"));
+                scratch.DeclaredKeyLengthOfFirstLogEntry = int.MaxValue - 1;
+                break;
+            case "version edit length": scratch.DeclaredComparatorLength = int.MaxValue - 1; break;
+            case "decompressed length": scratch.DeclaredDecompressedLengthOfFirstBlock = int.MaxValue; break;
+            default: break;
+        }
+
+        var diagnosis = ManagerDiagnosis.Of(scratch.Write(), Game, gameDirectory);
+
+        Assert.Null(diagnosis.State);
+        Assert.Null(diagnosis.Partition);
+        Assert.Contains(saying, diagnosis.WhyNoPartition!, StringComparison.Ordinal);
+        Assert.Contains(
+            diagnosis.Ordering.HomesNotRead,
+            home => home.Reason.Contains(saying, StringComparison.Ordinal));
+        Assert.NotNull(diagnosis.Record);
+    }
+
     [Fact]
     public void TheInUseCaveatTravelsWithTheDiagnosis()
     {

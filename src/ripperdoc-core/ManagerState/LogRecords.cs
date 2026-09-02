@@ -65,14 +65,8 @@ internal static class LogRecords
                     + "reader has not been shown - report it rather than reading past it.");
             }
 
-            if (at + HeaderSize + length > data.Length)
-            {
-                throw new StateReadException(
-                    $"'{what}' holds a record at byte {at} declaring {length} bytes, which runs "
-                    + "past the end of the file. It is truncated, or a write was interrupted.");
-            }
-
-            var payload = data.AsSpan(at + HeaderSize, length);
+            var payload = DeclaredLength.At(
+                data, at + HeaderSize, length, $"a record at byte {at} in '{what}'", "a payload");
 
             if (Checksum.Unmask(stored) != Checksum.Of(kind, payload))
             {
