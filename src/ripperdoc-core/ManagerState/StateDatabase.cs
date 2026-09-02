@@ -36,7 +36,8 @@ public sealed class StateDatabase
         Dictionary<string, byte[]> values,
         int keysSeen,
         int keysLive,
-        int entriesRead)
+        int entriesRead,
+        string? logsNotListed)
     {
         Directory = directory;
         FilesRead = filesRead;
@@ -44,6 +45,9 @@ public sealed class StateDatabase
         KeysSeen = keysSeen;
         KeysLive = keysLive;
         EntriesRead = entriesRead;
+        Caveats = logsNotListed is null
+            ? [InUseIsNotEstablished]
+            : [InUseIsNotEstablished, logsNotListed];
     }
 
     /// <summary>The directory this was read from.</summary>
@@ -86,13 +90,13 @@ public sealed class StateDatabase
     /// Carried on the reading rather than stated in prose somewhere else,
     /// because a caveat a caller cannot see is one that does not exist.
     /// </remarks>
-    public IReadOnlyList<string> Caveats { get; } =
-    [
+    public IReadOnlyList<string> Caveats { get; }
+
+    private const string InUseIsNotEstablished =
         "whether the manager was running while this was read is not established: what a running "
         + "manager changes on disk that a stopped one does not has not been measured, so this "
         + "reading neither detected one nor ruled one out. It is a read of bytes either way - "
-        + "nothing here opens a database or writes anything.",
-    ];
+        + "nothing here opens a database or writes anything.";
 
     /// <summary>
     /// Reads a manager's state directory, or reports that there is none.
@@ -165,7 +169,8 @@ public sealed class StateDatabase
                 .ToDictionary(pair => pair.Key, pair => pair.Value.Value!, StringComparer.Ordinal),
             newest.Count,
             newest.Count(pair => pair.Value.IsValue),
-            entries);
+            entries,
+            version.LogsNotListed);
     }
 
     /// <summary>

@@ -331,6 +331,54 @@ public sealed class StateDatabaseTests
         Assert.Equal("abcdabcd", Encoding.UTF8.GetString(Snappy.Decompress(block, tag)));
     }
 
+    /// <summary>
+    /// A write-ahead log numbered above the one the manifest names is refused:
+    /// the state may have been left part-way through a flush.
+    /// </summary>
+    [Fact]
+    public void ALogNumberedAboveTheOneTheManifestNamesIsRefusedByName()
+    {
+        using var scratch = Populated();
+        var directory = scratch.Write();
+
+        File.WriteAllBytes(Path.Combine(directory, $"{Newest(directory) + 1:D6}.log"), []);
+
+        var refusal = Assert.Throws<StateReadException>(
+            () => StateDatabase.In(directory, Prefixes));
+
+        Assert.Contains("the manifest does not name", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("mid-flush", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A leftover log numbered below the one the manifest names is left unread,
+    /// which is what makes the refusal above about the flush and not about the
+    /// directory holding an extra file.
+    /// </summary>
+    /// <remarks>
+    /// Its bytes are not a log. Reading it would refuse on the framing, so a
+    /// green here is a reading that never opened it.
+    /// </remarks>
+    [Fact]
+    public void ALogNumberedBelowTheOneTheManifestNamesIsLeftUnread()
+    {
+        using var scratch = Populated();
+        var directory = scratch.Write();
+        var leftover = $"{Newest(directory) - 1:D6}.log";
+
+        File.WriteAllBytes(Path.Combine(directory, leftover), [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+
+        var state = StateDatabase.In(directory, Prefixes)!;
+
+        Assert.Equal(4, state.Values.Count);
+        Assert.DoesNotContain(leftover, state.FilesRead);
+    }
+
+    private static ulong Newest(string directory) =>
+        Directory.EnumerateFiles(directory, "*.log")
+            .Select(path => ulong.Parse(Path.GetFileNameWithoutExtension(path)))
+            .Max();
+
     private static void Nothing(
         ReadOnlySpan<byte> key, ulong sequence, bool isValue, ReadOnlySpan<byte> value)
     {
