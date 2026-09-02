@@ -195,6 +195,33 @@ public sealed class StateDatabaseTests
         Assert.Contains("compressed by method 3", refusal.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A pointer naming something that is not a file name in the directory is
+    /// refused where the platform says so.
+    /// </summary>
+    /// <remarks>
+    /// A drive-relative name is a file name on Linux and is not one on Windows,
+    /// so the outcome asserted here is the platform's own, not a constant. The
+    /// neighbour is the plain-name check below, which reads green on both.
+    /// </remarks>
+    [Fact]
+    public void APointerNamingSomethingOtherThanAFileNameInThatDirectoryIsRefused()
+    {
+        using var scratch = Populated();
+        scratch.PointerText = "C:MANIFEST-000005";
+
+        var directory = scratch.Write();
+        var refusal = Assert.Throws<StateReadException>(
+            () => StateDatabase.In(directory, Prefixes));
+
+        Assert.Contains(
+            OperatingSystem.IsWindows()
+                ? "this reader models it as holding one file name in that same directory"
+                : $"there is no such file in '{directory}'",
+            refusal.Message,
+            StringComparison.Ordinal);
+    }
+
     private static void Spoil(SyntheticStateDatabase scratch, string marker)
     {
         switch (marker)
