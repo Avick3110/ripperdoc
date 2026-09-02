@@ -415,6 +415,28 @@ public sealed class StateDatabaseTests
         Assert.Equal("abcdabcd", Encoding.UTF8.GetString(Snappy.Decompress(block, tag)));
     }
 
+    public static TheoryData<string, byte[], string> TagsCutShort => new()
+    {
+        // literal "abcd", then a tag whose trailing bytes are not there: the
+        // two copy tags that carry an offset, and a literal whose length is
+        // carried after the tag.
+        { "copy tag 2", [0x08, 0x0C, 0x61, 0x62, 0x63, 0x64, 0x0E, 0x04], "a copy offset of 2 bytes at byte 7, which is not within the 8 bytes there are" },
+        { "copy tag 3", [0x08, 0x0C, 0x61, 0x62, 0x63, 0x64, 0x0F, 0x04, 0x00], "a copy offset of 4 bytes at byte 7, which is not within the 9 bytes there are" },
+        { "literal length", [0x08, 0xF4, 0x00], "a literal run's length of 2 bytes at byte 2, which is not within the 3 bytes there are" },
+    };
+
+    /// <summary>
+    /// A tag cut short is refused by the name of what its missing bytes were.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(TagsCutShort))]
+    public void ATagCutShortIsRefusedByTheNameOfWhatItWasReading(string tag, byte[] block, string saying)
+    {
+        var refusal = Assert.Throws<StateReadException>(() => Snappy.Decompress(block, tag));
+
+        Assert.Contains($"{tag} names {saying}", refusal.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// A write-ahead log numbered above the one the manifest names is refused:
     /// the state may have been left part-way through a flush.

@@ -55,7 +55,8 @@ internal static class Snappy
                 if (length >= 60)
                 {
                     var extra = length - 59;
-                    var declaredRun = ReadLittleEndian(source, ref at, extra, what);
+                    var declaredRun = ReadLittleEndian(
+                        source, ref at, extra, what, "a literal run's length");
 
                     if (declaredRun >= int.MaxValue)
                     {
@@ -86,11 +87,11 @@ internal static class Snappy
                     break;
                 case 2:
                     copyLength = (tag >> 2) + 1;
-                    offset = (int)ReadLittleEndian(source, ref at, 2, what);
+                    offset = (int)ReadLittleEndian(source, ref at, 2, what, "a copy offset");
                     break;
                 default:
                     copyLength = (tag >> 2) + 1;
-                    offset = (int)ReadLittleEndian(source, ref at, 4, what);
+                    offset = (int)ReadLittleEndian(source, ref at, 4, what, "a copy offset");
                     break;
             }
 
@@ -135,9 +136,9 @@ internal static class Snappy
     }
 
     private static ulong ReadLittleEndian(
-        ReadOnlySpan<byte> source, ref int at, int count, string what)
+        ReadOnlySpan<byte> source, ref int at, int count, string what, string of)
     {
-        var bytes = DeclaredLength.Next(source, ref at, count, what, "a compressed run's length");
+        var bytes = DeclaredLength.Next(source, ref at, count, what, of);
         ulong value = 0;
 
         for (var i = 0; i < count; i++)
