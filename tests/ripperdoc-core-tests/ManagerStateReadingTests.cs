@@ -190,6 +190,56 @@ public sealed class ManagerStateReadingTests
     /// A state shaped like a manager's, built out of the key shapes the
     /// characterisation published. Every id here is invented.
     /// </summary>
+    /// <summary>
+    /// A file spelling two installed mods answer to identifies neither, and is
+    /// named so a caller can see that it decided nothing.
+    /// </summary>
+    [Fact]
+    public void AFileSpellingTwoInstalledModsAnswerToIdentifiesNeither()
+    {
+        using var scratch = Contested("shared-hash");
+
+        var reading = ManagerStateReading.Of(scratch.Write(), Game)!;
+
+        Assert.Equal(["fileMD5 'shared-hash'"], reading.FileSpellingsNamingMoreThanOneMod);
+        Assert.Null(reading.Identify("shared-hash", null));
+    }
+
+    /// <summary>
+    /// The same state with the two spellings distinct identifies one, so the
+    /// check above turns on the collision rather than on the fixture.
+    /// </summary>
+    [Fact]
+    public void AFileSpellingOnlyOneModAnswersToIdentifiesIt()
+    {
+        using var scratch = Contested("its-own-hash");
+
+        var reading = ManagerStateReading.Of(scratch.Write(), Game)!;
+
+        Assert.Empty(reading.FileSpellingsNamingMoreThanOneMod);
+        Assert.Equal("mod-a", reading.Identify("shared-hash", null));
+    }
+
+    private static SyntheticStateDatabase Contested(string hashOfB)
+    {
+        var scratch = new SyntheticStateDatabase();
+
+        scratch.Table(
+            ($"persistent###profiles###{Active}###gameId", $"\"{Game}\""),
+            ($"persistent###profiles###{Active}###modState###mod-a###enabled", "true"),
+            ($"persistent###profiles###{Active}###modState###mod-b###enabled", "true"),
+            ($"persistent###mods###{Game}###mod-a###installationPath", "\"mod-a\""),
+            ($"persistent###mods###{Game}###mod-a###type", "\"\""),
+            ($"persistent###mods###{Game}###mod-a###attributes###fileMD5", "\"shared-hash\""),
+            ($"persistent###mods###{Game}###mod-b###installationPath", "\"mod-b\""),
+            ($"persistent###mods###{Game}###mod-b###type", "\"\""),
+            ($"persistent###mods###{Game}###mod-b###attributes###fileMD5", $"\"{hashOfB}\""));
+
+        scratch.Log(($"settings###profiles###lastActiveProfile###{Game}", $"\"{Active}\""));
+
+        return scratch;
+    }
+
     private static SyntheticStateDatabase Bench(
         bool recordTheActiveProfile = true,
         string activeProfile = Active,
