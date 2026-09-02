@@ -8,12 +8,20 @@ namespace Ripperdoc.Core.ManagerState;
 /// <para>
 /// The state names files this reader then opens - the manifest its pointer
 /// names, the directory a mod is staged under - and a name that is not one
-/// plain file name is a name that leaves the directory it is read under or one
-/// the platform refuses when it is opened, in the platform's own words rather
-/// than this reader's. The platform is asked what a file name is, rather than a
-/// list of separators being kept here: a drive-relative name carries no
-/// separator and still leaves the directory, because joining a rooted second
-/// part returns that part verbatim.
+/// plain file name is a name that leaves the directory it is read under, names
+/// that directory rather than a file in it, or is one the platform refuses when
+/// it is opened, in the platform's own words rather than this reader's. The
+/// platform is asked what a file name is, rather than a list of separators
+/// being kept here: a drive-relative name carries no separator and still leaves
+/// the directory, because joining a rooted second part returns that part
+/// verbatim.
+/// </para>
+/// <para>
+/// The two dot names are the ones the platform's own answers pass: each is its
+/// own file name and holds no character a file name may not, so both are held
+/// here by name. They are directory references rather than files in a
+/// directory, and joining one moves the read somewhere else or leaves it where
+/// it already was.
 /// </para>
 /// <para>
 /// One door, so that "the state's own names are asked about" is a property of
@@ -46,20 +54,21 @@ internal readonly struct PlainFileName
     /// <param name="of">What it names, for a refusal.</param>
     /// <returns>The name.</returns>
     /// <exception cref="StateReadException">
-    /// The name is empty, carries a directory part, or holds a character no
-    /// file name may hold.
+    /// The name is empty, is one of the two dot names, carries a directory
+    /// part, or holds a character no file name may hold.
     /// </exception>
     internal static PlainFileName Named(string? named, string what, string of)
     {
         if (named is not { Length: > 0 }
+            || named is "." or ".."
             || Path.GetFileName(named) != named
             || named.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
         {
             throw new StateReadException(
                 $"{what} names {of} '{named}', and this reader models {of} as one plain file name "
-                + "in the directory it is read under. A name that is not one either leaves that "
-                + "directory or is refused when it is opened, by the platform rather than by this "
-                + "reader.");
+                + "in the directory it is read under. A name that is not one leaves that "
+                + "directory, names the directory rather than a file in it, or is refused when it "
+                + "is opened, by the platform rather than by this reader.");
         }
 
         return new PlainFileName(named);

@@ -376,6 +376,34 @@ public sealed class ManagerDiagnosisTests : IDisposable
         Assert.Empty(staged.Refused);
     }
 
+    /// <summary>
+    /// A staged list whose id is a dot name is refused by name, so no manifest
+    /// is read from outside the directory the state stages under.
+    /// </summary>
+    /// <remarks>
+    /// Held where the escape would occur rather than only at the door: '..'
+    /// joined under the staging root and then under the manifest's own name
+    /// gives a path one level above that root, and the rules read from it would
+    /// go into the graph as a staged list's own.
+    /// </remarks>
+    [Fact]
+    public void AStagedListWhoseIdIsADotNameIsRefusedRatherThanLeavingTheStagingRoot()
+    {
+        using var scratch = State();
+        scratch.Table(($"persistent###mods###{Game}###..###type", "\"collection\""));
+
+        var staged = CollectionManifest.PathsIn(
+            ManagerStateReading.Of(scratch.Write(), Game)!);
+
+        Assert.Equal(
+            [Path.Combine(staging, Container, CollectionManifest.FileName)], staged.Paths);
+
+        var refused = Assert.Single(staged.Refused);
+
+        Assert.Equal("a curated list staged as '..'", refused.Home);
+        Assert.Contains("one plain file name", refused.Reason, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void TheInUseCaveatTravelsWithTheDiagnosis()
     {
