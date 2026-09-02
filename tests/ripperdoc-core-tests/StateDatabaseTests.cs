@@ -242,6 +242,62 @@ public sealed class StateDatabaseTests
         Assert.Empty(await read);
     }
 
+    /// <summary>
+    /// A table whose two block bounds are each a legal length but overrun added
+    /// together is refused by name, not indexed past.
+    /// </summary>
+    [Fact]
+    public void ABlockBoundThatOverrunsOnlyWhenAddedIsRefusedByName()
+    {
+        var footer = new byte[TableFile.FooterSize];
+        var at = 0;
+
+        Varint(footer, ref at, 0);
+        Varint(footer, ref at, 0);
+        Varint(footer, ref at, 2_000_000_000);
+        Varint(footer, ref at, 2_000_000_000);
+        BitConverter.GetBytes(TableFile.Magic).CopyTo(footer, TableFile.FooterSize - 8);
+
+        var refusal = Assert.Throws<StateReadException>(
+            () => TableFile.ReadInto(footer, "000001.ldb", Nothing));
+
+        Assert.Contains(
+            "runs past the end of the file", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A compressed literal declaring more bytes than a length can hold is
+    /// refused by name rather than turned into a negative one.
+    /// </summary>
+    [Fact]
+    public void ALiteralRunLargerThanALengthCanHoldIsRefusedByName()
+    {
+        var refusal = Assert.Throws<StateReadException>(
+            () => Snappy.Decompress(
+                [0x08, 0xFC, 0x00, 0x00, 0x00, 0x80, 1, 2, 3, 4], "a block"));
+
+        Assert.Contains(
+            "larger than anything this reader can hold",
+            refusal.Message,
+            StringComparison.Ordinal);
+    }
+
+    private static void Nothing(
+        ReadOnlySpan<byte> key, ulong sequence, bool isValue, ReadOnlySpan<byte> value)
+    {
+    }
+
+    private static void Varint(byte[] into, ref int at, ulong value)
+    {
+        while (value >= 0x80)
+        {
+            into[at++] = (byte)(value | 0x80);
+            value >>= 7;
+        }
+
+        into[at++] = (byte)value;
+    }
+
     private static SyntheticStateDatabase Populated()
     {
         var scratch = new SyntheticStateDatabase();

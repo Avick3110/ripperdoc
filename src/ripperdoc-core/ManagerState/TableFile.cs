@@ -106,7 +106,8 @@ internal static class TableFile
 
     private static byte[] Block(byte[] data, int offset, int length, string what)
     {
-        if (offset < 0 || length < 0 || offset + length + BlockTrailerSize > data.Length)
+        if (offset < 0 || length < 0
+            || (long)offset + length + BlockTrailerSize > data.Length)
         {
             throw new StateReadException(
                 $"'{what}' names a block of {length} bytes at byte {offset}, which runs past the "
@@ -176,7 +177,7 @@ internal static class TableFile
                     + "is corrupt.");
             }
 
-            if (at + fresh + valueLength > limit)
+            if ((long)at + fresh + valueLength > limit)
             {
                 throw new StateReadException(
                     $"'{what}' holds an entry whose key and value run past the end of its block. "
