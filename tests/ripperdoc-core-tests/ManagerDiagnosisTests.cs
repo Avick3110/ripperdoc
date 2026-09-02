@@ -136,6 +136,23 @@ public sealed class ManagerDiagnosisTests : IDisposable
         Assert.Single(diagnosis.Ordering.HomesRead);
     }
 
+    [Fact]
+    public void AStagedListWhoseManifestIsRefusedIsNamedOnce()
+    {
+        using var scratch = State();
+        var directory = Path.Combine(staging, Container);
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(
+            Path.Combine(directory, CollectionManifest.FileName), "not json at all");
+
+        var diagnosis = ManagerDiagnosis.Of(scratch.Write(), Game, gameDirectory);
+
+        var unread = Assert.Single(diagnosis.Ordering.HomesNotRead);
+
+        Assert.Contains(Container, unread.Home, StringComparison.Ordinal);
+        Assert.DoesNotContain("no manifest in it", unread.Reason, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// A refused read becomes the reason its home is named as unread, rather
     /// than a home that quietly held nothing.

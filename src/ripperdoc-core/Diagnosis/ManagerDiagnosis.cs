@@ -165,13 +165,14 @@ public sealed class ManagerDiagnosis
 
         foreach (var path in paths)
         {
-            var manifest = Read(() => CollectionManifest.In(path, state), path, notRead, out _);
+            var manifest = Read(
+                () => CollectionManifest.In(path, state), path, notRead, out var refusal);
 
             if (manifest is not null)
             {
                 read.Add(manifest.Rules);
             }
-            else
+            else if (refusal is null)
             {
                 notRead.Add(new UnreadRuleSet(
                     path,
