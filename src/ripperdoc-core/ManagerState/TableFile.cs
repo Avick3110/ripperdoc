@@ -128,7 +128,11 @@ internal static class TableFile
         return compression switch
         {
             Uncompressed => block.ToArray(),
-            SnappyCompressed => Snappy.Decompress(block, $"the block at byte {offset} of '{what}'"),
+            // The subject places the decoder's own figures within the
+            // compressed bytes, so a refusal carrying an offset of its own is
+            // not read against the file.
+            SnappyCompressed => Snappy.Decompress(
+                block, $"the compressed form of the block at byte {offset} of '{what}'"),
             _ => throw new StateReadException(
                 $"'{what}' holds a block at byte {offset} compressed by method {compression}, and "
                 + $"this reader models only {Uncompressed} (none) and {SnappyCompressed} "

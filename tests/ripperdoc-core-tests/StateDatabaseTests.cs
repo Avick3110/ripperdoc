@@ -353,6 +353,28 @@ public sealed class StateDatabaseTests
     }
 
     /// <summary>
+    /// A refusal from inside a block's compressed bytes places its own figure
+    /// within them, so the two figures it carries do not read as one
+    /// coordinate.
+    /// </summary>
+    [Fact]
+    public void ARefusalFromInsideABlockPlacesItsFigureWithinTheCompressedBytes()
+    {
+        using var scratch = Populated();
+        // A preamble of 16, then a literal tag declaring 9 bytes with 1 there.
+        scratch.CompressedBodyOfFirstBlock = [0x10, 0x20, 0x61];
+
+        var refusal = Assert.Throws<StateReadException>(
+            () => StateDatabase.In(scratch.Write(), Prefixes));
+
+        Assert.Contains(
+            "the compressed form of the block at byte 0 of '000001.ldb' names a literal run of 9 "
+            + "bytes at byte 2, which is not within the 3 bytes there are",
+            refusal.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A block that decompresses at the format's highest ratio reads, so the
     /// ceiling the row above refuses against is the format's and not a
     /// tighter one of this reader's.
