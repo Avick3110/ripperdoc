@@ -96,7 +96,11 @@ internal sealed record StateVersion(
 
         var named = Encoding.UTF8.GetString(pointer).Trim();
 
-        if (named.Length == 0 || named.Contains('/') || named.Contains('\\'))
+        // The platform's own notion of a file name, rather than a list of
+        // separators: a drive-relative name carries no separator and still
+        // leaves the directory, because Path.Combine returns a rooted second
+        // argument verbatim.
+        if (named.Length == 0 || Path.GetFileName(named) != named)
         {
             throw new StateReadException(
                 $"'{PointerName}' in '{directory}' names '{named}', and this reader models it as "
