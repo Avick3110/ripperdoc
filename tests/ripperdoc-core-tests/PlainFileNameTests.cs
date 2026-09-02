@@ -61,8 +61,11 @@ public sealed class PlainFileNameTests
     [Fact]
     public void AValueThatWasNeverNamedIsRefusedByName()
     {
+        // Spelled with its type rather than left to the target, so that an
+        // overload taking a raw string is a compiling change and the check
+        // holding the joining member to one signature is what refuses it.
         var refusal = Assert.Throws<InvalidOperationException>(
-            () => PlainFileName.Under("a-directory", default));
+            () => PlainFileName.Under("a-directory", default(PlainFileName)));
 
         Assert.Contains(
             "read before it was named", refusal.Message, StringComparison.Ordinal);
