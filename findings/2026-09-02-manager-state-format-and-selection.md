@@ -247,6 +247,37 @@ manifest's own `mods` list does not declare. A curated list may reference a mod
 it does not itself ship; the join has nothing to resolve it against, and the
 honest report is that it did not resolve.
 
+### The second join: a declared mod to the manager's own id
+
+The join above ends at a mod the **manifest** declares, and a manifest declares
+mods by file, not by the identity the manager keys everything else on. A rule
+set stopping there would sit beside the manager's own rules as a **disjoint
+graph**, and a cycle running through both would be one neither half could see.
+
+So each declared mod is carried one step further, to the manager's mod id:
+
+| Route | Manifest side | Manager side | Index | Ambiguous | Declared mods joined |
+|---|---|---|---|---|---|
+| file hash | `mods[].source.md5` | `attributes###fileMD5` | 284 | **0** | **283 of 283** |
+| file id | `mods[].source.fileId` | `attributes###fileId` | 283 | **0** | **283 of 283** |
+| logical name | `mods[].source.logicalFilename` | `attributes###logicalFileName` | 284 | 0 | 282 of 283 |
+| mod id | `mods[].source.modId` | `attributes###modId` | 273 | **9** | 283 of 283 |
+
+**The hash is the route, with the file id behind it.** Both are exact and
+neither is ambiguous on this bench. The last two are named to say why they are
+not used: the logical name misses one, and the mod id is a page rather than a
+file — nine of them name more than one installed mod, and a spelling two mods
+answer to identifies neither.
+
+A spelling that names more than one mod is **dropped from the index and
+reported**, not resolved to whichever was read first. A declared mod that joins
+to nothing is a mod the manager never installed, and it is counted rather than
+given a node under the manifest's own spelling.
+
+The manager's per-mod attributes carry 22 names on all 284 mods and 13 more on
+283 of them; only the four above are read, and the join is stated as this
+bench's, not the format's.
+
 ### A correction to the 2026-09-01 finding
 
 That document's ordering-metadata table reads:
@@ -298,6 +329,8 @@ the fixture is named for that.
 Read `CURRENT` and the manifest, not a glob. Take the active profile from the
 per-game key and refuse to guess when it is not there. Materialise a value only
 under a prefix you need. Refuse every byte value outside the table in §4 by
-name. And where a rule side joins to no declared mod, say so and count it —
-the residue is the measurement, and an invented node is the thing that turns a
-cycle check into a coin flip.
+name. Carry both rule homes onto the manager's own identity, so that the graph
+they share is one graph. And where a rule side joins to no declared mod, or a
+declared mod to no installed one, say so and count it — the residue is the
+measurement, and an invented node is the thing that turns a cycle check into a
+coin flip.
