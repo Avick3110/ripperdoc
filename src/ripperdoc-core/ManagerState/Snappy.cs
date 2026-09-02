@@ -37,7 +37,17 @@ internal static class Snappy
                 if (length >= 60)
                 {
                     var extra = length - 59;
-                    length = (int)ReadLittleEndian(source, ref at, extra, what);
+                    var declaredRun = ReadLittleEndian(source, ref at, extra, what);
+
+                    if (declaredRun >= int.MaxValue)
+                    {
+                        throw new StateReadException(
+                            $"{what} declares a literal run of {declaredRun} bytes, which is "
+                            + "larger than anything this reader can hold. The block is corrupt "
+                            + "or is not compressed the way this reader models.");
+                    }
+
+                    length = (int)declaredRun;
                 }
 
                 length += 1;
@@ -95,7 +105,7 @@ internal static class Snappy
 
     private static void Take(ReadOnlySpan<byte> source, ref int at, int count, string what)
     {
-        if (at + count > source.Length)
+        if (count < 0 || (long)at + count > source.Length)
         {
             throw new StateReadException(
                 $"{what} ends part-way through a compressed run of {count} bytes, so the block is "
@@ -107,7 +117,7 @@ internal static class Snappy
 
     private static void Room(int written, int length, int declared, string what)
     {
-        if (written + length > declared)
+        if ((long)written + length > declared)
         {
             throw new StateReadException(
                 $"{what} produces more than the {declared} decompressed bytes it declares, so the "
