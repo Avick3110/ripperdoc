@@ -7,11 +7,11 @@ namespace Ripperdoc.Core.ManagerState;
 /// <remarks>
 /// <para>
 /// Every construct in this format is a declared length at an offset, and a
-/// site that adds the two in the width of an <see langword="int" /> lets a
-/// length near the signed maximum wrap the sum negative, pass the guard, and
-/// reach the slice - which raises the platform's own exception rather than
-/// this reader's refusal. The sum is taken here in a width that holds it, so
-/// that no site has to remember to.
+/// site that adds the two lets a length near the signed maximum wrap the sum
+/// negative, pass the guard, and reach the slice - which raises the platform's
+/// own exception rather than this reader's refusal. The two are held against
+/// each other here without being added, so that no site has to remember to and
+/// no width has to be wide enough for the sum.
 /// </para>
 /// <para>
 /// One site, so that "every declared length is refused by name" is a property
@@ -98,7 +98,10 @@ internal static class DeclaredLength
 
     private static void Check(int available, int at, long length, string what, string of)
     {
-        if (at < 0 || length < 0 || at + length > available)
+        // Compared rather than added: a length near the signed maximum wraps
+        // the sum negative in a long as readily as in an int, and the two
+        // tests before it leave both operands non-negative.
+        if (at < 0 || length < 0 || length > available - at)
         {
             throw new StateReadException(
                 $"{what} names {of} of {length} bytes at byte {at}, which is not within the "
