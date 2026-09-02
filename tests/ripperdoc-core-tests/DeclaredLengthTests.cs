@@ -80,9 +80,12 @@ public sealed partial class DeclaredLengthTests
     /// <remarks>
     /// An identity check over the source rather than a behavioural one: a
     /// behavioural arm per site passes on the day a new site arrives without
-    /// one. The forms held are a slice call with arguments and a range with a
-    /// computed endpoint; a range whose endpoints are literals or counted from
-    /// the end names a fixed trailer, not a declared length.
+    /// one. Each file is scanned whole, so a call whose arguments begin on the
+    /// next line is the same call. The forms held are a slice call with
+    /// arguments, a span, memory or segment constructed over a buffer, a copy
+    /// naming an offset, and a range with a computed endpoint; a range whose
+    /// endpoints are literals, or count a literal from the end, names a fixed
+    /// trailer rather than a declared length.
     /// </remarks>
     [Fact]
     public void EverySliceByAComputedLengthInTheReaderIsThePrimitives()
@@ -97,18 +100,40 @@ public sealed partial class DeclaredLengthTests
 
         foreach (var path in sources.Where(path => Path.GetFileName(path) != Primitive))
         {
-            var lines = File.ReadAllLines(path);
+            var text = File.ReadAllText(path);
 
-            for (var i = 0; i < lines.Length; i++)
-            {
-                if (SliceCall().IsMatch(lines[i]) || RangeIndex().Matches(lines[i]).Any(Computed))
-                {
-                    offending.Add($"{Path.GetFileName(path)}:{i + 1}: {lines[i].Trim()}");
-                }
-            }
+            offending.AddRange(Slices(text).Select(
+                slice => $"{Path.GetFileName(path)}:{Line(text, slice.Index)}: {slice.Value}"));
         }
 
         Assert.Empty(offending);
+    }
+
+    /// <summary>
+    /// The primitive's own file makes exactly the slices its members exist to
+    /// make, each after the check - so a raw slice helper added beside them
+    /// fails here rather than being exempted with the file.
+    /// </summary>
+    [Fact]
+    public void ThePrimitiveSlicesOnlyAfterItsOwnCheck()
+    {
+        var text = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "ManagerState", Primitive));
+        var slices = Slices(text).ToList();
+
+        Assert.Equal(3, slices.Count);
+
+        foreach (var slice in slices)
+        {
+            var check = text.LastIndexOf(
+                "Check(buffer.Length, at, length, what, of);", slice.Index, StringComparison.Ordinal);
+
+            Assert.True(check >= 0, $"no check before {slice.Value} at {Line(text, slice.Index)}");
+
+            // Nothing closes between the two, so the slice is in the body the
+            // check guards and not in a later member of its own.
+            Assert.DoesNotContain("}", text.Substring(check, slice.Index - check), StringComparison.Ordinal);
+        }
     }
 
     private static void At(int at, long length) =>
@@ -117,14 +142,43 @@ public sealed partial class DeclaredLengthTests
     private static void Next(int at, long length) =>
         DeclaredLength.Next((ReadOnlySpan<byte>)Sixteen, ref at, length, "a fixture", "a key");
 
+    private static IEnumerable<Match> Slices(string text) =>
+        SliceCall().Matches(text)
+            .Concat(BufferView().Matches(text))
+            .Concat(CopyByOffset().Matches(text))
+            .Concat(RangeIndex().Matches(text).Where(Computed))
+            .OrderBy(match => match.Index);
+
+    private static int Line(string text, int index) =>
+        text.Take(index).Count(c => c == '\n') + 1;
+
     private static bool Computed(Match range) =>
         !Fixed(range.Groups["from"].Value) || !Fixed(range.Groups["to"].Value);
 
     private static bool Fixed(string endpoint) =>
-        endpoint.Length == 0 || endpoint.StartsWith('^') || endpoint.All(char.IsDigit);
+        endpoint.Length == 0
+        || endpoint.All(char.IsDigit)
+        || (endpoint.Length > 1 && endpoint[0] == '^' && endpoint[1..].All(char.IsDigit));
 
-    [GeneratedRegex(@"\.(Slice|AsSpan|AsMemory)\(\s*[^)\s]")]
+    [GeneratedRegex(@"\.(Slice|AsSpan|AsMemory)\s*\(\s*[^)\s]")]
     private static partial Regex SliceCall();
+
+    // A span, memory or segment constructed over a buffer with arguments,
+    // whether the type is spelled or left to the target; and the marshal
+    // that makes one from anything. A bare "new (" whose parenthesis is
+    // followed by "[" is an array of tuples, not a target-typed view.
+    [GeneratedRegex(
+        @"\bnew\s*(?:\((?![^()]*\)\s*\[)"
+        + @"|(?:ReadOnlySpan|Span|ReadOnlyMemory|Memory|ArraySegment)\s*<[^>]*>\s*\()\s*[^)\s]"
+        + @"|\bMemoryMarshal\b")]
+    private static partial Regex BufferView();
+
+    // A copy naming an offset: the static copies, and a CopyTo with more than
+    // a destination - its first argument balanced to the top-level comma.
+    [GeneratedRegex(
+        @"\b(?:Array\s*\.\s*Copy|Buffer\s*\.\s*(?:BlockCopy|MemoryCopy))\s*\("
+        + @"|\.CopyTo\s*\((?:[^(),]|\((?:[^()]|\([^()]*\))*\))*,")]
+    private static partial Regex CopyByOffset();
 
     [GeneratedRegex(@"[\w\)\]]\[\s*(?<from>[^\[\]]*?)\.\.(?<to>[^\[\]]*?)\s*\]")]
     private static partial Regex RangeIndex();

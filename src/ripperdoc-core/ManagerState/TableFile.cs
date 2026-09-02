@@ -82,10 +82,17 @@ internal static class TableFile
                 + "block is corrupt or is not the format this reader models.");
         }
 
-        var trailer = BitConverter.ToUInt64(key[^TrailerSize..]);
+        // Both halves of the key go through the primitive, so that the source
+        // holds no range with a computed endpoint.
+        var trailer = BitConverter.ToUInt64(DeclaredLength.At(
+            key, key.Length - TrailerSize, TrailerSize, $"'{what}'", "a key's trailer"));
         var kind = (byte)(trailer & 0xFF);
 
-        sink(key[..^TrailerSize], trailer >> 8, IsValue(kind, what), value);
+        sink(
+            DeclaredLength.At(key, 0, key.Length - TrailerSize, $"'{what}'", "a key"),
+            trailer >> 8,
+            IsValue(kind, what),
+            value);
     }
 
     /// <summary>
