@@ -207,7 +207,7 @@ public sealed class ManagerStateReading
             wanted,
             [.. known.Where(mod => mod.Value.InstallationPath != mod.Key)
                 .Select(mod => mod.Key).Order(StringComparer.Ordinal)],
-            ReadRules(state, gameId, known, out var unresolved),
+            ReadRules(state, gameId, known, ambiguous, out var unresolved),
             unresolved,
             Text(state, StagingSetting + gameId),
             FilesBy(state, gameId, known.Keys, "fileMD5", ambiguous),
@@ -343,17 +343,34 @@ public sealed class ManagerStateReading
         StateDatabase state,
         string gameId,
         Dictionary<string, (string InstallationPath, string Kind)> known,
+        List<string> ambiguous,
         out IReadOnlyList<UnresolvedRules> unresolved)
     {
         var prefix = $"persistent###mods###{gameId}###";
         var byArchive = new Dictionary<string, string>(StringComparer.Ordinal);
+        var contested = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var id in known.Keys)
         {
-            if (Text(state, $"{prefix}{id}###archiveId") is { Length: > 0 } archive)
+            if (Text(state, $"{prefix}{id}###archiveId") is not { Length: > 0 } archive)
             {
-                byArchive[archive] = id;
+                continue;
             }
+
+            if (byArchive.TryGetValue(archive, out var held) && held != id)
+            {
+                contested.Add(archive);
+            }
+
+            byArchive[archive] = id;
+        }
+
+        // One download installed twice gives two mods one archive, and a side
+        // naming it names neither of them.
+        foreach (var archive in contested)
+        {
+            byArchive.Remove(archive);
+            ambiguous.Add($"archiveId '{archive}'");
         }
 
         var rules = new List<OrderingRule>();

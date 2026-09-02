@@ -237,6 +237,27 @@ public sealed class ManagerStateReadingTests
     }
 
     /// <summary>
+    /// An archive id two installed mods answer to identifies neither, and the
+    /// rule side naming it is counted rather than attributed to one of them.
+    /// </summary>
+    /// <remarks>
+    /// Its neighbour is the check above, where the same rule resolves because
+    /// only one mod carries the archive.
+    /// </remarks>
+    [Fact]
+    public void AnArchiveIdTwoInstalledModsAnswerToResolvesToNeither()
+    {
+        using var scratch = Bench(referenceByArchive: true, archiveIdOfC: "archive-of-b");
+
+        var reading = ManagerStateReading.Of(scratch.Write(), Game)!;
+
+        Assert.Empty(reading.Rules.Rules);
+        Assert.Contains(
+            "archiveId 'archive-of-b'", reading.FileSpellingsNamingMoreThanOneMod);
+        Assert.Contains(reading.RulesNotResolved, kind => kind.DeclaredKind == "after");
+    }
+
+    /// <summary>
     /// A state shaped like a manager's, built out of the key shapes the
     /// characterisation published. Every id here is invented.
     /// </summary>
@@ -244,6 +265,7 @@ public sealed class ManagerStateReadingTests
         bool recordTheActiveProfile = true,
         string activeProfile = Active,
         string installationPathOfC = "mod-c",
+        string archiveIdOfC = "archive-of-c",
         string enabledOfA = "true",
         bool referenceByArchive = false)
     {
@@ -275,6 +297,7 @@ public sealed class ManagerStateReadingTests
             ($"persistent###mods###{Game}###mod-b###attributes###fileId", "102"),
             ($"persistent###mods###{Game}###mod-c###installationPath", $"\"{installationPathOfC}\""),
             ($"persistent###mods###{Game}###mod-c###type", "\"collection\""),
+            ($"persistent###mods###{Game}###mod-c###archiveId", $"\"{archiveIdOfC}\""),
             ($"persistent###mods###{Game}###mod-c###attributes###fileMD5", "\"hash-of-c\""),
             ($"settings###mods###installPath###{Game}", "\"a-staging-root\""),
             ("confidential###account###apiKey", "\"a secret\""));
