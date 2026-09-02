@@ -19,6 +19,13 @@ namespace Ripperdoc.Core.Diagnosis;
 /// Differencing an empty wanted set against a record gives every deployed mod
 /// as unclaimed, which is arithmetic that works and an answer that is false.
 /// </para>
+/// <para>
+/// <strong>A record that is there and could not be read means no partition
+/// either</strong>, for the same reason on the other side. Partitioning against
+/// a record that is absent from the reading reports every wanted mod as beyond
+/// reach for want of a record - which is a sentence about a file that is
+/// sitting in the directory.
+/// </para>
 /// </remarks>
 public sealed class ManagerDiagnosis
 {
@@ -116,7 +123,9 @@ public sealed class ManagerDiagnosis
         return new ManagerDiagnosis(
             state,
             record,
-            state?.Wanted is null ? null : DeploymentPartition.Of(state.Wanted, record),
+            state?.Wanted is null || recordRefusal is not null
+                ? null
+                : DeploymentPartition.Of(state.Wanted, record),
             state?.Wanted is null
                 ? state is null
                     ? stateRefusal
@@ -124,7 +133,11 @@ public sealed class ManagerDiagnosis
                          + "knows which mods were wanted - and the game directory cannot say, "
                          + "because a deployed file carries no mark of the mod that supplied it"
                     : state.WhyNoProfile
-                : null,
+                : recordRefusal is null
+                    ? null
+                    : $"{recordRefusal} - so nothing here can say which of the mods the manager "
+                      + "wants are deployed, and a partition built without it would report every "
+                      + "one of them as though the game directory carried no record at all",
             OrderingGraph.Over(read, notRead),
             caveats);
     }
