@@ -15,17 +15,20 @@ public sealed partial class DeclaredLengthTests
     private static readonly byte[] Sixteen = [.. Enumerable.Range(0, 16).Select(i => (byte)i)];
 
     /// <summary>
-    /// A length that wraps the sum negative in an int is refused by name, not
-    /// let through to the slice.
+    /// A length that would wrap the sum negative is refused by name, not let
+    /// through to the slice: one wrapping it in the int a site would add in,
+    /// and one wrapping it in a long as well.
     /// </summary>
-    [Fact]
-    public void ALengthThatWrapsTheSumIsRefusedByName()
+    [Theory]
+    [InlineData(8, (long)int.MaxValue - 4)]
+    [InlineData(5, long.MaxValue)]
+    public void ALengthThatWrapsTheSumIsRefusedByName(int at, long length)
     {
-        var refusal = Assert.Throws<StateReadException>(() => Next(8, int.MaxValue - 4));
+        var refusal = Assert.Throws<StateReadException>(() => Next(at, length));
 
         Assert.Contains(
-            "a fixture names a key of 2147483643 bytes at byte 8, which is not within the 16 bytes "
-            + "there are",
+            $"a fixture names a key of {length} bytes at byte {at}, which is not within the 16 "
+            + "bytes there are",
             refusal.Message,
             StringComparison.Ordinal);
     }
