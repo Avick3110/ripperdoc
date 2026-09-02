@@ -290,7 +290,8 @@ public sealed class StateDatabaseTests
             () => TableFile.ReadInto(footer, "000001.ldb", Nothing));
 
         Assert.Contains(
-            "names a block of 2000000000 bytes at byte 2000000000, which runs past the end",
+            "names a block of 2000000000 bytes at byte 2000000000, which is not within the 48 "
+            + "bytes there are",
             refusal.Message,
             StringComparison.Ordinal);
     }

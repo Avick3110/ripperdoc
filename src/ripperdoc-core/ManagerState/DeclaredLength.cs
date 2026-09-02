@@ -101,8 +101,8 @@ internal static class DeclaredLength
         if (at < 0 || length < 0 || at + length > available)
         {
             throw new StateReadException(
-                $"{what} names {of} of {length} bytes at byte {at}, which runs past the end of "
-                + $"the {available} bytes there are. The file is truncated, or is not the format "
+                $"{what} names {of} of {length} bytes at byte {at}, which is not within the "
+                + $"{available} bytes there are. The file is truncated, or is not the format "
                 + "this reader models.");
         }
     }
