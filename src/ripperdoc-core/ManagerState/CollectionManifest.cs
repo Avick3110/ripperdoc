@@ -184,7 +184,7 @@ public sealed class CollectionManifest
         var rules = new List<OrderingRule>();
         var missed = new Dictionary<string, int>(StringComparer.Ordinal);
 
-        foreach (var rule in Declared(root))
+        foreach (var rule in Declared(path, root))
         {
             var kind = Text(rule, "type") ?? string.Empty;
             var source = Resolve(rule, "source", byHash, byLogical, byName, identities);
@@ -211,9 +211,9 @@ public sealed class CollectionManifest
             [.. ambiguous.Order(StringComparer.Ordinal)]);
     }
 
-    private static IEnumerable<JsonElement> Declared(JsonElement root) =>
+    private static IReadOnlyList<JsonElement> Declared(string path, JsonElement root) =>
         root.TryGetProperty("modRules", out var rules) && rules.ValueKind == JsonValueKind.Array
-            ? rules.EnumerateArray()
+            ? ObjectList.In(rules, $"'{path}'", "a declared rule")
             : [];
 
     /// <remarks>

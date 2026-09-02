@@ -397,7 +397,7 @@ public sealed class ManagerStateReading
         {
             var source = key.Substring(prefix.Length).Split("###")[0];
 
-            foreach (var rule in Array(state, key))
+            foreach (var rule in RuleObjects(state, key))
             {
                 var declared = Property(rule, "type") ?? string.Empty;
                 var reference = Reference(rule, known, byArchive);
@@ -517,12 +517,12 @@ public sealed class ManagerStateReading
         };
     }
 
-    private static IEnumerable<JsonElement> Array(StateDatabase state, string key)
+    private static IReadOnlyList<JsonElement> RuleObjects(StateDatabase state, string key)
     {
         var element = Parse(state.Text(key)!, key);
 
         return element.ValueKind == JsonValueKind.Array
-            ? element.EnumerateArray()
+            ? ObjectList.In(element, $"'{key}'", "a rule")
             : throw new StateReadException(
                 $"'{key}' holds {element.ValueKind} where this reader models a list of rules. "
                 + "Reading it as no rules at all would report a graph quieter than the manager's.");
