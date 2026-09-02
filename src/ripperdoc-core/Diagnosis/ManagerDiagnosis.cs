@@ -145,34 +145,41 @@ public sealed class ManagerDiagnosis
     private static void ReadManifests(
         ManagerStateReading state, List<OrderingRuleSet> read, List<UnreadRuleSet> notRead)
     {
-        var paths = Read(
+        var staged = Read(
             () => CollectionManifest.PathsIn(state),
             "a curated list's manifest",
             notRead,
             out _);
 
-        if (paths is null)
+        if (staged is null)
         {
             return;
         }
 
-        if (paths.Count == 0)
+        notRead.AddRange(staged.Refused);
+
+        if (staged.Paths.Count == 0)
         {
-            notRead.Add(new UnreadRuleSet(
-                "a curated list's manifest",
-                state.Wanted is null
-                    ? "which curated lists are staged is a property of the profile, and no "
-                      + "profile was selected - so nothing here can say where a manifest would be"
-                    : state.StagingRoot is { Length: > 0 }
-                        ? "the manager's state names no staged curated list for this game, so "
-                          + "there is no manifest to read"
-                        : "the manager's state does not record where it stages this game's mods, "
-                          + "so nothing here can say where a curated list's manifest would be"));
+            if (staged.Refused.Count == 0)
+            {
+                notRead.Add(new UnreadRuleSet(
+                    "a curated list's manifest",
+                    state.Wanted is null
+                        ? "which curated lists are staged is a property of the profile, and no "
+                          + "profile was selected - so nothing here can say where a manifest "
+                          + "would be"
+                        : state.StagingRoot is { Length: > 0 }
+                            ? "the manager's state names no staged curated list for this game, so "
+                              + "there is no manifest to read"
+                            : "the manager's state does not record where it stages this game's "
+                              + "mods, so nothing here can say where a curated list's manifest "
+                              + "would be"));
+            }
 
             return;
         }
 
-        foreach (var path in paths)
+        foreach (var path in staged.Paths)
         {
             var manifest = Read(
                 () => CollectionManifest.In(path, state), path, notRead, out var refusal);

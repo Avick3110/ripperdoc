@@ -140,13 +140,19 @@ public sealed class InstalledManagerStateTests(ITestOutputHelper output)
     public void AStagedListsManifestIsFoundFromTheStateAndJoinsToTheManagersIds()
     {
         var reading = Reading();
-        var paths = CollectionManifest.PathsIn(reading);
+        var staged = CollectionManifest.PathsIn(reading);
         var known = reading.Wanted!.Select(mod => mod.Id).ToHashSet(StringComparer.Ordinal);
 
         output.WriteLine($"staging root recorded : {reading.StagingRoot is not null}");
-        output.WriteLine($"curated lists staged  : {paths.Count}");
+        output.WriteLine($"curated lists staged  : {staged.Paths.Count}");
+        output.WriteLine($"ids that name no path : {staged.Refused.Count}");
 
-        foreach (var path in paths)
+        foreach (var refused in staged.Refused)
+        {
+            output.WriteLine($"  refused             : {refused.Home}");
+        }
+
+        foreach (var path in staged.Paths)
         {
             var manifest = CollectionManifest.In(path, reading);
 
@@ -180,9 +186,10 @@ public sealed class InstalledManagerStateTests(ITestOutputHelper output)
     {
         var reading = Reading();
         var read = new List<OrderingRuleSet> { reading.Rules };
-        var notRead = new List<UnreadRuleSet>();
+        var staged = CollectionManifest.PathsIn(reading);
+        var notRead = new List<UnreadRuleSet>(staged.Refused);
 
-        foreach (var path in CollectionManifest.PathsIn(reading))
+        foreach (var path in staged.Paths)
         {
             var manifest = CollectionManifest.In(path, reading);
 

@@ -29,10 +29,11 @@ public sealed class CollectionManifestTests : IDisposable
         using var scratch = State();
 
         var reading = ManagerStateReading.Of(scratch.Write(), Game)!;
+        var staged = CollectionManifest.PathsIn(reading);
 
         Assert.Equal(
-            [Path.Combine(staging, Container, CollectionManifest.FileName)],
-            CollectionManifest.PathsIn(reading));
+            [Path.Combine(staging, Container, CollectionManifest.FileName)], staged.Paths);
+        Assert.Empty(staged.Refused);
     }
 
     [Fact]
