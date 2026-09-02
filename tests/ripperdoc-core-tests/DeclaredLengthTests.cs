@@ -24,8 +24,8 @@ public sealed partial class DeclaredLengthTests
         var refusal = Assert.Throws<StateReadException>(() => Next(8, int.MaxValue - 4));
 
         Assert.Contains(
-            "a fixture names a key of 2147483643 bytes at byte 8, which runs past the end of the "
-            + "16 bytes there are",
+            "a fixture names a key of 2147483643 bytes at byte 8, which is not within the 16 bytes "
+            + "there are",
             refusal.Message,
             StringComparison.Ordinal);
     }
@@ -35,8 +35,10 @@ public sealed partial class DeclaredLengthTests
     {
         var refusal = Assert.Throws<StateReadException>(() => At(10, 7));
 
-        Assert.Contains("a key of 7 bytes at byte 10", refusal.Message, StringComparison.Ordinal);
-        Assert.Contains("runs past the end", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "a key of 7 bytes at byte 10, which is not within the 16 bytes there are",
+            refusal.Message,
+            StringComparison.Ordinal);
     }
 
     [Theory]
@@ -46,7 +48,12 @@ public sealed partial class DeclaredLengthTests
     {
         var refusal = Assert.Throws<StateReadException>(() => At(at, length));
 
-        Assert.Contains($"of {length} bytes at byte {at}", refusal.Message, StringComparison.Ordinal);
+        // The whole sentence, because a fragment cannot tell a true sentence
+        // from one whose second half describes an overrun that did not happen.
+        Assert.Equal(
+            $"a fixture names a key of {length} bytes at byte {at}, which is not within the 16 "
+            + "bytes there are. The file is truncated, or is not the format this reader models.",
+            refusal.Message);
     }
 
     /// <summary>
