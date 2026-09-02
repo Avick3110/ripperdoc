@@ -85,11 +85,11 @@ public sealed class CollectionManifest
     /// Where a manifest would be, for every curated list the manager stages.
     /// </summary>
     /// <param name="state">The manager's state for the game.</param>
-    /// <returns>The paths, empty where the state stages no curated list.</returns>
+    /// <returns>
+    /// The paths, and the staged lists whose ids could not say where. Both are
+    /// empty where the state stages no curated list.
+    /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="state" /> is null.</exception>
-    /// <exception cref="StateReadException">
-    /// The state gives a staged list an id that is not one plain file name.
-    /// </exception>
     /// <remarks>
     /// Both halves of the path come out of the state: the staging root from the
     /// setting that records it, the container from the mod the manager gives a
@@ -97,28 +97,46 @@ public sealed class CollectionManifest
     /// about before it is joined, like every other. Nothing here searches the
     /// disk for a file of that name.
     /// </remarks>
-    public static IReadOnlyList<string> PathsIn(ManagerStateReading state)
+    public static StagedManifests PathsIn(ManagerStateReading state)
     {
         ArgumentNullException.ThrowIfNull(state);
 
         if (state.StagingRoot is not { Length: > 0 } root || state.Wanted is null)
         {
-            return [];
+            return new StagedManifests([], []);
         }
 
-        return
-        [
-            .. state.Wanted
-                .Where(mod => mod.Kind.Equals("collection", StringComparison.Ordinal))
-                .Select(mod => PlainFileName.Under(
+        var paths = new List<string>();
+        var refused = new List<UnreadRuleSet>();
+
+        foreach (var mod in state.Wanted.Where(
+            mod => mod.Kind.Equals("collection", StringComparison.Ordinal)))
+        {
+            try
+            {
+                paths.Add(PlainFileName.Under(
                     PlainFileName.Under(
                         root,
                         PlainFileName.Named(
                             mod.Id, "the manager's state", "a staged list's own directory")),
-                    Manifest))
-                .Order(StringComparer.Ordinal),
-        ];
+                    Manifest));
+            }
+            catch (StateReadException refusal)
+            {
+                refused.Add(new UnreadRuleSet(Staged(mod.Id), refusal.Message));
+            }
+        }
+
+        return new StagedManifests(
+            [.. paths.Order(StringComparer.Ordinal)],
+            [.. refused.OrderBy(home => home.Home, StringComparer.Ordinal)]);
     }
+
+    /// <remarks>
+    /// A list whose id is unusable has no path to be named by, and the id is
+    /// the only thing that tells it from the others staged beside it.
+    /// </remarks>
+    private static string Staged(string id) => $"a curated list staged as '{id}'";
 
     /// <summary>
     /// Reads a manifest, or reports that there is none at the path.

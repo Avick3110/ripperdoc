@@ -82,7 +82,7 @@ public sealed class ManagerDiagnosisTests : IDisposable
         var directory = scratch.Write();
         var reading = ManagerStateReading.Of(directory, Game)!;
         var manifest = CollectionManifest.In(
-            CollectionManifest.PathsIn(reading)[0], reading)!;
+            CollectionManifest.PathsIn(reading).Paths[0], reading)!;
 
         Assert.Empty(OrderingGraph.Over([reading.Rules], []).Cycles);
         Assert.Empty(OrderingGraph.Over([manifest.Rules], []).Cycles);
@@ -316,32 +316,46 @@ public sealed class ManagerDiagnosisTests : IDisposable
     }
 
     /// <summary>
-    /// A staged list whose id is not a file name names the manifest as a home
-    /// not read, with the state's own reading intact beside it.
+    /// A staged list whose id is not a file name is named as its own unread
+    /// home, and every other staged list is still read.
     /// </summary>
     /// <remarks>
     /// The id is the last half of the path a manifest would be at, and the
     /// state is where it comes from. Joined unasked, a NUL leaves the reader as
-    /// the platform's own exception and takes the whole reading down with it.
+    /// the platform's own exception and takes the whole reading down with it -
+    /// and refused for the collection rather than for the id, it takes every
+    /// other list's manifest with it instead, which is a graph that reads as
+    /// complete apart from one generic home.
     /// </remarks>
     [Fact]
-    public void AStagedListWhoseIdIsNotAFileNameNamesTheManifestAsAHomeNotRead()
+    public void AStagedListWhoseIdIsNotAFileNameIsNamedAndTheOthersAreStillRead()
     {
         using var scratch = State();
+        Manifest(Rule("before", "hash-of-b", "hash-of-a"));
         scratch.Table(($"persistent###mods###{Game}###mod-\0list###type", "\"collection\""));
 
         var diagnosis = ManagerDiagnosis.Of(scratch.Write(), Game, gameDirectory);
 
         var unread = Assert.Single(diagnosis.Ordering.HomesNotRead);
 
-        Assert.Equal("a curated list's manifest", unread.Home);
+        Assert.Equal("a curated list staged as 'mod-\0list'", unread.Home);
         Assert.Contains(
             "the manager's state names a staged list's own directory 'mod-\0list'",
             unread.Reason,
             StringComparison.Ordinal);
         Assert.Contains("one plain file name", unread.Reason, StringComparison.Ordinal);
         Assert.NotNull(diagnosis.State);
-        Assert.Single(diagnosis.Ordering.HomesRead);
+
+        // The state declares no rule of its own here, so the one edge below is
+        // the usable list's manifest and could come from nowhere else.
+        Assert.Equal(2, diagnosis.Ordering.HomesRead.Count);
+        Assert.Contains(
+            diagnosis.Ordering.HomesRead,
+            home => home.Contains(Container, StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            diagnosis.Ordering.HomesNotRead,
+            home => home.Home.Contains(Container, StringComparison.Ordinal));
+        Assert.Equal(1, diagnosis.Ordering.EdgeCount);
     }
 
     /// <summary>
@@ -354,10 +368,12 @@ public sealed class ManagerDiagnosisTests : IDisposable
         using var scratch = State();
 
         var reading = ManagerStateReading.Of(scratch.Write(), Game)!;
+        var staged = CollectionManifest.PathsIn(reading);
 
         Assert.Equal(
             Path.Combine(staging, Container, CollectionManifest.FileName),
-            Assert.Single(CollectionManifest.PathsIn(reading)));
+            Assert.Single(staged.Paths));
+        Assert.Empty(staged.Refused);
     }
 
     [Fact]
