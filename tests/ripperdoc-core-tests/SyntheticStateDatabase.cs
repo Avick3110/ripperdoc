@@ -76,6 +76,12 @@ internal sealed class SyntheticStateDatabase : IDisposable
     internal ulong? DeclaredDecompressedLengthOfFirstBlock { get; set; }
 
     /// <summary>
+    /// Bytes to write as the first data block's compressed body instead of
+    /// its own, under a checksum that covers them.
+    /// </summary>
+    internal byte[]? CompressedBodyOfFirstBlock { get; set; }
+
+    /// <summary>
     /// Adds a table file holding these keys, at sequence numbers below anything
     /// added after it.
     /// </summary>
@@ -419,7 +425,9 @@ internal sealed class SyntheticStateDatabase : IDisposable
     {
         var compression = corrupt ? FirstBlockCompression ?? Compression : Compression;
         var body = compression == 1
-            ? Compress(content, corrupt ? DeclaredDecompressedLengthOfFirstBlock : null)
+            ? corrupt && CompressedBodyOfFirstBlock is { } forced
+                ? forced
+                : Compress(content, corrupt ? DeclaredDecompressedLengthOfFirstBlock : null)
             : content;
 
         if (compression is not (0 or 1))
