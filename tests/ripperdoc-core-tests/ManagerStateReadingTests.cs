@@ -102,9 +102,29 @@ public sealed class ManagerStateReadingTests
     {
         using var scratch = Bench(installationPathOfC: "somewhere-else");
 
-        Assert.Equal(
-            ["mod-c"],
-            ManagerStateReading.Of(scratch.Write(), Game)!.InstallationPathIsNotTheId);
+        var reading = ManagerStateReading.Of(scratch.Write(), Game)!;
+
+        Assert.Equal(["mod-c"], reading.InstallationPathIsNotTheId);
+        Assert.Empty(reading.InstallationPathNotRecorded);
+    }
+
+    /// <summary>
+    /// A mod the manager recorded no installation path for is named as that,
+    /// not as one whose path differs from its id.
+    /// </summary>
+    /// <remarks>
+    /// Its neighbour is the check above, where a path is recorded and differs.
+    /// The two claims are different things to say about the identity law.
+    /// </remarks>
+    [Fact]
+    public void AModWithNoRecordedInstallationPathIsNamedSeparately()
+    {
+        using var scratch = Bench(recordInstallationPathOfC: false);
+
+        var reading = ManagerStateReading.Of(scratch.Write(), Game)!;
+
+        Assert.Equal(["mod-c"], reading.InstallationPathNotRecorded);
+        Assert.Empty(reading.InstallationPathIsNotTheId);
     }
 
     /// <summary>
@@ -265,6 +285,7 @@ public sealed class ManagerStateReadingTests
         bool recordTheActiveProfile = true,
         string activeProfile = Active,
         string installationPathOfC = "mod-c",
+        bool recordInstallationPathOfC = true,
         string archiveIdOfC = "archive-of-c",
         string enabledOfA = "true",
         bool referenceByArchive = false)
@@ -301,6 +322,14 @@ public sealed class ManagerStateReadingTests
             ($"persistent###mods###{Game}###mod-c###attributes###fileMD5", "\"hash-of-c\""),
             ($"settings###mods###installPath###{Game}", "\"a-staging-root\""),
             ("confidential###account###apiKey", "\"a secret\""));
+
+        if (!recordInstallationPathOfC)
+        {
+            // A later deletion rather than an omitted row, so the mod is still
+            // known by its other keys - which is the manager's own shape for a
+            // download-only or mid-install entry.
+            scratch.Table(($"persistent###mods###{Game}###mod-c###installationPath", null));
+        }
 
         if (recordTheActiveProfile)
         {
