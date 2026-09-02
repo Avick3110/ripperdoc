@@ -49,7 +49,10 @@ internal static class LogRecords
 
             if (kind == Padding)
             {
-                at = ((at + BlockSize - 1) / BlockSize) * BlockSize;
+                // The strict next boundary, never the ceiling: a block whose
+                // own first byte begins the padding is already on one, and a
+                // ceiling would leave the read where it stands.
+                at = ((at / BlockSize) + 1) * BlockSize;
                 continue;
             }
 

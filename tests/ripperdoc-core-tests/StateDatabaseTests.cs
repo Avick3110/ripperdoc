@@ -14,6 +14,7 @@ public sealed class StateDatabaseTests
 {
     private const string Wanted = "persistent###mods###";
     private const string Credential = "confidential###account###apiKey";
+    private const int BlockSize = 32768;
 
     private static readonly string[] Prefixes = [Wanted];
 
@@ -222,6 +223,23 @@ public sealed class StateDatabaseTests
 
         Assert.Equal(4, state.Values.Count);
         Assert.Equal("1", state.Text("persistent###mods###a"));
+    }
+
+    /// <remarks>
+    /// Bounded rather than asserted directly: the defect this is written
+    /// against does not return at all, and a check that called straight into it
+    /// would hang the suite instead of failing it.
+    /// </remarks>
+    [Fact]
+    public async Task ABlockBeginningWithPaddingIsPassedOverRatherThanReadForever()
+    {
+        var read = Task.Run(() => LogRecords.In(new byte[BlockSize * 2], "000001.log"));
+        var first = await Task.WhenAny(read, Task.Delay(TimeSpan.FromSeconds(30)));
+
+        Assert.True(
+            ReferenceEquals(first, read),
+            "a file of whole padded blocks did not finish reading");
+        Assert.Empty(await read);
     }
 
     private static SyntheticStateDatabase Populated()
