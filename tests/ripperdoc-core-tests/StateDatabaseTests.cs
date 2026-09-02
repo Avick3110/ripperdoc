@@ -139,7 +139,6 @@ public sealed class StateDatabaseTests
         { "version-edit tag", "tagged 42" },
         { "log record type", "record of type 9" },
         { "entry kind", "entry of kind 7" },
-        { "block compression", "compressed by method 3" },
         { "block checksum", "checksum does not match" },
         { "log checksum", "checksum does not match" },
         { "table magic", "does not end with the eight bytes" },
@@ -175,6 +174,25 @@ public sealed class StateDatabaseTests
             name => refusal.Message.Contains($"'{name}'", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A block compressed a way this reader does not model is refused by name.
+    /// </summary>
+    /// <remarks>
+    /// Its own check rather than a row of the theory above, so that a sabotage
+    /// of the modelled set can name the one check it must red.
+    /// </remarks>
+    [Fact]
+    public void ABlockCompressedAWayThisReaderDoesNotModelIsRefusedByName()
+    {
+        using var scratch = Populated();
+        scratch.FirstBlockCompression = 3;
+
+        var refusal = Assert.Throws<StateReadException>(
+            () => StateDatabase.In(scratch.Write(), Prefixes));
+
+        Assert.Contains("compressed by method 3", refusal.Message, StringComparison.Ordinal);
+    }
+
     private static void Spoil(SyntheticStateDatabase scratch, string marker)
     {
         switch (marker)
@@ -183,7 +201,6 @@ public sealed class StateDatabaseTests
             case "version-edit tag": scratch.ExtraVersionEditTag = 42; break;
             case "log record type": scratch.FirstLogRecordType = 9; break;
             case "entry kind": scratch.FirstLogEntryKind = 7; break;
-            case "block compression": scratch.FirstBlockCompression = 3; break;
             case "block checksum": scratch.BreakFirstBlockChecksum = true; break;
             case "log checksum": scratch.BreakFirstLogChecksum = true; break;
             case "table magic": scratch.BreakTableMagic = true; break;
