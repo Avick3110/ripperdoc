@@ -61,6 +61,8 @@ public sealed class InstalledManagerStateTests(ITestOutputHelper output)
         output.WriteLine($"  disabled          : {reading.Wanted?.Count(mod => !mod.Enabled)}");
         output.WriteLine(
             $"installationPath is not the id: {reading.InstallationPathIsNotTheId.Count}");
+        output.WriteLine(
+            $"installationPath not recorded : {reading.InstallationPathNotRecorded.Count}");
         output.WriteLine($"file spellings naming several mods: "
             + $"{reading.FileSpellingsNamingMoreThanOneMod.Count}");
 

@@ -38,6 +38,7 @@ public sealed class ManagerStateReading
         string? whyNoProfile,
         IReadOnlyList<ManagerMod>? wanted,
         IReadOnlyList<string> installationPathIsNotTheId,
+        IReadOnlyList<string> installationPathNotRecorded,
         OrderingRuleSet rules,
         IReadOnlyList<UnresolvedRules> rulesNotResolved,
         string? stagingRoot,
@@ -55,6 +56,7 @@ public sealed class ManagerStateReading
         WhyNoProfile = whyNoProfile;
         Wanted = wanted;
         InstallationPathIsNotTheId = installationPathIsNotTheId;
+        InstallationPathNotRecorded = installationPathNotRecorded;
         Rules = rules;
         RulesNotResolved = rulesNotResolved;
         StagingRoot = stagingRoot;
@@ -90,6 +92,11 @@ public sealed class ManagerStateReading
     /// manager and not a defect in this reader.
     /// </remarks>
     public IReadOnlyList<string> InstallationPathIsNotTheId { get; }
+
+    /// <summary>
+    /// Mods for which the manager recorded no installation path.
+    /// </summary>
+    public IReadOnlyList<string> InstallationPathNotRecorded { get; }
 
     /// <summary>The manager's own rules, under the name of the home they came from.</summary>
     public OrderingRuleSet Rules { get; }
@@ -205,7 +212,10 @@ public sealed class ManagerStateReading
             selected,
             why,
             wanted,
-            [.. known.Where(mod => mod.Value.InstallationPath != mod.Key)
+            [.. known.Where(mod => mod.Value.InstallationPath is not null
+                    && mod.Value.InstallationPath != mod.Key)
+                .Select(mod => mod.Key).Order(StringComparer.Ordinal)],
+            [.. known.Where(mod => mod.Value.InstallationPath is null)
                 .Select(mod => mod.Key).Order(StringComparer.Ordinal)],
             ReadRules(state, gameId, known, ambiguous, out var unresolved),
             unresolved,
@@ -294,18 +304,24 @@ public sealed class ManagerStateReading
         return null;
     }
 
-    private static Dictionary<string, (string InstallationPath, string Kind)> KnownMods(
+    /// <remarks>
+    /// The path stays nullable rather than defaulting to empty: every id under
+    /// the prefix is a known mod, including one carrying only attributes, and a
+    /// path the manager never recorded is a different thing to report from one
+    /// it recorded differently.
+    /// </remarks>
+    private static Dictionary<string, (string? InstallationPath, string Kind)> KnownMods(
         StateDatabase state, string gameId)
     {
         var prefix = $"persistent###mods###{gameId}###";
-        var mods = new Dictionary<string, (string, string)>(StringComparer.Ordinal);
+        var mods = new Dictionary<string, (string?, string)>(StringComparer.Ordinal);
 
         foreach (var id in state.KeysUnder(prefix)
             .Select(key => key[prefix.Length..].Split("###")[0])
             .Distinct(StringComparer.Ordinal))
         {
             mods[id] = (
-                Text(state, $"{prefix}{id}###installationPath") ?? string.Empty,
+                Text(state, $"{prefix}{id}###installationPath"),
                 Text(state, $"{prefix}{id}###type") ?? string.Empty);
         }
 
@@ -315,7 +331,7 @@ public sealed class ManagerStateReading
     private static IReadOnlyList<ManagerMod> Wanting(
         StateDatabase state,
         string profile,
-        Dictionary<string, (string InstallationPath, string Kind)> known)
+        Dictionary<string, (string? InstallationPath, string Kind)> known)
     {
         var prefix = Profiles + profile + ModState;
         var enabled = new Dictionary<string, bool>(StringComparer.Ordinal);
@@ -342,7 +358,7 @@ public sealed class ManagerStateReading
     private static OrderingRuleSet ReadRules(
         StateDatabase state,
         string gameId,
-        Dictionary<string, (string InstallationPath, string Kind)> known,
+        Dictionary<string, (string? InstallationPath, string Kind)> known,
         List<string> ambiguous,
         out IReadOnlyList<UnresolvedRules> unresolved)
     {
@@ -407,7 +423,7 @@ public sealed class ManagerStateReading
 
     private static string? Reference(
         JsonElement rule,
-        Dictionary<string, (string InstallationPath, string Kind)> known,
+        Dictionary<string, (string? InstallationPath, string Kind)> known,
         Dictionary<string, string> byArchive)
     {
         if (!rule.TryGetProperty("reference", out var reference)
