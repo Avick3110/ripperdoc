@@ -16,7 +16,8 @@ internal static class WriteBatch
     /// <param name="sink">What to offer each change to.</param>
     /// <exception cref="StateReadException">
     /// The record is shorter than its own header, carries fewer changes than it
-    /// declares, or holds a change of a kind this reader does not model.
+    /// declares, holds a change of a kind this reader does not model, or
+    /// declares a key or a value running past the record's own end.
     /// </exception>
     internal static void ReadInto(byte[] record, string what, StateEntrySink sink)
     {
