@@ -317,7 +317,7 @@ public sealed class ManagerStateReading
         var mods = new Dictionary<string, (string?, string)>(StringComparer.Ordinal);
 
         foreach (var id in state.KeysUnder(prefix)
-            .Select(key => key[prefix.Length..].Split("###")[0])
+            .Select(key => key.Substring(prefix.Length).Split("###")[0])
             .Distinct(StringComparer.Ordinal))
         {
             mods[id] = (
@@ -339,7 +339,7 @@ public sealed class ManagerStateReading
         foreach (var key in state.KeysUnder(prefix)
             .Where(key => key.EndsWith("###enabled", StringComparison.Ordinal)))
         {
-            enabled[key[prefix.Length..].Split("###")[0]] = Flag(state, key);
+            enabled[key.Substring(prefix.Length).Split("###")[0]] = Flag(state, key);
         }
 
         // The union, so that a mod the profile names and the mod records do not,
@@ -395,7 +395,7 @@ public sealed class ManagerStateReading
         foreach (var key in state.KeysUnder(prefix)
             .Where(key => key.EndsWith("###rules", StringComparison.Ordinal)))
         {
-            var source = key[prefix.Length..].Split("###")[0];
+            var source = key.Substring(prefix.Length).Split("###")[0];
 
             foreach (var rule in Array(state, key))
             {

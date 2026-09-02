@@ -290,7 +290,9 @@ public sealed class StateDatabaseTests
             () => TableFile.ReadInto(footer, "000001.ldb", Nothing));
 
         Assert.Contains(
-            "runs past the end of the file", refusal.Message, StringComparison.Ordinal);
+            "names a block of 2000000000 bytes at byte 2000000000, which runs past the end",
+            refusal.Message,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -308,6 +310,60 @@ public sealed class StateDatabaseTests
             "larger than anything this reader can hold",
             refusal.Message,
             StringComparison.Ordinal);
+    }
+
+    public static TheoryData<string, string> DeclaredLengths => new()
+    {
+        { "batch key length", "names a key of 2147483646 bytes" },
+        { "version edit length", "names a value of 2147483646 bytes" },
+        { "decompressed length", "declares 2147483647 decompressed bytes" },
+    };
+
+    /// <summary>
+    /// A declared length the bytes cannot hold is refused by name at every
+    /// site that reads one, including a length that wraps the sum in an int.
+    /// </summary>
+    /// <remarks>
+    /// Each row's neighbour is the same database with the declaration left
+    /// true, which is the whole of <see cref="Populated" /> as the checks
+    /// around it read it.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(DeclaredLengths))]
+    public void ADeclaredLengthTheBytesCannotHoldIsRefusedByName(string marker, string saying)
+    {
+        using var scratch = Populated();
+
+        switch (marker)
+        {
+            case "batch key length": scratch.DeclaredKeyLengthOfFirstLogEntry = int.MaxValue - 1; break;
+            case "version edit length": scratch.DeclaredComparatorLength = int.MaxValue - 1; break;
+            default: scratch.DeclaredDecompressedLengthOfFirstBlock = int.MaxValue; break;
+        }
+
+        var directory = scratch.Write();
+        var refusal = Assert.Throws<StateReadException>(
+            () => StateDatabase.In(directory, Prefixes));
+
+        Assert.Contains(saying, refusal.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            Directory.GetFiles(directory).Select(Path.GetFileName).OfType<string>(),
+            name => refusal.Message.Contains($"'{name}'", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A block that decompresses at the format's highest ratio reads, so the
+    /// ceiling the row above refuses against is the format's and not a
+    /// tighter one of this reader's.
+    /// </summary>
+    [Fact]
+    public void ABlockDecompressingAtTheHighestRatioTheFormatAllowsReads()
+    {
+        using var scratch = new SyntheticStateDatabase();
+        var long_ = new string('v', 70_000);
+        scratch.Table(("persistent###mods###a", long_));
+
+        Assert.Equal(long_, StateDatabase.In(scratch.Write(), Prefixes)!.Text("persistent###mods###a"));
     }
 
     /// <summary>

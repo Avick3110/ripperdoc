@@ -43,27 +43,22 @@ internal static class WriteBatch
             }
 
             var isValue = TableFile.IsValue(span[at++], what);
-            var key = Take(span, ref at, VarInt.ReadLength(span, ref at, $"a key length in '{what}'"), what);
+            var key = DeclaredLength.Next(
+                span,
+                ref at,
+                VarInt.ReadLength(span, ref at, $"a key length in '{what}'"),
+                $"a batch in '{what}'",
+                "a key");
             var value = isValue
-                ? Take(span, ref at, VarInt.ReadLength(span, ref at, $"a value length in '{what}'"), what)
+                ? DeclaredLength.Next(
+                    span,
+                    ref at,
+                    VarInt.ReadLength(span, ref at, $"a value length in '{what}'"),
+                    $"a batch in '{what}'",
+                    "a value")
                 : default;
 
             sink(key, sequence + written, isValue, value);
         }
-    }
-
-    private static ReadOnlySpan<byte> Take(
-        ReadOnlySpan<byte> span, ref int at, int length, string what)
-    {
-        if (at + length > span.Length)
-        {
-            throw new StateReadException(
-                $"'{what}' holds a batch whose declared {length} bytes run past the end of the "
-                + "record. The record is truncated.");
-        }
-
-        at += length;
-
-        return span.Slice(at - length, length);
     }
 }

@@ -320,19 +320,11 @@ internal sealed record StateVersion(
         }
     }
 
-    private static ReadOnlySpan<byte> Bytes(ReadOnlySpan<byte> span, ref int at, string named)
-    {
-        var length = VarInt.ReadLength(span, ref at, $"a length in '{named}'");
-
-        if (at + length > span.Length)
-        {
-            throw new StateReadException(
-                $"'{named}' holds a version edit whose declared {length} bytes run past the end "
-                + "of the edit. The manifest is damaged.");
-        }
-
-        at += length;
-
-        return span.Slice(at - length, length);
-    }
+    private static ReadOnlySpan<byte> Bytes(ReadOnlySpan<byte> span, ref int at, string named) =>
+        DeclaredLength.Next(
+            span,
+            ref at,
+            VarInt.ReadLength(span, ref at, $"a length in '{named}'"),
+            $"a version edit in '{named}'",
+            "a value");
 }

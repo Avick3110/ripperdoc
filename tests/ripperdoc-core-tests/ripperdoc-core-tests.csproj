@@ -37,6 +37,13 @@
     <None Include="..\drift-receipt.json" Link="drift-receipt.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- The manager-state reader's own source, read by the check that holds
+         every slice by a declared length to the one primitive. Linked as text
+         rather than compiled again: the check is about what the source says,
+         and a file added to that directory later is picked up by the glob. -->
+    <None Include="..\..\src\ripperdoc-core\ManagerState\*.cs" Link="ManagerState\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

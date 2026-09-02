@@ -63,6 +63,18 @@ internal sealed class SyntheticStateDatabase : IDisposable
     /// <summary>How many entries share a restart point in a table's blocks.</summary>
     internal int RestartInterval { get; set; } = 16;
 
+    /// <summary>A key length to declare on the log's first entry instead of its own.</summary>
+    internal ulong? DeclaredKeyLengthOfFirstLogEntry { get; set; }
+
+    /// <summary>A length to declare on the manifest's comparator instead of its own.</summary>
+    internal ulong? DeclaredComparatorLength { get; set; }
+
+    /// <summary>
+    /// A decompressed length to declare on the first data block's preamble
+    /// instead of its own.
+    /// </summary>
+    internal ulong? DeclaredDecompressedLengthOfFirstBlock { get; set; }
+
     /// <summary>
     /// Adds a table file holding these keys, at sequence numbers below anything
     /// added after it.
@@ -154,7 +166,8 @@ internal sealed class SyntheticStateDatabase : IDisposable
     {
         var edit = new List<byte>();
 
-        PutTagged(edit, 1, Encoding.UTF8.GetBytes(Comparator));
+        PutVarInt(edit, 1);
+        PutLengthPrefixed(edit, Encoding.UTF8.GetBytes(Comparator), DeclaredComparatorLength);
         PutVarInt(edit, 2);
         PutVarInt(edit, logNumber);
         PutVarInt(edit, 3);
@@ -202,7 +215,8 @@ internal sealed class SyntheticStateDatabase : IDisposable
             var kind = (byte)(entry.Value is null ? 0 : 1);
 
             batch.Add(i == 0 ? FirstLogEntryKind ?? kind : kind);
-            PutLengthPrefixed(batch, Encoding.UTF8.GetBytes(entry.Key));
+            PutLengthPrefixed(
+                batch, Encoding.UTF8.GetBytes(entry.Key), i == 0 ? DeclaredKeyLengthOfFirstLogEntry : null);
 
             if (entry.Value is not null)
             {
@@ -404,7 +418,9 @@ internal sealed class SyntheticStateDatabase : IDisposable
     private int PutBlock(List<byte> file, byte[] content, bool corrupt)
     {
         var compression = corrupt ? FirstBlockCompression ?? Compression : Compression;
-        var body = compression == 1 ? Compress(content) : content;
+        var body = compression == 1
+            ? Compress(content, corrupt ? DeclaredDecompressedLengthOfFirstBlock : null)
+            : content;
 
         if (compression is not (0 or 1))
         {
@@ -431,10 +447,10 @@ internal sealed class SyntheticStateDatabase : IDisposable
         return body.Length;
     }
 
-    private static byte[] Compress(byte[] data)
+    private static byte[] Compress(byte[] data, ulong? declared = null)
     {
         var output = new List<byte>();
-        PutVarInt(output, (ulong)data.Length);
+        PutVarInt(output, declared ?? (ulong)data.Length);
 
         var table = new Dictionary<int, int>();
         var literal = 0;
@@ -503,9 +519,14 @@ internal sealed class SyntheticStateDatabase : IDisposable
         PutLengthPrefixed(into, value);
     }
 
-    private static void PutLengthPrefixed(List<byte> into, byte[] value)
+    /// <remarks>
+    /// The declared length is the one thing a fixture may lie about: the bytes
+    /// written are always the value's own, so a reader that believes the
+    /// declaration reads past them.
+    /// </remarks>
+    private static void PutLengthPrefixed(List<byte> into, byte[] value, ulong? declared = null)
     {
-        PutVarInt(into, (ulong)value.Length);
+        PutVarInt(into, declared ?? (ulong)value.Length);
         into.AddRange(value);
     }
 

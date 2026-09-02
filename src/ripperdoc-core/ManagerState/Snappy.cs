@@ -9,6 +9,9 @@ namespace Ripperdoc.Core.ManagerState;
 /// </remarks>
 internal static class Snappy
 {
+    private const int MostOneTagProduces = 64;
+    private const int FewestBytesOfATagProducingThat = 3;
+
     /// <summary>
     /// Decompresses one block.
     /// </summary>
@@ -16,13 +19,28 @@ internal static class Snappy
     /// <param name="what">What is being read, for a refusal.</param>
     /// <returns>The bytes it stands for.</returns>
     /// <exception cref="StateReadException">
-    /// The stream is truncated, names an offset behind its own start, or does
-    /// not produce the length it declares.
+    /// The stream is truncated, declares more than its bytes can produce, names
+    /// an offset behind its own start, or does not produce the length it
+    /// declares.
     /// </exception>
     internal static byte[] Decompress(ReadOnlySpan<byte> source, string what)
     {
         var at = 0;
         var declared = VarInt.ReadLength(source, ref at, $"{what}'s compressed length preamble");
+        var ceiling = Ceiling(source.Length - at);
+
+        // The preamble is the block's own word for how much it holds, and a
+        // block is allocated on that word. The format bounds it: no tag
+        // produces more than 64 bytes, and none producing more than 11 is
+        // shorter than 3 - so the compressed bytes cap what they can stand for.
+        if (declared > ceiling)
+        {
+            throw new StateReadException(
+                $"{what} declares {declared} decompressed bytes, and its {source.Length - at} "
+                + $"compressed bytes can produce at most {ceiling}. The preamble is corrupt, or "
+                + "the block is not compressed the way this reader models.");
+        }
+
         var output = new byte[declared];
         var written = 0;
 
@@ -51,9 +69,9 @@ internal static class Snappy
                 }
 
                 length += 1;
-                Take(source, ref at, length, what);
+                var literal = DeclaredLength.Next(source, ref at, length, what, "a literal run");
                 Room(written, length, declared, what);
-                source.Slice(at - length, length).CopyTo(output.AsSpan(written));
+                literal.CopyTo(DeclaredLength.At(output, written, length, what, "a literal run"));
                 written += length;
                 continue;
             }
@@ -64,8 +82,7 @@ internal static class Snappy
             {
                 case 1:
                     copyLength = 4 + ((tag >> 2) & 7);
-                    Take(source, ref at, 1, what);
-                    offset = ((tag >> 5) << 8) | source[at - 1];
+                    offset = ((tag >> 5) << 8) | DeclaredLength.Next(source, ref at, 1, what, "a copy offset")[0];
                     break;
                 case 2:
                     copyLength = (tag >> 2) + 1;
@@ -103,17 +120,9 @@ internal static class Snappy
                 + "block is truncated or is not compressed the way this reader models.");
     }
 
-    private static void Take(ReadOnlySpan<byte> source, ref int at, int count, string what)
-    {
-        if (count < 0 || (long)at + count > source.Length)
-        {
-            throw new StateReadException(
-                $"{what} ends part-way through a compressed run of {count} bytes, so the block is "
-                + "truncated or is not compressed the way this reader models.");
-        }
-
-        at += count;
-    }
+    private static long Ceiling(int compressed) =>
+        (long)MostOneTagProduces
+        * ((compressed + FewestBytesOfATagProducingThat - 1) / FewestBytesOfATagProducingThat);
 
     private static void Room(int written, int length, int declared, string what)
     {
@@ -128,13 +137,12 @@ internal static class Snappy
     private static ulong ReadLittleEndian(
         ReadOnlySpan<byte> source, ref int at, int count, string what)
     {
-        Take(source, ref at, count, what);
-
+        var bytes = DeclaredLength.Next(source, ref at, count, what, "a compressed run's length");
         ulong value = 0;
 
         for (var i = 0; i < count; i++)
         {
-            value |= (ulong)source[at - count + i] << (i * 8);
+            value |= (ulong)bytes[i] << (i * 8);
         }
 
         return value;
