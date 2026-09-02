@@ -76,6 +76,12 @@ internal sealed class SyntheticStateDatabase : IDisposable
     internal ulong? DeclaredDecompressedLengthOfFirstBlock { get; set; }
 
     /// <summary>
+    /// Whether the first data block's preamble declares one byte more than
+    /// its compressed bytes could produce.
+    /// </summary>
+    internal bool DeclareOneOverTheCeilingOnFirstBlock { get; set; }
+
+    /// <summary>
     /// Bytes to write as the first data block's compressed body instead of
     /// its own, under a checksum that covers them.
     /// </summary>
@@ -427,7 +433,10 @@ internal sealed class SyntheticStateDatabase : IDisposable
         var body = compression == 1
             ? corrupt && CompressedBodyOfFirstBlock is { } forced
                 ? forced
-                : Compress(content, corrupt ? DeclaredDecompressedLengthOfFirstBlock : null)
+                : Compress(
+                    content,
+                    corrupt ? DeclaredDecompressedLengthOfFirstBlock : null,
+                    corrupt && DeclareOneOverTheCeilingOnFirstBlock)
             : content;
 
         if (compression is not (0 or 1))
@@ -455,11 +464,13 @@ internal sealed class SyntheticStateDatabase : IDisposable
         return body.Length;
     }
 
-    private static byte[] Compress(byte[] data, ulong? declared = null)
+    /// <remarks>
+    /// The preamble is written after the body, because one of the lies a
+    /// fixture may tell in it is a function of the body's length.
+    /// </remarks>
+    private static byte[] Compress(byte[] data, ulong? declared, bool oneOverTheCeiling)
     {
         var output = new List<byte>();
-        PutVarInt(output, declared ?? (ulong)data.Length);
-
         var table = new Dictionary<int, int>();
         var literal = 0;
         var at = 0;
@@ -501,8 +512,20 @@ internal sealed class SyntheticStateDatabase : IDisposable
 
         PutLiteral(output, data, literal, data.Length - literal);
 
-        return [.. output];
+        var preamble = new List<byte>();
+        PutVarInt(
+            preamble,
+            declared ?? (oneOverTheCeiling ? Ceiling(output.Count) + 1 : (ulong)data.Length));
+
+        return [.. preamble, .. output];
     }
+
+    /// <remarks>
+    /// The format's own bound, not the reader's constant: a copy producing up
+    /// to 64 bytes takes at least 3, and a literal never produces more than it
+    /// consumes.
+    /// </remarks>
+    private static ulong Ceiling(int compressed) => 64UL * (ulong)((compressed + 2) / 3);
 
     private static void PutLiteral(List<byte> output, byte[] data, int at, int length)
     {

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Ripperdoc.Core.ManagerState;
 using Xunit;
 
@@ -11,7 +12,7 @@ namespace Ripperdoc.Core.Tests;
 /// Every database here is built by <see cref="SyntheticStateDatabase" />, byte
 /// by byte. No manager's file is read by any check in this class.
 /// </remarks>
-public sealed class StateDatabaseTests
+public sealed partial class StateDatabaseTests
 {
     private const string Wanted = "persistent###mods###";
     private const string Credential = "confidential###account###apiKey";
@@ -375,18 +376,68 @@ public sealed class StateDatabaseTests
     }
 
     /// <summary>
-    /// A block that decompresses at the format's highest ratio reads, so the
-    /// ceiling the row above refuses against is the format's and not a
-    /// tighter one of this reader's.
+    /// A block at the highest ratio the fixture's own compressor reaches
+    /// reads through the whole reader.
     /// </summary>
     [Fact]
-    public void ABlockDecompressingAtTheHighestRatioTheFormatAllowsReads()
+    public void ABlockAtTheHighestRatioTheFixturesCompressorReachesReads()
     {
         using var scratch = new SyntheticStateDatabase();
         var long_ = new string('v', 70_000);
         scratch.Table(("persistent###mods###a", long_));
 
         Assert.Equal(long_, StateDatabase.In(scratch.Write(), Prefixes)!.Text("persistent###mods###a"));
+    }
+
+    /// <summary>
+    /// A block producing more than its compressed bytes divided by three
+    /// reads, and the same block declaring one more is refused for what it
+    /// produced - so the ceiling is the format's, and a block under it is not
+    /// refused by it.
+    /// </summary>
+    [Fact]
+    public void ABlockUnderItsCeilingReadsAndOneDeclaringMoreIsRefusedForWhatItProduced()
+    {
+        // A one-byte literal, then a 64-byte copy from one back: 65 bytes out
+        // of five compressed, which a floor of 64 * (5 / 3) would refuse.
+        byte[] body = [0x00, 0x76, 0xFE, 0x01, 0x00];
+
+        Assert.Equal(
+            new string('v', 65),
+            Encoding.UTF8.GetString(Snappy.Decompress([65, .. body], "a block")));
+
+        var refusal = Assert.Throws<StateReadException>(
+            () => Snappy.Decompress([66, .. body], "a block"));
+
+        Assert.Contains(
+            "a block declares 66 decompressed bytes and produced 65",
+            refusal.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A block declaring one byte over its ceiling is refused by the ceiling,
+    /// and the figures the refusal carries are the ceiling's own.
+    /// </summary>
+    [Fact]
+    public void ABlockDeclaringOneOverItsCeilingIsRefusedNamingTheCeiling()
+    {
+        using var scratch = Populated();
+        scratch.DeclareOneOverTheCeilingOnFirstBlock = true;
+
+        var refusal = Assert.Throws<StateReadException>(
+            () => StateDatabase.In(scratch.Write(), Prefixes));
+
+        var figures = CeilingRefusal().Match(refusal.Message);
+
+        Assert.True(figures.Success, refusal.Message);
+
+        var declared = long.Parse(figures.Groups["declared"].Value);
+        var compressed = long.Parse(figures.Groups["compressed"].Value);
+        var ceiling = long.Parse(figures.Groups["ceiling"].Value);
+
+        Assert.Equal(64 * ((compressed + 2) / 3), ceiling);
+        Assert.Equal(ceiling + 1, declared);
     }
 
     /// <summary>
@@ -511,6 +562,11 @@ public sealed class StateDatabaseTests
         ReadOnlySpan<byte> key, ulong sequence, bool isValue, ReadOnlySpan<byte> value)
     {
     }
+
+    [GeneratedRegex(
+        @"declares (?<declared>\d+) decompressed bytes, and its (?<compressed>\d+) compressed "
+        + @"bytes can produce at most (?<ceiling>\d+)\.")]
+    private static partial Regex CeilingRefusal();
 
     private static void Varint(byte[] into, ref int at, ulong value)
     {
