@@ -10,14 +10,18 @@ namespace Ripperdoc.Core.Tests;
 /// </summary>
 public sealed class PlainFileNameTests
 {
-    // Empty, absent, carrying a directory part, and holding a character no
-    // file name may hold.
+    // Empty, absent, carrying a directory part, holding a character no file
+    // name may hold, and the two dot names. A dot name carries no separator
+    // and no invalid character, so the platform's own answers pass it: it is
+    // a reference to a directory rather than a file in one.
     public static TheoryData<string?> NamesThatAreNotOne => new()
     {
         string.Empty,
         null,
         "sub/MANIFEST-000005",
         "MANIFEST-000005\0",
+        ".",
+        "..",
     };
 
     /// <summary>
@@ -34,8 +38,8 @@ public sealed class PlainFileNameTests
         Assert.Equal(
             $"a fixture names the manifest in force '{named}', and this reader models the manifest "
             + "in force as one plain file name in the directory it is read under. A name that is "
-            + "not one either leaves that directory or is refused when it is opened, by the "
-            + "platform rather than by this reader.",
+            + "not one leaves that directory, names the directory rather than a file in it, or is "
+            + "refused when it is opened, by the platform rather than by this reader.",
             refusal.Message);
     }
 
