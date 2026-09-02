@@ -346,6 +346,7 @@ public sealed partial class StateDatabaseTests
         { "batch key length", "names a key of 2147483646 bytes" },
         { "version edit length", "names a value of 2147483646 bytes" },
         { "decompressed length", "declares 2147483647 decompressed bytes" },
+        { "value length into the restart array", "holds an entry whose key and value run past the end of its block" },
     };
 
     /// <summary>
@@ -367,6 +368,7 @@ public sealed partial class StateDatabaseTests
         {
             case "batch key length": scratch.DeclaredKeyLengthOfFirstLogEntry = int.MaxValue - 1; break;
             case "version edit length": scratch.DeclaredComparatorLength = int.MaxValue - 1; break;
+            case "value length into the restart array": scratch.OverstateTheLastValueLengthOfFirstBlockBy = 3; break;
             default: scratch.DeclaredDecompressedLengthOfFirstBlock = int.MaxValue; break;
         }
 
