@@ -9,8 +9,8 @@ namespace Ripperdoc.Core.ManagerState;
 /// </remarks>
 internal static class Snappy
 {
-    private const int MostOneTagProduces = 64;
-    private const int FewestBytesOfATagProducingThat = 3;
+    private const int MostACopyProduces = 64;
+    private const int FewestBytesOfACopyProducingThat = 3;
 
     /// <summary>
     /// Decompresses one block.
@@ -30,9 +30,10 @@ internal static class Snappy
         var ceiling = Ceiling(source.Length - at);
 
         // The preamble is the block's own word for how much it holds, and a
-        // block is allocated on that word. The format bounds it: no tag
-        // produces more than 64 bytes, and none producing more than 11 is
-        // shorter than 3 - so the compressed bytes cap what they can stand for.
+        // block is allocated on that word. The format bounds it: a copy
+        // producing up to 64 bytes takes at least 3 (the two-byte copy
+        // produces at most 11), and a literal never produces more than it
+        // consumes - so the compressed bytes cap what they can stand for.
         if (declared > ceiling)
         {
             throw new StateReadException(
@@ -122,8 +123,8 @@ internal static class Snappy
     }
 
     private static long Ceiling(int compressed) =>
-        (long)MostOneTagProduces
-        * ((compressed + FewestBytesOfATagProducingThat - 1) / FewestBytesOfATagProducingThat);
+        (long)MostACopyProduces
+        * ((compressed + FewestBytesOfACopyProducingThat - 1) / FewestBytesOfACopyProducingThat);
 
     private static void Room(int written, int length, int declared, string what)
     {
