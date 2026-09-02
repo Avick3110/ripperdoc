@@ -377,6 +377,51 @@ public sealed class ManagerDiagnosisTests : IDisposable
     }
 
     /// <summary>
+    /// A state that stages no curated list at all says so as its own unread
+    /// home, rather than leaving it to be inferred from an absence.
+    /// </summary>
+    [Fact]
+    public void AStateThatStagesNoCuratedListSaysSo()
+    {
+        using var scratch = State();
+        scratch.Table(($"persistent###mods###{Game}###{Container}###type", "\"\""));
+
+        var diagnosis = ManagerDiagnosis.Of(scratch.Write(), Game, gameDirectory);
+
+        var unread = Assert.Single(diagnosis.Ordering.HomesNotRead);
+
+        Assert.Equal("a curated list's manifest", unread.Home);
+        Assert.Contains(
+            "names no staged curated list", unread.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Where the only staged list is one whose id is unusable, that list is the
+    /// unread home and the graph does not also say the state stages none.
+    /// </summary>
+    /// <remarks>
+    /// The other arm of the one above. A state that stages a list this reader
+    /// cannot place is not a state that stages no list, and reporting both
+    /// sentences would put a second, false reason beside the true one.
+    /// </remarks>
+    [Fact]
+    public void AStagedListRefusedByItsIdIsNotAlsoReportedAsNoStagedListAtAll()
+    {
+        using var scratch = State();
+        scratch.Table(
+            ($"persistent###mods###{Game}###{Container}###type", "\"\""),
+            ($"persistent###mods###{Game}###mod-\0list###type", "\"collection\""));
+
+        var diagnosis = ManagerDiagnosis.Of(scratch.Write(), Game, gameDirectory);
+
+        var unread = Assert.Single(diagnosis.Ordering.HomesNotRead);
+
+        Assert.Equal("a curated list staged as 'mod-\0list'", unread.Home);
+        Assert.DoesNotContain(
+            "names no staged curated list", unread.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A staged list whose id is a dot name is refused by name, so no manifest
     /// is read from outside the directory the state stages under.
     /// </summary>
