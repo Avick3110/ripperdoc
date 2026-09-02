@@ -92,15 +92,18 @@ public sealed partial class DeclaredLengthTests
     /// segment constructed over a buffer, a copy naming an offset, and a range
     /// with a computed endpoint; a range whose endpoints are literals, or count
     /// a literal from the end, names a fixed trailer rather than a declared
-    /// length.
+    /// length. The range spelling is held whatever the receiver's type, a
+    /// string included: the regex reads the endpoints and not what is being
+    /// indexed.
     /// </para>
     /// <para>
     /// <strong>What the scan does not see, and this check therefore does not
     /// claim:</strong> a read taking a buffer and an index rather than a view
-    /// of it, an allocation sized by a declared length, a string operation over
-    /// an already-decoded value, and enumerable slicing. A site written in one
-    /// of those spellings compiles and passes here, and is held by an arm of
-    /// its own or by nothing.
+    /// of it, an allocation sized by a declared length, a string operation
+    /// spelled as a call rather than as a range - <c>Substring</c> and its
+    /// neighbours - and enumerable slicing. A site written in one of those
+    /// spellings compiles and passes here, and is held by an arm of its own or
+    /// by nothing.
     /// </para>
     /// </remarks>
     [Fact]
