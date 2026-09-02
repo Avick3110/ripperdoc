@@ -33,13 +33,15 @@ public sealed class CollectionManifest
         int declaredMods,
         int declaredModsNotInTheState,
         OrderingRuleSet rules,
-        IReadOnlyList<UnresolvedRules> rulesNotResolved)
+        IReadOnlyList<UnresolvedRules> rulesNotResolved,
+        IReadOnlyList<string> spellingsNamingMoreThanOneDeclaredMod)
     {
         Path = path;
         DeclaredMods = declaredMods;
         DeclaredModsNotInTheState = declaredModsNotInTheState;
         Rules = rules;
         RulesNotResolved = rulesNotResolved;
+        SpellingsNamingMoreThanOneDeclaredMod = spellingsNamingMoreThanOneDeclaredMod;
     }
 
     /// <summary>The manifest this was read from.</summary>
@@ -63,6 +65,18 @@ public sealed class CollectionManifest
 
     /// <summary>Rules whose sides did not survive both joins, counted by declared kind.</summary>
     public IReadOnlyList<UnresolvedRules> RulesNotResolved { get; }
+
+    /// <summary>
+    /// Spellings more than one declared mod answers to, which resolve to none
+    /// of them.
+    /// </summary>
+    /// <remarks>
+    /// The manager's own reading drops a contested spelling on the same
+    /// ground. A rule side naming one of these joins to nothing and is counted
+    /// as residue, rather than being attributed to whichever mod the list
+    /// declared first.
+    /// </remarks>
+    public IReadOnlyList<string> SpellingsNamingMoreThanOneDeclaredMod { get; }
 
     /// <summary>
     /// Where a manifest would be, for every curated list the manager stages.
@@ -159,17 +173,10 @@ public sealed class CollectionManifest
         }
 
         var mods = declared.EnumerateArray().ToList();
-        var byHash = Index(mods, "md5");
-        var byLogical = Index(mods, "logicalFilename");
-        var byName = new Dictionary<string, int>(StringComparer.Ordinal);
-
-        for (var i = 0; i < mods.Count; i++)
-        {
-            if (Text(mods[i], "name") is { Length: > 0 } name)
-            {
-                byName.TryAdd(name, i);
-            }
-        }
+        var ambiguous = new List<string>();
+        var byHash = Index(mods, "md5", ambiguous);
+        var byLogical = Index(mods, "logicalFilename", ambiguous);
+        var byName = Index(mods, "name", ambiguous, i => Text(mods[i], "name"));
 
         var identities = mods.Select(mod => state.Identify(
             Text(mod, "source", "md5"), Text(mod, "source", "fileId"))).ToList();
@@ -200,7 +207,8 @@ public sealed class CollectionManifest
             [
                 .. missed.OrderBy(pair => pair.Key, StringComparer.Ordinal)
                     .Select(pair => new UnresolvedRules(pair.Key, pair.Value)),
-            ]);
+            ],
+            [.. ambiguous.Order(StringComparer.Ordinal)]);
     }
 
     private static IEnumerable<JsonElement> Declared(JsonElement root) =>
@@ -247,16 +255,41 @@ public sealed class CollectionManifest
         return at is { } found ? identities[found] : null;
     }
 
-    private static Dictionary<string, int> Index(List<JsonElement> mods, string field)
+    private static Dictionary<string, int> Index(
+        List<JsonElement> mods, string field, List<string> ambiguous) =>
+        Index(mods, field, ambiguous, i => Text(mods[i], "source", field));
+
+    /// <remarks>
+    /// A spelling two declared mods answer to is dropped rather than resolved
+    /// to whichever the list happened to declare first. Taking the first
+    /// attributes a rule to a mod on the strength of an array order, and an
+    /// edge attributed that way can invent a cycle or hide one.
+    /// </remarks>
+    private static Dictionary<string, int> Index(
+        List<JsonElement> mods, string field, List<string> ambiguous, Func<int, string?> spelling)
     {
         var index = new Dictionary<string, int>(StringComparer.Ordinal);
+        var contested = new HashSet<string>(StringComparer.Ordinal);
 
         for (var i = 0; i < mods.Count; i++)
         {
-            if (Text(mods[i], "source", field) is { Length: > 0 } value)
+            if (spelling(i) is not { Length: > 0 } value)
             {
-                index.TryAdd(value, i);
+                continue;
             }
+
+            if (index.TryGetValue(value, out var held) && held != i)
+            {
+                contested.Add(value);
+            }
+
+            index[value] = i;
+        }
+
+        foreach (var value in contested)
+        {
+            index.Remove(value);
+            ambiguous.Add($"{field} '{value}'");
         }
 
         return index;

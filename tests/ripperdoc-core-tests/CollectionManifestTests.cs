@@ -152,6 +152,62 @@ public sealed class CollectionManifestTests : IDisposable
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A spelling two declared mods answer to resolves to neither, and the rule
+    /// naming it is residue rather than an edge onto whichever came first.
+    /// </summary>
+    [Fact]
+    public void ASpellingTwoDeclaredModsAnswerToResolvesToNeither()
+    {
+        using var scratch = State();
+        var reading = ManagerStateReading.Of(scratch.Write(), Game)!;
+        var path = Written(
+            """
+            {"mods":[
+              {"name":"A","source":{"md5":"hash-of-a","logicalFilename":"shared.zip","fileId":101}},
+              {"name":"B","source":{"md5":"hash-of-b","logicalFilename":"shared.zip","fileId":102}}],
+             "modRules":[
+            {"type":"before",
+             "source":{"logicalFileName":"shared.zip","versionMatch":"*"},
+             "reference":{"fileMD5":"hash-of-b","logicalFileName":"b.zip","versionMatch":"*"}}]}
+            """);
+
+        var manifest = CollectionManifest.In(path, reading)!;
+
+        Assert.Empty(manifest.Rules.Rules);
+        Assert.Equal(
+            ["logicalFilename 'shared.zip'"], manifest.SpellingsNamingMoreThanOneDeclaredMod);
+        Assert.Equal(1, Assert.Single(manifest.RulesNotResolved).Count);
+    }
+
+    /// <summary>
+    /// The same manifest with the two spellings distinct joins, so the check
+    /// above turns on the collision and not on the fixture.
+    /// </summary>
+    [Fact]
+    public void TheSameRuleJoinsWhenNoTwoDeclaredModsShareTheSpelling()
+    {
+        using var scratch = State();
+        var reading = ManagerStateReading.Of(scratch.Write(), Game)!;
+        var path = Written(
+            """
+            {"mods":[
+              {"name":"A","source":{"md5":"hash-of-a","logicalFilename":"shared.zip","fileId":101}},
+              {"name":"B","source":{"md5":"hash-of-b","logicalFilename":"b.zip","fileId":102}}],
+             "modRules":[
+            {"type":"before",
+             "source":{"logicalFileName":"shared.zip","versionMatch":"*"},
+             "reference":{"fileMD5":"hash-of-b","logicalFileName":"b.zip","versionMatch":"*"}}]}
+            """);
+
+        var manifest = CollectionManifest.In(path, reading)!;
+
+        Assert.Equal(
+            new OrderingRule("mod-a", "mod-b", OrderingRuleKind.Before),
+            Assert.Single(manifest.Rules.Rules));
+        Assert.Empty(manifest.SpellingsNamingMoreThanOneDeclaredMod);
+    }
+
     private static string Manifest(string rule) =>
         """
         {"mods":[
