@@ -431,11 +431,6 @@ internal sealed class SyntheticStateDatabase : IDisposable
         return body.Length;
     }
 
-    /// <remarks>
-    /// A real encoder rather than a literal-only one: back-references are what
-    /// a manager's own tables are full of, and a fixture that never emitted one
-    /// would leave the copy arms of the decompressor unexercised.
-    /// </remarks>
     private static byte[] Compress(byte[] data)
     {
         var output = new List<byte>();

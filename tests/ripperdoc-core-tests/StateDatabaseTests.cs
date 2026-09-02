@@ -1,3 +1,4 @@
+using System.Text;
 using Ripperdoc.Core.ManagerState;
 using Xunit;
 
@@ -304,6 +305,30 @@ public sealed class StateDatabaseTests
         Assert.DoesNotContain(
             state.FilesRead,
             name => name.StartsWith("MANIFEST", StringComparison.Ordinal));
+    }
+
+    public static TheoryData<string, byte[]> CopyTags => new()
+    {
+        // literal "abcd", then a four-byte copy from four back, spelled three
+        // ways: a one-byte offset, a two-byte offset, and a four-byte one.
+        { "copy tag 1", [0x08, 0x0C, 0x61, 0x62, 0x63, 0x64, 0x01, 0x04] },
+        { "copy tag 2", [0x08, 0x0C, 0x61, 0x62, 0x63, 0x64, 0x0E, 0x04, 0x00] },
+        { "copy tag 3", [0x08, 0x0C, 0x61, 0x62, 0x63, 0x64, 0x0F, 0x04, 0x00, 0x00, 0x00] },
+    };
+
+    /// <summary>
+    /// All three copy tags decode, which is what the modelled subset claims of
+    /// them.
+    /// </summary>
+    /// <remarks>
+    /// Authored byte by byte because the fixture's own encoder emits only the
+    /// two-byte form, so the other two arms have no fixture that reaches them.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(CopyTags))]
+    public void EveryModelledCopyTagDecodes(string tag, byte[] block)
+    {
+        Assert.Equal("abcdabcd", Encoding.UTF8.GetString(Snappy.Decompress(block, tag)));
     }
 
     private static void Nothing(
