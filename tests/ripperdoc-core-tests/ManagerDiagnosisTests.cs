@@ -253,6 +253,7 @@ public sealed class ManagerDiagnosisTests : IDisposable
         { "batch key length", "names a key of" },
         { "version edit length", "names a value of" },
         { "decompressed length", "decompressed bytes" },
+        { "rule that is not an object", "String at position 0" },
     };
 
     /// <summary>
@@ -268,7 +269,7 @@ public sealed class ManagerDiagnosisTests : IDisposable
     [MemberData(nameof(OutsideTheModelledSubset))]
     public void InputOutsideTheModelledSubsetNamesTheStateAsAHomeNotRead(string marker, string saying)
     {
-        using var scratch = State();
+        using var scratch = State(stateRule: marker == "rule that is not an object" ? "\"after\"" : null);
         Record(("mods/a.archive", "mod-a"));
 
         switch (marker)
@@ -292,6 +293,26 @@ public sealed class ManagerDiagnosisTests : IDisposable
             diagnosis.Ordering.HomesNotRead,
             home => home.Reason.Contains(saying, StringComparison.Ordinal));
         Assert.NotNull(diagnosis.Record);
+    }
+
+    /// <summary>
+    /// A manifest declaring a rule that is not an object names the manifest as
+    /// a home not read, with the state's own reading intact beside it.
+    /// </summary>
+    [Fact]
+    public void AManifestRuleThatIsNotAnObjectNamesTheManifestAsAHomeNotRead()
+    {
+        using var scratch = State();
+        Manifest("42");
+
+        var diagnosis = ManagerDiagnosis.Of(scratch.Write(), Game, gameDirectory);
+
+        var unread = Assert.Single(diagnosis.Ordering.HomesNotRead);
+
+        Assert.Contains(Container, unread.Home, StringComparison.Ordinal);
+        Assert.Contains("Number at position 0", unread.Reason, StringComparison.Ordinal);
+        Assert.NotNull(diagnosis.State);
+        Assert.Single(diagnosis.Ordering.HomesRead);
     }
 
     [Fact]

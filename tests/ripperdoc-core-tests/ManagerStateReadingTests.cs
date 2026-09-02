@@ -158,6 +158,25 @@ public sealed class ManagerStateReadingTests
             Assert.Single(reading.Rules.Rules));
     }
 
+    /// <summary>
+    /// A rule that is not an object is refused by name, as every other
+    /// unmodelled shape in the state is.
+    /// </summary>
+    /// <remarks>
+    /// Its neighbour is the check above it, whose rules are objects and read.
+    /// </remarks>
+    [Fact]
+    public void ARuleThatIsNotAnObjectIsRefusedByName()
+    {
+        using var scratch = Bench(rulesOfA: """[{"type":"after","reference":{"id":"mod-b"}},"after"]""");
+
+        var refusal = Assert.Throws<StateReadException>(
+            () => ManagerStateReading.Of(scratch.Write(), Game));
+
+        Assert.Contains("String at position 1", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("mod-a###rules", refusal.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void AWantedFlagThatIsNotTrueOrFalseIsRefusedByName()
     {
@@ -288,12 +307,16 @@ public sealed class ManagerStateReadingTests
         bool recordInstallationPathOfC = true,
         string archiveIdOfC = "archive-of-c",
         string enabledOfA = "true",
-        bool referenceByArchive = false)
+        bool referenceByArchive = false,
+        string? rulesOfA = null)
     {
         var scratch = new SyntheticStateDatabase();
         var reference = referenceByArchive
             ? """{"archiveId":"archive-of-b"}"""
             : """{"id":"mod-b"}""";
+
+        rulesOfA ??= $$"""[{"type":"after","reference":{{reference}}},"""
+            + """{"type":"requires","reference":{"logicalFileName":"something not here"}}]""";
 
         scratch.Table(
             ($"persistent###profiles###{Active}###gameId", $"\"{Game}\""),
@@ -308,9 +331,7 @@ public sealed class ManagerStateReadingTests
             ($"persistent###mods###{Game}###mod-a###archiveId", "\"archive-of-a\""),
             ($"persistent###mods###{Game}###mod-a###attributes###fileMD5", "\"hash-of-a\""),
             ($"persistent###mods###{Game}###mod-a###attributes###fileId", "101"),
-            ($"persistent###mods###{Game}###mod-a###rules",
-                $$"""[{"type":"after","reference":{{reference}}},"""
-                + """{"type":"requires","reference":{"logicalFileName":"something not here"}}]"""),
+            ($"persistent###mods###{Game}###mod-a###rules", rulesOfA),
             ($"persistent###mods###{Game}###mod-b###installationPath", "\"mod-b\""),
             ($"persistent###mods###{Game}###mod-b###type", "\"\""),
             ($"persistent###mods###{Game}###mod-b###archiveId", "\"archive-of-b\""),

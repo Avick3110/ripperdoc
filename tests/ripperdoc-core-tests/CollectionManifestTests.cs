@@ -208,6 +208,26 @@ public sealed class CollectionManifestTests : IDisposable
         Assert.Empty(manifest.SpellingsNamingMoreThanOneDeclaredMod);
     }
 
+    /// <summary>
+    /// A declared rule that is not an object is refused by name rather than
+    /// asked for a side it cannot have.
+    /// </summary>
+    /// <remarks>
+    /// Its neighbours are the checks above, whose rules are objects and read.
+    /// </remarks>
+    [Fact]
+    public void ADeclaredRuleThatIsNotAnObjectIsRefusedByName()
+    {
+        using var scratch = State();
+        var reading = ManagerStateReading.Of(scratch.Write(), Game)!;
+        var path = Written(Manifest("42"));
+
+        var refusal = Assert.Throws<StateReadException>(() => CollectionManifest.In(path, reading));
+
+        Assert.Contains("Number at position 0", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains($"'{path}'", refusal.Message, StringComparison.Ordinal);
+    }
+
     private static string Manifest(string rule) =>
         """
         {"mods":[
