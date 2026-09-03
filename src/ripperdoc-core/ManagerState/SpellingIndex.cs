@@ -8,17 +8,24 @@ namespace Ripperdoc.Core.ManagerState;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A spelling two mods answer to identifies neither. Taking whichever was read
-/// first attributes a rule to a mod on the strength of an ordering, so a
-/// contested spelling is dropped from the index and named in
-/// <see cref="Contested" />, where a caller can see that it decided nothing.
+/// A spelling two of <typeparamref name="T" /> answer to identifies neither.
+/// Taking whichever was read first attributes a rule to a mod on the strength
+/// of an ordering, so a contested spelling is dropped from the index and named
+/// in <see cref="Contested" />, where a caller can see that it decided nothing.
 /// </para>
 /// <para>
 /// One place, so that the rule is a property of the code rather than a habit
 /// each site keeps.
 /// </para>
 /// </remarks>
-/// <typeparam name="T">What a spelling names.</typeparam>
+/// <typeparam name="T">
+/// What a spelling names, and the identity a contest is decided on: two
+/// spellings that name one value of it are one answer, and two values are a
+/// contest whatever the two stand for further out. A manager's reading names a
+/// mod id, so a mod recorded twice under one spelling is not a contest; a
+/// manifest names a declared mod's position, so one mod declared twice is two
+/// positions and its spellings are contested.
+/// </typeparam>
 internal sealed class SpellingIndex<T>
 {
     private readonly Dictionary<string, T> named;

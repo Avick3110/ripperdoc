@@ -112,6 +112,14 @@ public sealed class SpellingIndexTests
     /// One thing named twice under one spelling resolves to itself however many
     /// times it is written down, so it is not a contest.
     /// </summary>
+    /// <remarks>
+    /// One thing is one value of the type a spelling names, which is what the
+    /// index compares and is not always the mod a caller has in mind. Here it is
+    /// a mod id, which a state can record twice. Where it is a declared mod's
+    /// position in a manifest, one mod declared twice is two positions, and the
+    /// spellings both entries carry are contested rather than resolved to that
+    /// mod.
+    /// </remarks>
     [Fact]
     public void OneThingAnsweringTwiceToItsOwnSpellingIsNotAContest()
     {
