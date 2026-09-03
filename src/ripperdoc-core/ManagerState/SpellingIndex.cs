@@ -93,9 +93,15 @@ internal sealed class SpellingIndex<T>
     /// <param name="spelling">The spelling, as a document wrote it.</param>
     /// <param name="names">What it names.</param>
     /// <returns>Whether one thing answers to it.</returns>
+    /// <remarks>
+    /// Null is what a document that carries no such field spells, and it is
+    /// answered rather than refused: a caller asks with what it read, and making
+    /// an absent field an error would put the reading of one document at the
+    /// mercy of a field another one happens to declare.
+    /// </remarks>
     internal bool Names(string? spelling, [MaybeNullWhen(false)] out T names)
     {
-        if (spelling is { Length: > 0 } written)
+        if (spelling is { } written)
         {
             return named.TryGetValue(written, out names);
         }

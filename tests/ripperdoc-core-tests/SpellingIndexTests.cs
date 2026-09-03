@@ -94,10 +94,12 @@ public sealed class SpellingIndexTests
     public void ASpellingNoDocumentWroteDownNamesNothing(string? unwritten)
     {
         var index = SpellingIndex<string>.Of(
-            "logicalFilename", [(unwritten, "mod-a"), (unwritten, "mod-b")]);
+            "logicalFilename", [(unwritten, "mod-a"), ("written-down", "mod-b")]);
 
         Assert.False(index.Names(unwritten, out _));
         Assert.Empty(index.Contested);
+        Assert.True(index.Names("written-down", out var named));
+        Assert.Equal("mod-b", named);
     }
 
     /// <summary>
