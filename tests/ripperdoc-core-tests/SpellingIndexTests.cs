@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Ripperdoc.Core.ManagerState;
 using Xunit;
 
@@ -18,17 +19,18 @@ public sealed class SpellingIndexTests
     /// A list kept by hand is the shape of the thing this primitive closes - a
     /// site nobody pointed at, passing every check while carrying the defect -
     /// so a reader added to that namespace is held without anyone remembering
-    /// to add it. Two kinds are out. The primitive is out because being the one
-    /// place an index is made is what the rest of this holds it to. Nested
-    /// types are out because a nested type is part of its declaring type's
-    /// implementation rather than a reader in its own right - which is also why
-    /// a compiler-generated closure, a member's locals declared as fields, does
-    /// not count as a declaration here.
+    /// to add it. A nested type is one of them: it is where a declaring type
+    /// keeps what it does not hand out, which is where an index by spelling has
+    /// somewhere to sit unread. Two kinds are out. The primitive is out because
+    /// being the one place an index is made is what the rest of this holds it
+    /// to. A compiler-generated type is out because a closure, a member's own
+    /// locals declared as fields, is not a declaration anybody wrote.
     /// </remarks>
     private static readonly Type[] Readers =
         [.. typeof(ManagerStateReading).Assembly.GetTypes()
             .Where(type => type.Namespace == typeof(ManagerStateReading).Namespace)
-            .Where(type => !type.IsNested && type != typeof(SpellingIndex<>))
+            .Where(type => !type.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false)
+                && type != typeof(SpellingIndex<>))
             .OrderBy(type => type.Name, StringComparer.Ordinal)];
 
     private const BindingFlags Declared =
@@ -56,6 +58,26 @@ public sealed class SpellingIndexTests
         $"{nameof(StateDatabase)}.get_{nameof(StateDatabase.Values)} returns",
         $"{nameof(StateDatabase)}.values",
     ];
+
+    /// <summary>
+    /// The other member the sweep names rather than flags: the map the
+    /// manager's reading keys its own mod records by.
+    /// </summary>
+    /// <remarks>
+    /// An id is the identity the manager assigned a mod, and one id is one
+    /// record; a spelling is what some document wrote about a file and can name
+    /// two mods at once. Named by its declaring type and member, so a second
+    /// string-keyed map on the same type is still flagged. The type is private
+    /// to its declaring one and cannot be spelled here in any other way; what
+    /// holds the name honest is the sweep asserting the site still carries a
+    /// map, so an exemption that outlived its member is a failure rather than a
+    /// silence.
+    /// </remarks>
+    private static readonly string[] TheManagersOwnRecords = ["KnownMods.byId"];
+
+    /// <summary>Every member named rather than flagged, in one list.</summary>
+    private static readonly string[] NamedRatherThanFlagged =
+        [.. TheDatabasesOwnValues.Concat(TheManagersOwnRecords).Order(StringComparer.Ordinal)];
 
     /// <summary>
     /// A spelling two things answer to is in neither the index nor an answer,
@@ -193,21 +215,27 @@ public sealed class SpellingIndexTests
     /// to.
     /// </summary>
     /// <remarks>
-    /// The sweep reads signatures - fields, properties, and the parameters and
-    /// return types of constructors and methods - and flags a string-keyed map
-    /// of any value shape, unwrapping arrays and generic arguments to find one.
-    /// Three things stay outside it, and all are stated rather than left to be
-    /// discovered: a map that never leaves the member that built it, a map a
-    /// nested type declares, which is its declaring type's implementation
-    /// rather than anything that type's own signatures hand on, and the one
-    /// member named in <see cref="TheDatabasesOwnValues" />.
+    /// What this holds, stated rather than left to be discovered: a dictionary
+    /// shape - <c>IDictionary</c> or <c>IReadOnlyDictionary</c> keyed by string,
+    /// and the types implementing either, reached through arrays and generic
+    /// arguments - in a signature declared by a type of the
+    /// <c>Ripperdoc.Core.ManagerState</c> namespace, nested types included.
+    /// Signatures are fields, properties, and the parameters and return types of
+    /// constructors and methods. The members in
+    /// <see cref="NamedRatherThanFlagged" /> are named instead.
     /// <para>
-    /// What this holds is the type an index has, never what a site feeds
-    /// <see cref="SpellingIndex{T}.Of" />: a site that collapsed its own
-    /// spellings first and handed over what survived would pass this sweep
-    /// carrying the defect. The contested arm each reader ships through the
-    /// member that answers with its index is the floor under that, and this
-    /// sweep is not a substitute for one.
+    /// What is outside it. An association shape that is neither of those two
+    /// interfaces - <c>ILookup</c> keyed by string is the one measured, and it
+    /// is not flagged. A map a member builds and consumes without handing on,
+    /// which is in no signature to read: what this holds is the type an index
+    /// has, never what a site feeds <see cref="SpellingIndex{T}.Of" />, so a
+    /// site that collapsed its own spellings first and handed over what survived
+    /// would pass carrying the defect. And every other namespace - the
+    /// <c>Diagnosis</c> lane's <c>DeploymentRecord.ClaimsByPath</c> is a public
+    /// map from a spelling to the mod that answers to it, outside this namespace
+    /// and deliberately not migrated. The arm each reader ships end to end
+    /// through the member that answers with its index is the floor under all of
+    /// that, and this sweep is not a substitute for one.
     /// </para>
     /// </remarks>
     [Fact]
@@ -219,7 +247,7 @@ public sealed class SpellingIndexTests
             .ToList();
 
         var carried = found
-            .Where(where => !TheDatabasesOwnValues.Contains(where, StringComparer.Ordinal))
+            .Where(where => !NamedRatherThanFlagged.Contains(where, StringComparer.Ordinal))
             .Order(StringComparer.Ordinal)
             .ToList();
 
@@ -230,8 +258,8 @@ public sealed class SpellingIndexTests
             + string.Join(", ", carried));
 
         Assert.Equal(
-            TheDatabasesOwnValues.Order(StringComparer.Ordinal),
-            found.Where(where => TheDatabasesOwnValues.Contains(where, StringComparer.Ordinal))
+            NamedRatherThanFlagged,
+            found.Where(where => NamedRatherThanFlagged.Contains(where, StringComparer.Ordinal))
                 .Order(StringComparer.Ordinal));
     }
 
