@@ -292,9 +292,8 @@ public sealed class CollectionManifest
         Index(mods, field, i => Text(mods[i], "source", field));
 
     /// <remarks>
-    /// Each declared mod is indexed by its position, so two entries declaring
-    /// one spelling contest it however they were declared - the identity a
-    /// position resolves to is the manager's, and it is joined afterwards.
+    /// Each declared mod is indexed by its position: the identity a position
+    /// resolves to is the manager's, and it is joined afterwards.
     /// </remarks>
     private static SpellingIndex<int> Index(
         List<JsonElement> mods, string field, Func<int, string?> spelling) =>
