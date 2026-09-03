@@ -160,6 +160,10 @@ public sealed class SpellingIndexTests
     [Fact]
     public void TheSweepReadsSignaturesInBothReaders()
     {
+        Assert.Equal(
+            [nameof(CollectionManifest), nameof(ManagerStateReading)],
+            Readers.Select(reader => reader.Name).Order(StringComparer.Ordinal));
+
         Assert.All(
             Readers,
             reader => Assert.NotEmpty(Signatures(reader)));
