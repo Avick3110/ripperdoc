@@ -210,6 +210,80 @@ public sealed class CollectionManifestTests : IDisposable
     }
 
     /// <summary>
+    /// A hash two declared mods answer to resolves to neither, and is named
+    /// under the field that spelled it.
+    /// </summary>
+    /// <remarks>
+    /// The second rule joins on a spelling nothing contests, so the first being
+    /// residue is the collision and not a manifest the reader could not read.
+    /// </remarks>
+    [Fact]
+    public void AHashTwoDeclaredModsAnswerToResolvesToNeither()
+    {
+        using var scratch = State();
+        var reading = ManagerStateReading.Of(scratch.Write(), Game)!;
+        var path = Written(
+            """
+            {"mods":[
+              {"name":"A","source":{"md5":"shared-md5","logicalFilename":"a.zip","fileId":101}},
+              {"name":"B","source":{"md5":"shared-md5","logicalFilename":"b.zip","fileId":102}}],
+             "modRules":[
+            {"type":"before",
+             "source":{"fileMD5":"shared-md5","versionMatch":"*"},
+             "reference":{"logicalFileName":"b.zip","versionMatch":"*"}},
+            {"type":"after",
+             "source":{"logicalFileName":"a.zip","versionMatch":"*"},
+             "reference":{"logicalFileName":"b.zip","versionMatch":"*"}}]}
+            """);
+
+        var manifest = CollectionManifest.In(path, reading)!;
+
+        Assert.Contains("md5 'shared-md5'", manifest.SpellingsNamingMoreThanOneDeclaredMod);
+        Assert.Equal(
+            new OrderingRule("mod-a", "mod-b", OrderingRuleKind.After),
+            Assert.Single(manifest.Rules.Rules));
+        Assert.Equal([new UnresolvedRules("before", 1)], manifest.RulesNotResolved);
+    }
+
+    /// <summary>
+    /// A display name two declared mods answer to resolves to neither, and is
+    /// named under the field that spelled it.
+    /// </summary>
+    /// <remarks>
+    /// The display name is the last of the joins to be tried, and a side that
+    /// reaches it has already missed the two more specific ones - so it is the
+    /// join where a collision is likeliest and the one a check is cheapest to
+    /// leave out of.
+    /// </remarks>
+    [Fact]
+    public void ADisplayNameTwoDeclaredModsAnswerToResolvesToNeither()
+    {
+        using var scratch = State();
+        var reading = ManagerStateReading.Of(scratch.Write(), Game)!;
+        var path = Written(
+            """
+            {"mods":[
+              {"name":"Shared","source":{"md5":"hash-of-a","logicalFilename":"a.zip","fileId":101}},
+              {"name":"Shared","source":{"md5":"hash-of-b","logicalFilename":"b.zip","fileId":102}}],
+             "modRules":[
+            {"type":"before",
+             "source":{"logicalFileName":"Shared","versionMatch":"*"},
+             "reference":{"fileMD5":"hash-of-b","versionMatch":"*"}},
+            {"type":"after",
+             "source":{"fileMD5":"hash-of-a","versionMatch":"*"},
+             "reference":{"fileMD5":"hash-of-b","versionMatch":"*"}}]}
+            """);
+
+        var manifest = CollectionManifest.In(path, reading)!;
+
+        Assert.Contains("name 'Shared'", manifest.SpellingsNamingMoreThanOneDeclaredMod);
+        Assert.Equal(
+            new OrderingRule("mod-a", "mod-b", OrderingRuleKind.After),
+            Assert.Single(manifest.Rules.Rules));
+        Assert.Equal([new UnresolvedRules("before", 1)], manifest.RulesNotResolved);
+    }
+
+    /// <summary>
     /// A declared rule that is not an object is refused by name rather than
     /// asked for a side it cannot have.
     /// </summary>

@@ -276,6 +276,27 @@ public sealed class ManagerStateReadingTests
         Assert.Equal("mod-a", reading.Identify("shared-hash", null));
     }
 
+    /// <summary>
+    /// A file id two installed mods answer to identifies neither, and is named
+    /// under the field that spelled it.
+    /// </summary>
+    /// <remarks>
+    /// Its neighbour is the hash pair above. Both indexes are built the same
+    /// way, and an index that goes through the primitive is a different claim
+    /// from an index reported under the same name as one that does.
+    /// </remarks>
+    [Fact]
+    public void AFileIdTwoInstalledModsAnswerToIdentifiesNeither()
+    {
+        using var scratch = Bench(fileIdOfB: "101");
+
+        var reading = ManagerStateReading.Of(scratch.Write(), Game)!;
+
+        Assert.Contains("fileId '101'", reading.FileSpellingsNamingMoreThanOneMod);
+        Assert.Null(reading.Identify(null, "101"));
+        Assert.Equal("mod-a", reading.Identify("hash-of-a", null));
+    }
+
     private static SyntheticStateDatabase Contested(string hashOfB)
     {
         var scratch = new SyntheticStateDatabase();
@@ -329,6 +350,7 @@ public sealed class ManagerStateReadingTests
         string archiveIdOfC = "archive-of-c",
         string enabledOfA = "true",
         string fileHashOfA = "\"hash-of-a\"",
+        string fileIdOfB = "102",
         bool referenceByArchive = false,
         string? rulesOfA = null)
     {
@@ -358,7 +380,7 @@ public sealed class ManagerStateReadingTests
             ($"persistent###mods###{Game}###mod-b###type", "\"\""),
             ($"persistent###mods###{Game}###mod-b###archiveId", "\"archive-of-b\""),
             ($"persistent###mods###{Game}###mod-b###attributes###fileMD5", "\"hash-of-b\""),
-            ($"persistent###mods###{Game}###mod-b###attributes###fileId", "102"),
+            ($"persistent###mods###{Game}###mod-b###attributes###fileId", fileIdOfB),
             ($"persistent###mods###{Game}###mod-c###installationPath", $"\"{installationPathOfC}\""),
             ($"persistent###mods###{Game}###mod-c###type", "\"collection\""),
             ($"persistent###mods###{Game}###mod-c###archiveId", $"\"{archiveIdOfC}\""),
