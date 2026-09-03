@@ -11,12 +11,23 @@ namespace Ripperdoc.Core.Tests;
 public sealed class SpellingIndexTests
 {
     /// <summary>
-    /// The readers this holds. The rule is theirs; a site in either of them
-    /// that built its own index would be the fourth instance of the class this
-    /// primitive closes.
+    /// The readers this holds: everything the manager-state namespace declares,
+    /// read from the assembly rather than listed here.
     /// </summary>
+    /// <remarks>
+    /// A list kept by hand is the shape of the thing this primitive closes - a
+    /// site nobody pointed at, passing every check while carrying the defect -
+    /// so a reader added to that namespace is held without anyone remembering
+    /// to add it. Two kinds are out. The primitive is out because being the one
+    /// place an index is made is what the rest of this holds it to. Nested
+    /// types are out because a compiler-generated closure declares a member's
+    /// locals as its own fields, and a local is outside this sweep either way.
+    /// </remarks>
     private static readonly Type[] Readers =
-        [typeof(ManagerStateReading), typeof(CollectionManifest)];
+        [.. typeof(ManagerStateReading).Assembly.GetTypes()
+            .Where(type => type.Namespace == typeof(ManagerStateReading).Namespace)
+            .Where(type => !type.IsNested && type != typeof(SpellingIndex<>))
+            .OrderBy(type => type.Name, StringComparer.Ordinal)];
 
     private const BindingFlags Declared =
         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
@@ -188,22 +199,29 @@ public sealed class SpellingIndexTests
     }
 
     /// <summary>
-    /// The sweep reads what the two readers actually declare, so a reader that
-    /// declared nothing would pass it having read nothing.
+    /// The sweep reads what the readers actually declare, so a set that
+    /// resolved to nothing, or to types declaring nothing, would pass it having
+    /// read nothing.
     /// </summary>
+    /// <remarks>
+    /// The two named here are the readers the primitive was extracted from. A
+    /// derived set that stopped resolving them would be a sweep still reporting
+    /// green over a namespace it had lost, so they are held by name as well as
+    /// derived.
+    /// </remarks>
     [Fact]
-    public void TheSweepReadsSignaturesInBothReaders()
+    public void TheSweepReadsSignaturesInEveryReaderTheNamespaceDeclares()
     {
-        Assert.Equal(
-            [nameof(CollectionManifest), nameof(ManagerStateReading)],
-            Readers.Select(reader => reader.Name).Order(StringComparer.Ordinal));
+        Type[] named = [typeof(CollectionManifest), typeof(ManagerStateReading)];
+
+        Assert.All(named, reader => Assert.Contains(reader, Readers));
 
         Assert.All(
             Readers,
             reader => Assert.NotEmpty(Signatures(reader)));
 
         Assert.All(
-            Readers,
+            named,
             reader => Assert.Contains(
                 Signatures(reader),
                 carrier => carrier.Type.IsGenericType
