@@ -284,6 +284,46 @@ public sealed class CollectionManifestTests : IDisposable
     }
 
     /// <summary>
+    /// A list declaring one mod twice contests every spelling that mod carries,
+    /// so a rule naming it is residue.
+    /// </summary>
+    /// <remarks>
+    /// A declared mod is indexed by its position in the list, and two entries
+    /// are two positions however identically they are written - so the two
+    /// spell the same hash, the same file name and the same display name as each
+    /// other and contest all three. The rule joining those same two mods is the
+    /// one <see cref="ARuleSideNamingAFileBecomesARuleAboutTheManagersOwnModIds" />
+    /// reads, so what changes here is the duplicate declaration.
+    /// </remarks>
+    [Fact]
+    public void AListDeclaringOneModTwiceContestsThatModsSpellings()
+    {
+        using var scratch = State();
+        var reading = ManagerStateReading.Of(scratch.Write(), Game)!;
+        var path = Written(
+            """
+            {"mods":[
+              {"name":"A","source":{"md5":"hash-of-a","logicalFilename":"a.zip","fileId":101}},
+              {"name":"A","source":{"md5":"hash-of-a","logicalFilename":"a.zip","fileId":101}},
+              {"name":"B","source":{"md5":"hash-of-b","logicalFilename":"b.zip","fileId":102}}],
+             "modRules":[
+            {"type":"before",
+             "source":{"fileMD5":"hash-of-a","logicalFileName":"a.zip","versionMatch":"*"},
+             "reference":{"fileMD5":"hash-of-b","logicalFileName":"b.zip","versionMatch":"*"}}]}
+            """);
+
+        var manifest = CollectionManifest.In(path, reading)!;
+
+        Assert.Equal(
+            ["logicalFilename 'a.zip'", "md5 'hash-of-a'", "name 'A'"],
+            manifest.SpellingsNamingMoreThanOneDeclaredMod);
+        Assert.Empty(manifest.Rules.Rules);
+        Assert.Equal([new UnresolvedRules("before", 1)], manifest.RulesNotResolved);
+        Assert.Equal(3, manifest.DeclaredMods);
+        Assert.Equal(0, manifest.DeclaredModsNotInTheState);
+    }
+
+    /// <summary>
     /// A declared rule that is not an object is refused by name rather than
     /// asked for a side it cannot have.
     /// </summary>
