@@ -20,8 +20,10 @@ public sealed class SpellingIndexTests
     /// so a reader added to that namespace is held without anyone remembering
     /// to add it. Two kinds are out. The primitive is out because being the one
     /// place an index is made is what the rest of this holds it to. Nested
-    /// types are out because a compiler-generated closure declares a member's
-    /// locals as its own fields, and a local is outside this sweep either way.
+    /// types are out because a nested type is part of its declaring type's
+    /// implementation rather than a reader in its own right - which is also why
+    /// a compiler-generated closure, a member's locals declared as fields, does
+    /// not count as a declaration here.
     /// </remarks>
     private static readonly Type[] Readers =
         [.. typeof(ManagerStateReading).Assembly.GetTypes()
@@ -170,9 +172,12 @@ public sealed class SpellingIndexTests
     /// </summary>
     /// <remarks>
     /// The sweep reads signatures - fields, properties, and the parameters and
-    /// return types of constructors and methods. A dictionary that never leaves
-    /// the member that built it is outside it, and so is a value shape other
-    /// than the two an index by spelling has taken here.
+    /// return types of constructors and methods - and flags a string-keyed map
+    /// of any value shape, unwrapping arrays and generic arguments to find one.
+    /// Two things stay outside it, and both are stated rather than left to be
+    /// discovered: a map that never leaves the member that built it, and a map
+    /// a nested type declares, which is its declaring type's implementation
+    /// rather than anything that type's own signatures hand on.
     /// <para>
     /// What this holds is the type an index has, never what a site feeds
     /// <see cref="SpellingIndex{T}.Of" />: a site that collapsed its own
@@ -228,28 +233,33 @@ public sealed class SpellingIndexTests
                     && carrier.Type.GetGenericTypeDefinition() == typeof(SpellingIndex<>)));
     }
 
-    private static bool IsAPlainIndexBySpelling(Type type)
+    /// <remarks>
+    /// Any string-keyed map, whatever it names and however it is wrapped. A
+    /// vocabulary of shapes kept by hand is a list the next shape is not on:
+    /// the concrete class, the frozen one, an array of them and a list of them
+    /// are all the same thing to a site that wants to hand one on, and so is a
+    /// map to any type at all.
+    /// </remarks>
+    private static bool IsAPlainIndexBySpelling(Type type) =>
+        Unwrapped(type).Any(KeyedBySpelling);
+
+    private static IEnumerable<Type> Unwrapped(Type type)
     {
-        if (!type.IsGenericType)
+        yield return type;
+
+        Type[] inside = type.IsArray ? [type.GetElementType()!] : type.GetGenericArguments();
+
+        foreach (var held in inside.SelectMany(Unwrapped))
         {
-            return false;
+            yield return held;
         }
-
-        var shape = type.GetGenericTypeDefinition();
-
-        if (shape != typeof(Dictionary<,>)
-            && shape != typeof(SortedDictionary<,>)
-            && shape != typeof(IDictionary<,>)
-            && shape != typeof(IReadOnlyDictionary<,>))
-        {
-            return false;
-        }
-
-        var arguments = type.GetGenericArguments();
-
-        return arguments[0] == typeof(string)
-            && (arguments[1] == typeof(string) || arguments[1] == typeof(int));
     }
+
+    private static bool KeyedBySpelling(Type type) =>
+        type.GetInterfaces().Append(type).Any(face => face.IsGenericType
+            && (face.GetGenericTypeDefinition() == typeof(IDictionary<,>)
+                || face.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>))
+            && face.GetGenericArguments()[0] == typeof(string));
 
     private static IReadOnlyList<(string Where, Type Type)> Signatures(Type reader)
     {
