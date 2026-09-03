@@ -15,9 +15,7 @@ namespace Ripperdoc.Core.ManagerState;
 /// </para>
 /// <para>
 /// One place, so that the rule is a property of the code rather than a habit
-/// each site keeps. The index is a type only <see cref="Of" /> makes, and the
-/// members that read one take it rather than a dictionary, so a site that built
-/// its own index by hand would have nothing to hand it to.
+/// each site keeps.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">What a spelling names.</typeparam>
