@@ -142,6 +142,12 @@ public sealed class SpellingIndexTests
             index.GetMethods(Declared)
                 .Where(member => member.ReturnType == index)
                 .Select(member => member.Name)
+                .Concat(index.GetFields(Declared)
+                    .Where(field => field.FieldType == index)
+                    .Select(field => field.Name))
+                .Concat(index.GetProperties(Declared)
+                    .Where(property => property.PropertyType == index)
+                    .Select(property => property.Name))
                 .Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal));
     }
