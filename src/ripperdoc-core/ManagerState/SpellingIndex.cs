@@ -47,7 +47,10 @@ internal sealed class SpellingIndex<T>
     /// <exception cref="ArgumentNullException">Either argument is null.</exception>
     /// <remarks>
     /// A spelling that is absent or empty is one no document wrote down, and it
-    /// is neither in the index nor a contest.
+    /// is neither in the index nor a contest. Spellings are compared ordinally,
+    /// because what a document wrote is the identity: folding case would let one
+    /// document's spelling answer for another's, which is the attribution this
+    /// type exists to refuse.
     /// </remarks>
     internal static SpellingIndex<T> Of(
         string field, IEnumerable<(string? Spelling, T Names)> spellings)

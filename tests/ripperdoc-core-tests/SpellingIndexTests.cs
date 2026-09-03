@@ -67,6 +67,24 @@ public sealed class SpellingIndexTests
     }
 
     /// <summary>
+    /// Two spellings differing only in case are two spellings, so neither
+    /// contests the other and neither answers for the other.
+    /// </summary>
+    [Fact]
+    public void SpellingsDifferingOnlyInCaseAreTwoSpellings()
+    {
+        var index = SpellingIndex<string>.Of(
+            "fileMD5", [("Shared", "mod-a"), ("shared", "mod-b")]);
+
+        Assert.Empty(index.Contested);
+        Assert.True(index.Names("Shared", out var written));
+        Assert.Equal("mod-a", written);
+        Assert.True(index.Names("shared", out var lowered));
+        Assert.Equal("mod-b", lowered);
+        Assert.False(index.Names("SHARED", out _));
+    }
+
+    /// <summary>
     /// A spelling no document wrote down is neither in the index nor a contest,
     /// and asking with one is answered rather than refused.
     /// </summary>
