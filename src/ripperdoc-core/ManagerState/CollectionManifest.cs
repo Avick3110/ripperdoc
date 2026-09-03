@@ -204,10 +204,9 @@ public sealed class CollectionManifest
         }
 
         var mods = declared.EnumerateArray().ToList();
-        var ambiguous = new List<string>();
-        var byHash = Index(mods, "md5", ambiguous);
-        var byLogical = Index(mods, "logicalFilename", ambiguous);
-        var byName = Index(mods, "name", ambiguous, i => Text(mods[i], "name"));
+        var byHash = Index(mods, "md5");
+        var byLogical = Index(mods, "logicalFilename");
+        var byName = Index(mods, "name", i => Text(mods[i], "name"));
 
         var identities = mods.Select(mod => state.Identify(
             Text(mod, "source", "md5"), Text(mod, "source", "fileId"))).ToList();
@@ -239,7 +238,10 @@ public sealed class CollectionManifest
                 .. missed.OrderBy(pair => pair.Key, StringComparer.Ordinal)
                     .Select(pair => new UnresolvedRules(pair.Key, pair.Value)),
             ],
-            [.. ambiguous.Order(StringComparer.Ordinal)]);
+            [.. byHash.Contested
+                .Concat(byLogical.Contested)
+                .Concat(byName.Contested)
+                .Order(StringComparer.Ordinal)]);
     }
 
     private static IReadOnlyList<JsonElement> Declared(string path, JsonElement root) =>
@@ -256,9 +258,9 @@ public sealed class CollectionManifest
     private static string? Resolve(
         JsonElement rule,
         string side,
-        Dictionary<string, int> byHash,
-        Dictionary<string, int> byLogical,
-        Dictionary<string, int> byName,
+        SpellingIndex<int> byHash,
+        SpellingIndex<int> byLogical,
+        SpellingIndex<int> byName,
         List<string?> identities)
     {
         if (!rule.TryGetProperty(side, out var end) || end.ValueKind != JsonValueKind.Object)
@@ -268,7 +270,7 @@ public sealed class CollectionManifest
 
         int? at = null;
 
-        foreach (var (index, value) in new (Dictionary<string, int> Index, string? Value)[]
+        foreach (var (index, value) in new (SpellingIndex<int> Index, string? Value)[]
         {
             (byHash, Text(end, "fileMD5")),
             (byLogical, Text(end, "logicalFileName")),
@@ -276,7 +278,7 @@ public sealed class CollectionManifest
             (byLogical, Text(end, "fileExpression")),
         })
         {
-            if (value is { Length: > 0 } spelling && index.TryGetValue(spelling, out var hit))
+            if (index.Names(value, out var hit))
             {
                 at = hit;
                 break;
@@ -286,45 +288,18 @@ public sealed class CollectionManifest
         return at is { } found ? identities[found] : null;
     }
 
-    private static Dictionary<string, int> Index(
-        List<JsonElement> mods, string field, List<string> ambiguous) =>
-        Index(mods, field, ambiguous, i => Text(mods[i], "source", field));
+    private static SpellingIndex<int> Index(List<JsonElement> mods, string field) =>
+        Index(mods, field, i => Text(mods[i], "source", field));
 
     /// <remarks>
-    /// A spelling two declared mods answer to is dropped rather than resolved
-    /// to whichever the list happened to declare first. Taking the first
-    /// attributes a rule to a mod on the strength of an array order, and an
-    /// edge attributed that way can invent a cycle or hide one.
+    /// Each declared mod is indexed by its position, so two entries declaring
+    /// one spelling contest it however they were declared - the identity a
+    /// position resolves to is the manager's, and it is joined afterwards.
     /// </remarks>
-    private static Dictionary<string, int> Index(
-        List<JsonElement> mods, string field, List<string> ambiguous, Func<int, string?> spelling)
-    {
-        var index = new Dictionary<string, int>(StringComparer.Ordinal);
-        var contested = new HashSet<string>(StringComparer.Ordinal);
-
-        for (var i = 0; i < mods.Count; i++)
-        {
-            if (spelling(i) is not { Length: > 0 } value)
-            {
-                continue;
-            }
-
-            if (index.TryGetValue(value, out var held) && held != i)
-            {
-                contested.Add(value);
-            }
-
-            index[value] = i;
-        }
-
-        foreach (var value in contested)
-        {
-            index.Remove(value);
-            ambiguous.Add($"{field} '{value}'");
-        }
-
-        return index;
-    }
+    private static SpellingIndex<int> Index(
+        List<JsonElement> mods, string field, Func<int, string?> spelling) =>
+        SpellingIndex<int>.Of(
+            field, Enumerable.Range(0, mods.Count).Select(i => (spelling(i), i)));
 
     private static OrderingRuleKind Kind(string declared) => declared switch
     {
