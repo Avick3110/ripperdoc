@@ -201,16 +201,16 @@ public sealed class ManagerStateReading
 
         var candidates = Candidates(state, gameId);
         var selected = Selected(state, gameId, candidates, out var why);
-        var known = KnownMods(state, gameId);
+        var known = Known(state, gameId);
         var wanted = selected is null ? null : Wanting(state, selected, known);
         // Ordered here rather than left to the constructor's argument list: the
         // order these are read in decides which key an unreadable state is
         // refused under, and an argument list is arranged to be read.
-        var byArchive = ArchiveIds(state, gameId, known);
+        var byArchive = ArchiveIds(state, gameId, known.Ids);
         var rules = ReadRules(state, gameId, known, byArchive, out var unresolved);
         var stagingRoot = Text(state, StagingSetting + gameId);
-        var byFileHash = FilesBy(state, gameId, known.Keys, "fileMD5");
-        var byFileId = FilesBy(state, gameId, known.Keys, "fileId");
+        var byFileHash = FilesBy(state, gameId, known.Ids, "fileMD5");
+        var byFileId = FilesBy(state, gameId, known.Ids, "fileId");
 
         return new ManagerStateReading(
             state,
@@ -219,11 +219,8 @@ public sealed class ManagerStateReading
             selected,
             why,
             wanted,
-            [.. known.Where(mod => mod.Value.InstallationPath is not null
-                    && mod.Value.InstallationPath != mod.Key)
-                .Select(mod => mod.Key).Order(StringComparer.Ordinal)],
-            [.. known.Where(mod => mod.Value.InstallationPath is null)
-                .Select(mod => mod.Key).Order(StringComparer.Ordinal)],
+            [.. known.WhosePathIsNotTheirId().Order(StringComparer.Ordinal)],
+            [.. known.WithNoPathRecorded().Order(StringComparer.Ordinal)],
             rules,
             unresolved,
             stagingRoot,
@@ -251,15 +248,13 @@ public sealed class ManagerStateReading
     /// naming it names neither of them.
     /// </remarks>
     private static SpellingIndex<string> ArchiveIds(
-        StateDatabase state,
-        string gameId,
-        Dictionary<string, (string? InstallationPath, string Kind)> known)
+        StateDatabase state, string gameId, IEnumerable<string> mods)
     {
         var prefix = $"persistent###mods###{gameId}###";
 
         return SpellingIndex<string>.Of(
             "archiveId",
-            known.Keys.Select(id => (Text(state, $"{prefix}{id}###archiveId"), id)));
+            mods.Select(id => (Text(state, $"{prefix}{id}###archiveId"), id)));
     }
 
     private static IReadOnlyList<string> Candidates(StateDatabase state, string gameId) =>
@@ -307,17 +302,17 @@ public sealed class ManagerStateReading
     /// path the manager never recorded is a different thing to report from one
     /// it recorded differently.
     /// </remarks>
-    private static Dictionary<string, (string? InstallationPath, string Kind)> KnownMods(
-        StateDatabase state, string gameId)
+    private static KnownMods Known(StateDatabase state, string gameId)
     {
         var prefix = $"persistent###mods###{gameId}###";
-        var mods = new Dictionary<string, (string?, string)>(StringComparer.Ordinal);
+        var mods = new KnownMods();
 
         foreach (var id in state.KeysUnder(prefix)
             .Select(key => key.Substring(prefix.Length).Split("###")[0])
             .Distinct(StringComparer.Ordinal))
         {
-            mods[id] = (
+            mods.Add(
+                id,
                 Text(state, $"{prefix}{id}###installationPath"),
                 Text(state, $"{prefix}{id}###type") ?? string.Empty);
         }
@@ -326,9 +321,7 @@ public sealed class ManagerStateReading
     }
 
     private static IReadOnlyList<ManagerMod> Wanting(
-        StateDatabase state,
-        string profile,
-        Dictionary<string, (string? InstallationPath, string Kind)> known)
+        StateDatabase state, string profile, KnownMods known)
     {
         var prefix = Profiles + profile + ModState;
         var enabled = new Dictionary<string, bool>(StringComparer.Ordinal);
@@ -343,19 +336,17 @@ public sealed class ManagerStateReading
         // or the reverse, comes out rather than falling between them.
         return
         [
-            .. known.Keys.Concat(enabled.Keys).Distinct(StringComparer.Ordinal)
+            .. known.Ids.Concat(enabled.Keys).Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal)
                 .Select(id => new ManagerMod(
-                    id,
-                    enabled.GetValueOrDefault(id),
-                    known.TryGetValue(id, out var mod) ? mod.Kind : string.Empty)),
+                    id, enabled.GetValueOrDefault(id), known.KindOf(id))),
         ];
     }
 
     private static OrderingRuleSet ReadRules(
         StateDatabase state,
         string gameId,
-        Dictionary<string, (string? InstallationPath, string Kind)> known,
+        KnownMods known,
         SpellingIndex<string> byArchive,
         out IReadOnlyList<UnresolvedRules> unresolved)
     {
@@ -393,9 +384,7 @@ public sealed class ManagerStateReading
     }
 
     private static string? Reference(
-        JsonElement rule,
-        Dictionary<string, (string? InstallationPath, string Kind)> known,
-        SpellingIndex<string> byArchive)
+        JsonElement rule, KnownMods known, SpellingIndex<string> byArchive)
     {
         if (!rule.TryGetProperty("reference", out var reference)
             || reference.ValueKind != JsonValueKind.Object)
@@ -403,7 +392,7 @@ public sealed class ManagerStateReading
             return null;
         }
 
-        if (Property(reference, "id") is { } id && known.ContainsKey(id))
+        if (Property(reference, "id") is { } id && known.Knows(id))
         {
             return id;
         }
@@ -413,7 +402,7 @@ public sealed class ManagerStateReading
             return owner;
         }
 
-        return Property(reference, "idHint") is { } hint && known.ContainsKey(hint) ? hint : null;
+        return Property(reference, "idHint") is { } hint && known.Knows(hint) ? hint : null;
     }
 
     private static OrderingRuleKind Kind(string declared) => declared switch
@@ -513,5 +502,47 @@ public sealed class ManagerStateReading
                 + "damaged, or this is not the manager's state database.",
                 error);
         }
+    }
+
+    /// <summary>
+    /// The mods the manager knows for this game, under the id it keys them on.
+    /// </summary>
+    /// <remarks>
+    /// A named type rather than the map: what a member here takes is then the
+    /// manager's own set of mods, and never something a map from a spelling
+    /// could be handed to. The two are both keyed by a string and are not the
+    /// same sort of string - an id is the identity the manager assigned, and a
+    /// spelling is what some document wrote about a file.
+    /// </remarks>
+    private sealed class KnownMods
+    {
+        private readonly Dictionary<string, (string? InstallationPath, string Kind)> byId =
+            new Dictionary<string, (string? InstallationPath, string Kind)>(
+                StringComparer.Ordinal);
+
+        /// <summary>Every id the manager has a record under.</summary>
+        internal IEnumerable<string> Ids => byId.Keys;
+
+        internal void Add(string id, string? installationPath, string kind) =>
+            byId[id] = (installationPath, kind);
+
+        /// <summary>Whether the manager has a record under an id.</summary>
+        internal bool Knows(string id) => byId.ContainsKey(id);
+
+        /// <summary>
+        /// The kind the manager gives a mod, or empty where it knows no such id.
+        /// </summary>
+        internal string KindOf(string id) =>
+            byId.TryGetValue(id, out var mod) ? mod.Kind : string.Empty;
+
+        /// <summary>Mods whose recorded installation path is not their own id.</summary>
+        internal IEnumerable<string> WhosePathIsNotTheirId() =>
+            byId.Where(mod => mod.Value.InstallationPath is not null
+                    && mod.Value.InstallationPath != mod.Key)
+                .Select(mod => mod.Key);
+
+        /// <summary>Mods for which the manager recorded no installation path.</summary>
+        internal IEnumerable<string> WithNoPathRecorded() =>
+            byId.Where(mod => mod.Value.InstallationPath is null).Select(mod => mod.Key);
     }
 }
