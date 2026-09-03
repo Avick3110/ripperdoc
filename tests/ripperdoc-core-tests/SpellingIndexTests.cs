@@ -162,6 +162,14 @@ public sealed class SpellingIndexTests
     /// return types of constructors and methods. A dictionary that never leaves
     /// the member that built it is outside it, and so is a value shape other
     /// than the two an index by spelling has taken here.
+    /// <para>
+    /// What this holds is the type an index has, never what a site feeds
+    /// <see cref="SpellingIndex{T}.Of" />: a site that collapsed its own
+    /// spellings first and handed over what survived would pass this sweep
+    /// carrying the defect. The contested arm each reader ships through the
+    /// member that answers with its index is the floor under that, and this
+    /// sweep is not a substitute for one.
+    /// </para>
     /// </remarks>
     [Fact]
     public void NeitherReaderDeclaresAnIndexBySpellingAsAPlainDictionary()
