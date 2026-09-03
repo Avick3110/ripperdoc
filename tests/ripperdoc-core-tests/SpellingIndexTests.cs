@@ -218,9 +218,7 @@ public sealed class SpellingIndexTests
     }
 
     /// <summary>
-    /// Neither reader declares an index from a spelling as a plain dictionary,
-    /// so a site that built one by hand would have nothing in them to hand it
-    /// to.
+    /// Neither reader declares an index from a spelling as a plain dictionary.
     /// </summary>
     /// <remarks>
     /// What this holds, stated rather than left to be discovered: a dictionary
