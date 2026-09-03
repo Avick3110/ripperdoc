@@ -203,7 +203,12 @@ public sealed class ManagerStateReading
         var selected = Selected(state, gameId, candidates, out var why);
         var known = KnownMods(state, gameId);
         var wanted = selected is null ? null : Wanting(state, selected, known);
+        // Ordered here rather than left to the constructor's argument list: the
+        // order these are read in decides which key an unreadable state is
+        // refused under, and an argument list is arranged to be read.
         var byArchive = ArchiveIds(state, gameId, known);
+        var rules = ReadRules(state, gameId, known, byArchive, out var unresolved);
+        var stagingRoot = Text(state, StagingSetting + gameId);
         var byFileHash = FilesBy(state, gameId, known.Keys, "fileMD5");
         var byFileId = FilesBy(state, gameId, known.Keys, "fileId");
 
@@ -219,9 +224,9 @@ public sealed class ManagerStateReading
                 .Select(mod => mod.Key).Order(StringComparer.Ordinal)],
             [.. known.Where(mod => mod.Value.InstallationPath is null)
                 .Select(mod => mod.Key).Order(StringComparer.Ordinal)],
-            ReadRules(state, gameId, known, byArchive, out var unresolved),
+            rules,
             unresolved,
-            Text(state, StagingSetting + gameId),
+            stagingRoot,
             byFileHash,
             byFileId,
             [.. byArchive.Contested
