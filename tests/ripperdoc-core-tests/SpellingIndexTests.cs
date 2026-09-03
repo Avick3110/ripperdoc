@@ -182,13 +182,20 @@ public sealed class SpellingIndexTests
     }
 
     /// <summary>
-    /// An index is a thing only the primitive makes: every constructor is
-    /// private, and the factory is the only member that hands one out.
+    /// An index is a thing only the primitive makes: every constructor on it is
+    /// private.
     /// </summary>
     /// <remarks>
     /// This is the half that makes the sweep below mean something. A site could
     /// otherwise satisfy a typed signature with an index it built itself, and
     /// the rule would be back to being a habit.
+    /// <para>
+    /// The scan under it reads the members the closed type declares whose own
+    /// type is that same closed type, and the factory is the only one. A member
+    /// handing out an index closed over some other type argument is outside what
+    /// it matches, which is why the private constructors are the claim this is
+    /// named for.
+    /// </para>
     /// </remarks>
     [Fact]
     public void AnIndexIsMadeInOnePlace()
