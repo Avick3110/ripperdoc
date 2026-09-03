@@ -27,8 +27,8 @@ public sealed class ManagerStateReading
     private const string StagingSetting = "settings###mods###installPath###";
     private const string ModState = "###modState###";
 
-    private readonly Dictionary<string, string> byFileHash;
-    private readonly Dictionary<string, string> byFileId;
+    private readonly SpellingIndex<string> byFileHash;
+    private readonly SpellingIndex<string> byFileId;
 
     private ManagerStateReading(
         StateDatabase state,
@@ -42,8 +42,8 @@ public sealed class ManagerStateReading
         OrderingRuleSet rules,
         IReadOnlyList<UnresolvedRules> rulesNotResolved,
         string? stagingRoot,
-        Dictionary<string, string> byFileHash,
-        Dictionary<string, string> byFileId,
+        SpellingIndex<string> byFileHash,
+        SpellingIndex<string> byFileId,
         IReadOnlyList<string> fileSpellingsNamingMoreThanOneMod)
     {
         this.byFileHash = byFileHash;
@@ -135,12 +135,12 @@ public sealed class ManagerStateReading
     /// </remarks>
     public string? Identify(string? fileHash, string? fileId)
     {
-        if (fileHash is { Length: > 0 } hash && byFileHash.TryGetValue(hash, out var byHash))
+        if (byFileHash.Names(fileHash, out var byHash))
         {
             return byHash;
         }
 
-        return fileId is { Length: > 0 } id && byFileId.TryGetValue(id, out var byId) ? byId : null;
+        return byFileId.Names(fileId, out var byId) ? byId : null;
     }
 
     /// <summary>The key prefixes this reading materialises values under.</summary>
@@ -203,7 +203,9 @@ public sealed class ManagerStateReading
         var selected = Selected(state, gameId, candidates, out var why);
         var known = KnownMods(state, gameId);
         var wanted = selected is null ? null : Wanting(state, selected, known);
-        var ambiguous = new List<string>();
+        var byArchive = ArchiveIds(state, gameId, known);
+        var byFileHash = FilesBy(state, gameId, known.Keys, "fileMD5");
+        var byFileId = FilesBy(state, gameId, known.Keys, "fileId");
 
         return new ManagerStateReading(
             state,
@@ -217,52 +219,42 @@ public sealed class ManagerStateReading
                 .Select(mod => mod.Key).Order(StringComparer.Ordinal)],
             [.. known.Where(mod => mod.Value.InstallationPath is null)
                 .Select(mod => mod.Key).Order(StringComparer.Ordinal)],
-            ReadRules(state, gameId, known, ambiguous, out var unresolved),
+            ReadRules(state, gameId, known, byArchive, out var unresolved),
             unresolved,
             Text(state, StagingSetting + gameId),
-            FilesBy(state, gameId, known.Keys, "fileMD5", ambiguous),
-            FilesBy(state, gameId, known.Keys, "fileId", ambiguous),
-            [.. ambiguous.Order(StringComparer.Ordinal)]);
+            byFileHash,
+            byFileId,
+            [.. byArchive.Contested
+                .Concat(byFileHash.Contested)
+                .Concat(byFileId.Contested)
+                .Order(StringComparer.Ordinal)]);
+    }
+
+    private static SpellingIndex<string> FilesBy(
+        StateDatabase state, string gameId, IEnumerable<string> mods, string attribute)
+    {
+        var prefix = $"persistent###mods###{gameId}###";
+
+        return SpellingIndex<string>.Of(
+            attribute,
+            mods.Select(id => (
+                Scalar(state, $"{prefix}{id}###attributes###{attribute}"), id)));
     }
 
     /// <remarks>
-    /// A spelling two mods answer to is dropped from the index rather than
-    /// resolved to whichever was read first, and named so a caller can see that
-    /// it decided nothing.
+    /// One download installed twice gives two mods one archive, and a side
+    /// naming it names neither of them.
     /// </remarks>
-    private static Dictionary<string, string> FilesBy(
+    private static SpellingIndex<string> ArchiveIds(
         StateDatabase state,
         string gameId,
-        IEnumerable<string> mods,
-        string attribute,
-        List<string> ambiguous)
+        Dictionary<string, (string? InstallationPath, string Kind)> known)
     {
         var prefix = $"persistent###mods###{gameId}###";
-        var index = new Dictionary<string, string>(StringComparer.Ordinal);
-        var contested = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var id in mods)
-        {
-            if (Scalar(state, $"{prefix}{id}###attributes###{attribute}") is not { Length: > 0 } spelling)
-            {
-                continue;
-            }
-
-            if (index.TryGetValue(spelling, out var held) && held != id)
-            {
-                contested.Add(spelling);
-            }
-
-            index[spelling] = id;
-        }
-
-        foreach (var spelling in contested)
-        {
-            index.Remove(spelling);
-            ambiguous.Add($"{attribute} '{spelling}'");
-        }
-
-        return index;
+        return SpellingIndex<string>.Of(
+            "archiveId",
+            known.Keys.Select(id => (Text(state, $"{prefix}{id}###archiveId"), id)));
     }
 
     private static IReadOnlyList<string> Candidates(StateDatabase state, string gameId) =>
@@ -359,36 +351,10 @@ public sealed class ManagerStateReading
         StateDatabase state,
         string gameId,
         Dictionary<string, (string? InstallationPath, string Kind)> known,
-        List<string> ambiguous,
+        SpellingIndex<string> byArchive,
         out IReadOnlyList<UnresolvedRules> unresolved)
     {
         var prefix = $"persistent###mods###{gameId}###";
-        var byArchive = new Dictionary<string, string>(StringComparer.Ordinal);
-        var contested = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var id in known.Keys)
-        {
-            if (Text(state, $"{prefix}{id}###archiveId") is not { Length: > 0 } archive)
-            {
-                continue;
-            }
-
-            if (byArchive.TryGetValue(archive, out var held) && held != id)
-            {
-                contested.Add(archive);
-            }
-
-            byArchive[archive] = id;
-        }
-
-        // One download installed twice gives two mods one archive, and a side
-        // naming it names neither of them.
-        foreach (var archive in contested)
-        {
-            byArchive.Remove(archive);
-            ambiguous.Add($"archiveId '{archive}'");
-        }
-
         var rules = new List<OrderingRule>();
         var missed = new Dictionary<string, int>(StringComparer.Ordinal);
 
@@ -424,7 +390,7 @@ public sealed class ManagerStateReading
     private static string? Reference(
         JsonElement rule,
         Dictionary<string, (string? InstallationPath, string Kind)> known,
-        Dictionary<string, string> byArchive)
+        SpellingIndex<string> byArchive)
     {
         if (!rule.TryGetProperty("reference", out var reference)
             || reference.ValueKind != JsonValueKind.Object)
@@ -437,8 +403,7 @@ public sealed class ManagerStateReading
             return id;
         }
 
-        if (Property(reference, "archiveId") is { } archive
-            && byArchive.TryGetValue(archive, out var owner))
+        if (byArchive.Names(Property(reference, "archiveId"), out var owner))
         {
             return owner;
         }
