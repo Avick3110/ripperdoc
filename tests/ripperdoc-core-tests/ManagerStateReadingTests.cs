@@ -177,6 +177,27 @@ public sealed class ManagerStateReadingTests
         Assert.Contains("mod-a###rules", refusal.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A state unreadable in two places is refused under the one this reader
+    /// reads first.
+    /// </summary>
+    /// <remarks>
+    /// Which key a caller is sent to look at is decided by the order the reads
+    /// happen in, and that order is a property of the reader rather than of the
+    /// order its constructor's arguments happen to be written in.
+    /// </remarks>
+    [Fact]
+    public void AStateUnreadableInTwoPlacesIsRefusedUnderTheOneReadFirst()
+    {
+        using var scratch = Bench(rulesOfA: "42", fileHashOfA: "not json at all");
+
+        var refusal = Assert.Throws<StateReadException>(
+            () => ManagerStateReading.Of(scratch.Write(), Game));
+
+        Assert.Contains("mod-a###rules", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("a list of rules", refusal.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void AWantedFlagThatIsNotTrueOrFalseIsRefusedByName()
     {
@@ -307,6 +328,7 @@ public sealed class ManagerStateReadingTests
         bool recordInstallationPathOfC = true,
         string archiveIdOfC = "archive-of-c",
         string enabledOfA = "true",
+        string fileHashOfA = "\"hash-of-a\"",
         bool referenceByArchive = false,
         string? rulesOfA = null)
     {
@@ -329,7 +351,7 @@ public sealed class ManagerStateReadingTests
             ($"persistent###mods###{Game}###mod-a###installationPath", "\"mod-a\""),
             ($"persistent###mods###{Game}###mod-a###type", "\"\""),
             ($"persistent###mods###{Game}###mod-a###archiveId", "\"archive-of-a\""),
-            ($"persistent###mods###{Game}###mod-a###attributes###fileMD5", "\"hash-of-a\""),
+            ($"persistent###mods###{Game}###mod-a###attributes###fileMD5", fileHashOfA),
             ($"persistent###mods###{Game}###mod-a###attributes###fileId", "101"),
             ($"persistent###mods###{Game}###mod-a###rules", rulesOfA),
             ($"persistent###mods###{Game}###mod-b###installationPath", "\"mod-b\""),
