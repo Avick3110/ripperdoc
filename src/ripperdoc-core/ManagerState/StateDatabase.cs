@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Text;
 
 namespace Ripperdoc.Core.ManagerState;
@@ -29,12 +28,12 @@ namespace Ripperdoc.Core.ManagerState;
 /// </remarks>
 public sealed class StateDatabase
 {
-    private readonly LiveValues values;
+    private readonly Dictionary<string, byte[]> values;
 
     private StateDatabase(
         string directory,
         IReadOnlyList<string> filesRead,
-        LiveValues values,
+        Dictionary<string, byte[]> values,
         int keysSeen,
         int keysLive,
         int entriesRead,
@@ -82,7 +81,7 @@ public sealed class StateDatabase
     /// <summary>
     /// The live values under the prefixes this reading was asked for.
     /// </summary>
-    public LiveValues Values => values;
+    public IReadOnlyDictionary<string, byte[]> Values => values;
 
     /// <summary>
     /// What this reading did not establish about itself.
@@ -166,8 +165,8 @@ public sealed class StateDatabase
         return new StateDatabase(
             directory,
             [.. version.Tables.Concat(version.Logs).Select(Path.GetFileName).OfType<string>()],
-            new LiveValues(newest.Where(pair => pair.Value.Value is not null)
-                .ToDictionary(pair => pair.Key, pair => pair.Value.Value!, StringComparer.Ordinal)),
+            newest.Where(pair => pair.Value.Value is not null)
+                .ToDictionary(pair => pair.Key, pair => pair.Value.Value!, StringComparer.Ordinal),
             newest.Count,
             newest.Count(pair => pair.Value.IsValue),
             entries,
@@ -184,7 +183,7 @@ public sealed class StateDatabase
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        return values.Of(key) is { } value ? Encoding.UTF8.GetString(value) : null;
+        return values.TryGetValue(key, out var value) ? Encoding.UTF8.GetString(value) : null;
     }
 
     /// <summary>
@@ -200,38 +199,5 @@ public sealed class StateDatabase
         return values.Keys
             .Where(key => key.StartsWith(prefix, StringComparison.Ordinal))
             .Order(StringComparer.Ordinal);
-    }
-
-    /// <summary>
-    /// The values a reading materialised, under the keys the database holds
-    /// them by.
-    /// </summary>
-    /// <remarks>
-    /// A named type rather than the map: a database key and a spelling some
-    /// document wrote about a file are both strings, and only one of them can
-    /// name two things at once. Keeping them different types is what stops a
-    /// map of the second sort being handed anywhere a map of this sort goes.
-    /// </remarks>
-    public sealed class LiveValues : IEnumerable<KeyValuePair<string, byte[]>>
-    {
-        private readonly Dictionary<string, byte[]> held;
-
-        internal LiveValues(Dictionary<string, byte[]> held) => this.held = held;
-
-        /// <summary>How many keys hold a value.</summary>
-        public int Count => held.Count;
-
-        /// <summary>Every key holding a value.</summary>
-        public IEnumerable<string> Keys => held.Keys;
-
-        /// <summary>What one key holds, or null where it holds nothing.</summary>
-        /// <param name="key">The key.</param>
-        /// <returns>The bytes, or null.</returns>
-        public byte[]? Of(string key) => held.GetValueOrDefault(key);
-
-        /// <inheritdoc />
-        public IEnumerator<KeyValuePair<string, byte[]>> GetEnumerator() => held.GetEnumerator();
-
-        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }

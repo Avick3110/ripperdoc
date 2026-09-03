@@ -36,6 +36,28 @@ public sealed class SpellingIndexTests
         | BindingFlags.Static | BindingFlags.DeclaredOnly;
 
     /// <summary>
+    /// The one member the sweep names rather than flags, at the four sites that
+    /// are it: the property, the field behind it, the constructor parameter
+    /// that fills it, and the getter's return.
+    /// </summary>
+    /// <remarks>
+    /// A database's key-to-value map is not an index from a spelling: a
+    /// spelling is a string some document wrote about a file and can name two
+    /// things at once, and a database key cannot. Named by its declaring type
+    /// and member rather than by its shape or its value type, so a second
+    /// string-keyed map declared on the same type is still flagged; the sweep
+    /// asserts each of these sites still carries a map, so an exemption that
+    /// outlived its member is a failure rather than a silence.
+    /// </remarks>
+    private static readonly string[] TheDatabasesOwnValues =
+    [
+        $"{nameof(StateDatabase)}..ctor(values)",
+        $"{nameof(StateDatabase)}.{nameof(StateDatabase.Values)}",
+        $"{nameof(StateDatabase)}.get_{nameof(StateDatabase.Values)} returns",
+        $"{nameof(StateDatabase)}.values",
+    ];
+
+    /// <summary>
     /// A spelling two things answer to is in neither the index nor an answer,
     /// and is named under the field that spelled it.
     /// </summary>
@@ -174,10 +196,11 @@ public sealed class SpellingIndexTests
     /// The sweep reads signatures - fields, properties, and the parameters and
     /// return types of constructors and methods - and flags a string-keyed map
     /// of any value shape, unwrapping arrays and generic arguments to find one.
-    /// Two things stay outside it, and both are stated rather than left to be
-    /// discovered: a map that never leaves the member that built it, and a map
-    /// a nested type declares, which is its declaring type's implementation
-    /// rather than anything that type's own signatures hand on.
+    /// Three things stay outside it, and all are stated rather than left to be
+    /// discovered: a map that never leaves the member that built it, a map a
+    /// nested type declares, which is its declaring type's implementation
+    /// rather than anything that type's own signatures hand on, and the one
+    /// member named in <see cref="TheDatabasesOwnValues" />.
     /// <para>
     /// What this holds is the type an index has, never what a site feeds
     /// <see cref="SpellingIndex{T}.Of" />: a site that collapsed its own
@@ -190,9 +213,13 @@ public sealed class SpellingIndexTests
     [Fact]
     public void NeitherReaderDeclaresAnIndexBySpellingAsAPlainDictionary()
     {
-        var carried = Readers.SelectMany(Signatures)
+        var found = Readers.SelectMany(Signatures)
             .Where(carrier => IsAPlainIndexBySpelling(carrier.Type))
             .Select(carrier => carrier.Where)
+            .ToList();
+
+        var carried = found
+            .Where(where => !TheDatabasesOwnValues.Contains(where, StringComparer.Ordinal))
             .Order(StringComparer.Ordinal)
             .ToList();
 
@@ -201,6 +228,11 @@ public sealed class SpellingIndexTests
             "an index from a spelling is the primitive's type and not a dictionary, so that a "
             + "site building its own cannot hand it on. These carry one: "
             + string.Join(", ", carried));
+
+        Assert.Equal(
+            TheDatabasesOwnValues.Order(StringComparer.Ordinal),
+            found.Where(where => TheDatabasesOwnValues.Contains(where, StringComparer.Ordinal))
+                .Order(StringComparer.Ordinal));
     }
 
     /// <summary>
