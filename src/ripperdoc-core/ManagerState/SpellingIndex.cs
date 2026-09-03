@@ -49,7 +49,6 @@ internal sealed class SpellingIndex<T>
     /// <param name="field">The field the spellings were read from, for a report.</param>
     /// <param name="spellings">Each spelling with the thing that answers to it.</param>
     /// <returns>The index.</returns>
-    /// <exception cref="ArgumentNullException">Either argument is null.</exception>
     /// <remarks>
     /// A spelling that is absent or empty is one no document wrote down, and it
     /// is neither in the index nor a contest. Spellings are compared ordinally,
@@ -60,9 +59,6 @@ internal sealed class SpellingIndex<T>
     internal static SpellingIndex<T> Of(
         string field, IEnumerable<(string? Spelling, T Names)> spellings)
     {
-        ArgumentNullException.ThrowIfNull(field);
-        ArgumentNullException.ThrowIfNull(spellings);
-
         var index = new Dictionary<string, T>(StringComparer.Ordinal);
         var contested = new HashSet<string>(StringComparer.Ordinal);
 
