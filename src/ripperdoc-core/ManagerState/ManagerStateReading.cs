@@ -244,8 +244,7 @@ public sealed class ManagerStateReading
     }
 
     /// <remarks>
-    /// One download installed twice gives two mods one archive, and a side
-    /// naming it names neither of them.
+    /// One download installed twice gives two mods one archive.
     /// </remarks>
     private static SpellingIndex<string> ArchiveIds(
         StateDatabase state, string gameId, IEnumerable<string> mods)
