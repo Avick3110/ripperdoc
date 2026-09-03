@@ -182,6 +182,9 @@ How a session behaves.
 5. Fold its findings.
 6. **Aaron's explicit go** — each time, not once for the branch.
 7. `gh pr merge <PR#> --rebase --delete-branch`. Rebase keeps history linear.
+   Remove the branch's worktree **before** this step; `gh` deletes the local
+   branch first and aborts before the remote when a worktree still holds it.
+   Verify the remote branch is gone as its own step.
 8. Remove the worktree, delete the local branch. `--delete-branch` cannot
    delete a local branch while its worktree still holds it, so the worktree
    comes off first.
@@ -198,16 +201,19 @@ the rules you are operating under.
 
 Before a **code** branch is pushed, it is reviewed by agents that did not write
 it — and **the rounds are conducted by a fresh session, not the branch's
-author.** A build engagement runs as two sessions by default: the build session
-ends at branch-green plus a decision record and the settled-decisions list (the
-reviewer-seed block), and does not conduct review rounds or open the PR; a fresh
-session boots from that record, conducts the rounds, triages, folds, and opens
-the PR. This applies to small PRs too — size exemptions are how the rule would
-die. Watch condition: if writing the decision record well enough for a stranger
-costs more than ~80k on either of the first two engagements run under it, the
-economics invert — revisit, never quietly exempt. Every round-conduct rule below
-binds whoever runs the rounds, unchanged. And the review is bounded, because an
-unbounded one makes the code worse.
+author.** A build engagement is conducted by one session that writes no code:
+it spawns a build agent, which ends at branch-green plus a decision record and
+the settled-decisions list (the reviewer-seed block) and does not conduct
+review rounds or open the PR; the conductor then spawns the review agents,
+triages every finding against the source, spawns the fold agents, and has an
+agent push and open the PR. The conductor judges work run from its own
+directive, and says so in its record; the fresh review agents are the
+independent eyes. This applies to small PRs too — size exemptions are how the
+rule would die. Watch condition: if writing the decision record well enough for
+a stranger costs more than ~80k on either of the first two engagements run
+under it, the economics invert — revisit, never quietly exempt. Every
+round-conduct rule below binds whoever runs the rounds, unchanged. And the
+review is bounded, because an unbounded one makes the code worse.
 
 **Where the bounds come from.** The reference implementation ran this unbounded
 once: a three-fix branch spent **ten rounds, roughly four million tokens and
@@ -235,6 +241,9 @@ survives triage, then spawn a **new** round. Stop on the first of:
 
 **What makes the rounds worth their tokens rather than theatre:**
 
+- **Every spawned agent runs on Opus or lower.** The Fable-class model is for
+  advisor sessions Aaron creates, never for a build, review, fold or landing
+  agent. Standing, not re-litigated (Aaron, 2026-09-02).
 - **Fresh agents every round.** Never continue a reviewer that already saw the
   code; never let the session review itself. A reviewer that watched you fold
   its own finding is no longer independent.
