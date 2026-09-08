@@ -2,12 +2,19 @@
 
 A deterministic resolved-state engine for Cyberpunk 2077 mod setups.
 
-**Status: early. There is no release.** The first layer of the engine exists -
-the schema layer that knows what every record type looks like, and the check
-that holds it to what the game actually ships. Nothing reads a mod setup yet.
-Alongside the code sit the operating manual, the standards, the decision
-record, and a set of measured findings about how the game and its modding
-frameworks actually resolve conflicts. The rest arrives wave by wave from here.
+**Status: on ice since 2026-09-08. There is no release, and no work is
+planned.** The engine reads a mod setup's tweak layer, archives, scripts and
+mod-manager state, but it never got an entry point a user could run. During
+the build, [Cyberpunk Conflict Studio](https://github.com/qcargile/Cyberpunk-Conflict-Studio)
+shipped a conflict tool with a GUI, both mod managers and a wider set of
+layers, and the useful thing this project can do for the scene is hand it the
+measured resolution rules it lacks. That is happening through issues on that
+repository rather than through more code here.
+
+What stays useful regardless is [`findings/`](findings/): measured, refutable
+laws for how the game and its frameworks resolve conflicts, several of which
+contradict widely repeated advice. The first of them has already been adopted
+upstream.
 
 ---
 
@@ -116,6 +123,7 @@ ones.
 
 ## Contributing
 
-Not yet set up for outside contributions - there is no code to contribute to.
-Bug reports and gap reports are welcome through Issues once there is something
-to report against.
+Not accepting code contributions while the project is on ice. If you have
+measured something in `findings/` differently, that is still the most useful
+report this repository can receive: open a `[Docs]` issue with what you
+measured and how.
